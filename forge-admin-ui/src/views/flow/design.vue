@@ -742,6 +742,7 @@ import { DingFlowDesigner } from '@/components/flow-designer'
 import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue'
 import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
+import { useTabStore } from '@/store'
 import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
 import { buildFlowCategoryTreeOptions, resolveFlowCategoryValue } from './utils/categoryOptions'
 import { buildLocalFormFieldCatalog } from './utils/form-field-catalog'
@@ -776,6 +777,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved', 'deployed'])
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const message = window.$message
 
 const FlowModeler = defineAsyncComponent(() => import('@/components/bpmn/FlowModeler.vue'))
@@ -806,6 +808,10 @@ const diagramLoadingCount = ref(0)
 const modelerRef = ref(null)
 const bpmnXml = ref('')
 const hasChanges = ref(false)
+watch(hasChanges, (value) => {
+  if (!props.embedded)
+    tabStore.setTabDirty(route.fullPath, value, '当前流程设计存在未保存的更改')
+}, { immediate: true })
 const aiSending = ref(false)
 const aiPrompt = ref('')
 const aiSessionId = ref('')
@@ -1275,6 +1281,8 @@ watch(businessObjectCode, async (value, oldValue) => {
 })
 
 onUnmounted(() => {
+  if (!props.embedded)
+    tabStore.setTabDirty(route.fullPath, false)
   if (businessSelectionClearTimer) {
     clearTimeout(businessSelectionClearTimer)
     businessSelectionClearTimer = null

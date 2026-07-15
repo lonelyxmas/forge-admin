@@ -900,7 +900,8 @@ const tableColumns = computed(() => [
     ? [{
         prop: 'tenantName',
         label: '所属租户',
-        minWidth: 180,
+        minWidth: 240,
+        ellipsis: false,
         render: row => renderTenantNames(row),
       }]
     : []),
@@ -1373,7 +1374,12 @@ function renderTenantNames(row = {}) {
   if (names.length === 0)
     return '-'
   return h('div', { class: 'tenant-name-list' }, names.map(name =>
-    h(NTag, { size: 'small', bordered: true, class: 'tenant-name-tag' }, { default: () => name }),
+    h(NTag, {
+      size: 'small',
+      bordered: true,
+      class: 'tenant-name-tag',
+      title: name,
+    }, { default: () => name }),
   ))
 }
 
@@ -2694,12 +2700,15 @@ async function handleSubmitBatchTenant() {
 .tenant-name-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 6px;
   align-items: center;
+  padding: 3px 0;
+  line-height: 1;
 }
 
 .tenant-name-list :deep(.tenant-name-tag) {
-  max-width: 128px;
+  max-width: 160px;
+  flex: 0 0 auto;
 }
 
 .tenant-name-list :deep(.tenant-name-tag .n-tag__content) {

@@ -2086,7 +2086,7 @@ const formContext = computed(() => {
 
 const normalizedExpandConfig = computed(() => normalizeExpandConfig(props.expandConfig, props.childrenConfig))
 const hasExpandConfig = computed(() => normalizedExpandConfig.value.enabled && normalizedExpandConfig.value.panels.length > 0)
-const resolvedResizable = computed(() => props.resizable === true || props.tableProps?.resizable === true)
+const resolvedResizable = computed(() => props.tableProps?.resizable ?? props.resizable)
 
 /**
  * 表格列配置（添加操作列）
@@ -4977,29 +4977,40 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 .ai-crud-table :deep(.ai-table-wrapper) {
-  flex: 0 1 auto;
+  height: 100%;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .ai-crud-table :deep(.n-data-table-wrapper) {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table) {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table-base-table) {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table-base-table-body) {
+  flex: 1 1 auto;
   min-height: 144px;
+  overflow: hidden;
 }
 
 .ai-crud-table :deep(.n-data-table-empty) {

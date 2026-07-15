@@ -2650,7 +2650,7 @@
               <n-form-item label="列宽拖拽">
                 <n-switch
                   size="small"
-                  :value="crudOptions.resizable === true"
+                  :value="crudOptions.resizable !== false"
                   @update:value="updateCrudOption('resizable', $event)"
                 />
               </n-form-item>

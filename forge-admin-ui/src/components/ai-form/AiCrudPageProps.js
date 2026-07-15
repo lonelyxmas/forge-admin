@@ -186,7 +186,7 @@ export const aiCrudPageProps = {
    */
   resizable: {
     type: Boolean,
-    default: false,
+    default: true,
   },
 
   /**

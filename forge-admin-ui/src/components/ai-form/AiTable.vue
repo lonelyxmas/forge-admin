@@ -47,7 +47,7 @@
       remote
       :data-table-drag-scroll="dragScroll ? 'enabled' : 'disabled'"
       :columns="tableColumns"
-      :data="dataSource"
+      :data="displayedDataSource"
       :loading="loading"
       :pagination="paginationProps"
       :row-key="rowKeyFn"
@@ -55,6 +55,7 @@
       :bordered="bordered"
       :single-line="singleLine"
       :size="currentSize"
+      flex-height
       :max-height="maxHeight"
       :scroll-x="scrollX"
       :checked-row-keys="innerCheckedRowKeys"
@@ -62,6 +63,8 @@
       v-bind="$attrs"
       @update:checked-row-keys="handleUpdateCheckedKeys"
       @update:expanded-row-keys="handleUpdateExpandedKeys"
+      @update:sorter="handleUpdateSorter"
+      @update:filters="handleUpdateFilters"
     >
       <template #empty>
         <NEmpty class="ai-table-empty-state" :description="emptyTitle" size="large">
@@ -263,7 +266,7 @@ const props = defineProps({
   },
   resizable: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   // 上下文对象（传递给插槽）
   context: {
@@ -382,6 +385,8 @@ const emit = defineEmits([
   'search-toggle',
   'fullscreen-change',
   'render-mode-change',
+  'update:sorter',
+  'update:filters',
 ])
 
 const slots = useSlots()
@@ -393,9 +398,12 @@ const innerCheckedRowKeys = ref([...props.checkedRowKeys])
 const currentSize = ref(normalizeTableSize(props.size))
 const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
+const activeSorter = ref(null)
+const activeFilters = ref({})
 
 const DEFAULT_TEXT_COLUMN_ALIGN = 'left'
 const SELECTION_COLUMN_WIDTH = 48
+const AUTO_FILTER_MAX_OPTIONS = 12
 const CENTER_COLUMN_KEYS = new Set([
   'status',
   'state',
@@ -522,9 +530,12 @@ const tableColumns = computed(() => {
     const resolvedFixed = shouldDefaultRightFixed(col) ? 'right' : col.fixed
     const columnAlign = col.align || inferColumnAlign(col, actionColumn)
     const columnTitleAlign = col.titleAlign || col.headerAlign || columnAlign
+    const columnKey = col.prop || col.key || col.dataIndex || (actionColumn ? 'action' : undefined)
+    const autoFilterOptions = resolveAutoFilterOptions(col, columnKey, actionColumn)
+    const customContent = !!(col.render || col.formatter || col.slot || col._slot)
 
     const column = {
-      key: col.prop || col.key || col.dataIndex || (actionColumn ? 'action' : undefined),
+      key: columnKey,
       title: col.label || col.title || (actionColumn ? '操作' : undefined),
       width: col.width,
       minWidth: col.minWidth,
@@ -538,20 +549,12 @@ const tableColumns = computed(() => {
       ),
       type: col.type,
       resizable: col.resizable ?? props.resizable,
-      ellipsis: col.ellipsis !== false ? { tooltip: true } : false,
-      sorter: col.sortable
-        ? (row1, row2) => {
-            const val1 = row1[col.prop]
-            const val2 = row2[col.prop]
-            if (typeof val1 === 'number' && typeof val2 === 'number') {
-              return val1 - val2
-            }
-            return String(val1).localeCompare(String(val2))
-          }
-        : false,
-      filter: col.filter,
-      filterMultiple: col.filterMultiple,
-      filterOptions: col.filterOptions,
+      ellipsis: resolveColumnEllipsis(col.ellipsis, customContent),
+      sorter: resolveColumnSorter(col, columnKey, actionColumn),
+      filter: col.filter ?? (autoFilterOptions.length > 0 ? createColumnFilter(columnKey) : undefined),
+      filterMultiple: col.filterMultiple ?? true,
+      filterMode: col.filterMode,
+      filterOptions: col.filterOptions || autoFilterOptions,
     }
 
     if (col.type === 'expand') {
@@ -612,6 +615,148 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+const displayedDataSource = computed(() => {
+  const columns = tableColumns.value.filter(column => column.type !== 'selection' && column.type !== 'expand')
+  let rows = [...props.dataSource]
+
+  const filters = activeFilters.value || {}
+  rows = rows.filter((row) => {
+    return columns.every((column) => {
+      const selectedValues = filters[column.key]
+      if (selectedValues === null || selectedValues === undefined || selectedValues.length === 0) {
+        return true
+      }
+      const values = Array.isArray(selectedValues) ? selectedValues : [selectedValues]
+      const filter = column.filter === 'default' ? createColumnFilter(column.key) : column.filter
+      if (typeof filter !== 'function') {
+        return true
+      }
+      return column.filterMode === 'and'
+        ? values.every(value => filter(value, row))
+        : values.some(value => filter(value, row))
+    })
+  })
+
+  const sorterState = Array.isArray(activeSorter.value) ? activeSorter.value[0] : activeSorter.value
+  if (!sorterState?.order) {
+    return rows
+  }
+  const column = columns.find(item => item.key === sorterState.columnKey)
+  const compare = resolveSorterCompare(column?.sorter, sorterState.columnKey)
+  if (!compare) {
+    return rows
+  }
+  const direction = sorterState.order === 'descend' ? -1 : 1
+  return rows.sort((row1, row2) => compare(row1, row2) * direction)
+})
+
+function resolveColumnSorter(column, columnKey, actionColumn) {
+  if (!columnKey || actionColumn || column.type === 'selection' || column.type === 'expand') {
+    return false
+  }
+  if (column.sorter !== undefined) {
+    return column.sorter
+  }
+  if (column.sortable === false) {
+    return false
+  }
+  if (typeof column.sortable === 'function' || typeof column.sortable === 'object' || column.sortable === 'default') {
+    return column.sortable
+  }
+  return createColumnSorter(columnKey)
+}
+
+function resolveColumnEllipsis(ellipsis, customContent) {
+  if (ellipsis === false) {
+    return false
+  }
+  if (ellipsis && typeof ellipsis === 'object') {
+    return ellipsis
+  }
+  if (customContent && ellipsis !== true) {
+    return false
+  }
+  return { tooltip: true }
+}
+
+function createColumnSorter(columnKey) {
+  return (row1, row2) => compareTableValues(getColumnValue(row1, columnKey), getColumnValue(row2, columnKey))
+}
+
+function resolveSorterCompare(sorter, columnKey) {
+  if (typeof sorter === 'function') {
+    return sorter
+  }
+  if (sorter && typeof sorter === 'object' && typeof sorter.compare === 'function') {
+    return sorter.compare
+  }
+  if (sorter === true || sorter === 'default' || sorter?.compare === 'default') {
+    return createColumnSorter(columnKey)
+  }
+  return null
+}
+
+function compareTableValues(value1, value2) {
+  if (value1 === value2) {
+    return 0
+  }
+  if (value1 === null || value1 === undefined || value1 === '') {
+    return -1
+  }
+  if (value2 === null || value2 === undefined || value2 === '') {
+    return 1
+  }
+  if (typeof value1 === 'number' && typeof value2 === 'number') {
+    return value1 - value2
+  }
+  return String(value1).localeCompare(String(value2), 'zh-CN', { numeric: true, sensitivity: 'base' })
+}
+
+function resolveAutoFilterOptions(column, columnKey, actionColumn) {
+  if (!columnKey || actionColumn || column.filterable === false || column.filter === false) {
+    return []
+  }
+  if (Array.isArray(column.filterOptions)) {
+    return column.filterOptions
+  }
+  if (column.filterable !== true) {
+    return []
+  }
+
+  const rows = props.dataSource || []
+  if (rows.length < 2) {
+    return []
+  }
+  const options = new Map()
+  rows.forEach((row) => {
+    const value = getColumnValue(row, columnKey)
+    if (value === null || value === undefined || value === '' || typeof value === 'object') {
+      return
+    }
+    const normalizedValue = String(value)
+    if (!options.has(normalizedValue)) {
+      options.set(normalizedValue, { label: normalizedValue, value })
+    }
+  })
+
+  const maxUsefulOptions = Math.min(AUTO_FILTER_MAX_OPTIONS, Math.max(2, Math.floor(rows.length / 2)))
+  if (options.size < 2 || options.size > maxUsefulOptions) {
+    return []
+  }
+  return Array.from(options.values()).sort((option1, option2) => compareTableValues(option1.label, option2.label))
+}
+
+function createColumnFilter(columnKey) {
+  return (filterValue, row) => String(getColumnValue(row, columnKey) ?? '') === String(filterValue ?? '')
+}
+
+function getColumnValue(row, columnKey) {
+  return String(columnKey)
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], row)
+}
 
 function isActionColumn(column) {
   const key = String(column?.key || column?.prop || column?.dataIndex || '').trim()
@@ -787,6 +932,16 @@ function handleUpdateExpandedKeys(keys) {
   emit('update:expanded-row-keys', keys)
 }
 
+function handleUpdateSorter(sorter) {
+  activeSorter.value = sorter
+  emit('update:sorter', sorter)
+}
+
+function handleUpdateFilters(filters) {
+  activeFilters.value = filters || {}
+  emit('update:filters', filters)
+}
+
 function isRowChecked(row) {
   return innerCheckedRowKeys.value.includes(rowKeyFn.value(row))
 }
@@ -871,10 +1026,12 @@ defineExpose({
 <style scoped>
 .ai-table-wrapper {
   width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .ai-card-mode {
@@ -1096,26 +1253,37 @@ defineExpose({
 }
 
 :deep(.n-data-table) {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: 100%;
+  height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 :deep(.n-data-table-wrapper) {
+  flex: 1 1 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 :deep(.n-data-table-base-table) {
-  height: auto;
+  flex: 1 1 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 :deep(.n-data-table-base-table-body) {
+  flex: 1 1 auto;
   min-height: 144px;
+  overflow: hidden;
 }
 
 :deep(.n-data-table-base-table-body .n-scrollbar) {
+  height: 100%;
   min-height: 144px;
 }
 

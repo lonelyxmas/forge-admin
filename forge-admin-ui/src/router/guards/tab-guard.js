@@ -1,4 +1,5 @@
 import { usePermissionStore, useTabStore } from '@/store'
+import { confirmDirtyTabs } from '@/utils/tab-interactions'
 
 export const EXCLUDE_TAB = ['/404', '/403', '/login', '/login/callback', '/mcp-authorize']
 
@@ -68,6 +69,21 @@ function shouldUpdateExistingTitle(existingTitle, nextTitle, path) {
 }
 
 export function createTabGuard(router) {
+  router.beforeEach(async (to, from) => {
+    if (to.fullPath === from.fullPath)
+      return true
+    const tabStore = useTabStore()
+    const currentTab = tabStore.tabs.find(item => item.path === from.fullPath || item.key === from.fullPath)
+    if (!currentTab?.dirty)
+      return true
+    if (tabStore.dirtyNavigationBypassPath === from.fullPath)
+      return true
+    if (!await confirmDirtyTabs(currentTab, '离开页面'))
+      return false
+    tabStore.authorizeDirtyNavigation(from.fullPath)
+    return true
+  })
+
   router.afterEach(async (to) => {
     if (EXCLUDE_TAB.includes(to.path))
       return

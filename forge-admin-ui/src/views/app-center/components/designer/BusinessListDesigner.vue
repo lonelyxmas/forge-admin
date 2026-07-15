@@ -1143,7 +1143,7 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     hideSelection: tableProps.hideSelection === true,
     maxHeight: tableProps.maxHeight || undefined,
     scrollX: tableProps.scrollX || undefined,
-    resizable: tableProps.resizable === true,
+    resizable: tableProps.resizable !== false,
     expandConfig: tableProps.expandConfig || {},
     listMethod: tableProps.listMethod || 'get',
     listDataField: tableProps.listDataField || 'records',

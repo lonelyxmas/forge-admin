@@ -6219,7 +6219,7 @@ function resolveAiCrudTableFlags(block = {}) {
     flags.push('striped')
   if (props.hideSelection === true)
     flags.push('hideSelection')
-  if (props.resizable === true)
+  if (props.resizable !== false)
     flags.push('resizable')
   if (props.searchEnableCollapse !== false)
     flags.push('searchEnableCollapse')

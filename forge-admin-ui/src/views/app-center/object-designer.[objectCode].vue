@@ -424,13 +424,22 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  if (!props.embedded)
+    tabStore.setTabDirty(route.fullPath, false)
 })
 
 onBeforeRouteLeave(() => {
+  if (tabStore.consumeDirtyNavigation(route.fullPath))
+    return true
   if (!dirty.value)
     return true
   return confirmLeave()
 })
+
+watch(dirty, (value) => {
+  if (!props.embedded)
+    tabStore.setTabDirty(route.fullPath, value, '当前业务对象设计存在未保存的更改')
+}, { immediate: true })
 
 watch(pageTitle, (title) => {
   if (props.embedded)

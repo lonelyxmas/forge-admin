@@ -272,12 +272,13 @@
   background: var(--n-merged-td-color, var(--bg-primary)) !important;
 }
 
-.forge-table-scroll-enhanced .n-data-table-wrapper,
-.forge-table-scroll-enhanced .n-data-table-base-table-body,
-.forge-table-scroll-enhanced .n-scrollbar-container,
-.forge-table-scroll-enhanced .n-data-table-th,
+.forge-table-scroll-enhanced .n-data-table-th {
+  cursor: default;
+}
+
 .forge-table-scroll-enhanced .n-data-table-td {
-  cursor: grab;
+  cursor: text;
+  user-select: text;
 }
 
 .forge-table-scroll-enhanced.is-table-dragging,
@@ -285,8 +286,9 @@
   cursor: grabbing !important;
 }
 
-.forge-table-scroll-enhanced.is-table-dragging * {
-  cursor: grabbing !important;
+.forge-table-scroll-enhanced .n-data-table-sorter,
+.forge-table-scroll-enhanced .n-data-table-filter {
+  cursor: pointer;
 }
 
 .forge-table-scroll-enhanced.forge-table-no-y-overflow .n-scrollbar-rail--vertical {

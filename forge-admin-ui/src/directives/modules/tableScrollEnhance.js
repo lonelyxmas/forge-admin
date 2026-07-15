@@ -32,6 +32,11 @@ const INTERACTIVE_SELECTOR = [
   '[data-data-table-resizable]',
 ].join(',')
 
+const SELECTABLE_TABLE_CONTENT_SELECTOR = [
+  '.n-data-table-th',
+  '.n-data-table-td',
+].join(',')
+
 const SCROLL_CONTAINER_SELECTORS = [
   '.n-data-table-base-table-header',
   '.n-data-table-base-table-body',
@@ -63,6 +68,10 @@ function isInteractiveTarget(target) {
   return target instanceof Element && !!target.closest(INTERACTIVE_SELECTOR)
 }
 
+function isSelectableTableContent(target) {
+  return target instanceof Element && !!target.closest(SELECTABLE_TABLE_CONTENT_SELECTOR)
+}
+
 function isScrollableX(element) {
   if (!(element instanceof HTMLElement)) {
     return false
@@ -71,7 +80,7 @@ function isScrollableX(element) {
     return false
   }
   const style = window.getComputedStyle(element)
-  return /(auto|scroll|overlay)/.test(style.overflowX) || element.classList.contains('n-data-table-wrapper')
+  return /auto|scroll|overlay/.test(style.overflowX) || element.classList.contains('n-data-table-wrapper')
 }
 
 function findScrollableAncestor(target, root) {
@@ -238,7 +247,7 @@ function cleanup(el) {
   document.removeEventListener('mouseup', state.onMouseUp, true)
   el.classList.remove('forge-table-scroll-enhanced', 'is-table-dragging', 'forge-table-no-y-overflow')
   state.scrollContainer?.classList.remove('is-table-dragging')
-  if (state.dragging) {
+  if (state.selectionLocked) {
     document.body.style.userSelect = state.previousUserSelect || ''
   }
   ENHANCED_STATE.delete(el)
@@ -259,6 +268,7 @@ function bindTableScrollEnhance(el, value) {
     startScrollLeft: 0,
     scrollContainer: null,
     previousUserSelect: '',
+    selectionLocked: false,
     preventClick: false,
     refreshTimer: null,
     scrollContainers: [],
@@ -267,7 +277,7 @@ function bindTableScrollEnhance(el, value) {
   }
 
   state.onMouseDown = (event) => {
-    if (event.button !== 0 || isInteractiveTarget(event.target)) {
+    if (event.button !== 0 || isInteractiveTarget(event.target) || isSelectableTableContent(event.target)) {
       return
     }
     const scrollContainer = resolveScrollContainer(el, event.target)
@@ -282,9 +292,6 @@ function bindTableScrollEnhance(el, value) {
     state.scrollContainer = scrollContainer
     state.previousUserSelect = document.body.style.userSelect
 
-    document.body.style.userSelect = 'none'
-    el.classList.add('is-table-dragging')
-    scrollContainer.classList.add('is-table-dragging')
     document.addEventListener('mousemove', state.onMouseMove, true)
     document.addEventListener('mouseup', state.onMouseUp, true)
   }
@@ -299,6 +306,12 @@ function bindTableScrollEnhance(el, value) {
     }
     state.moved = true
     state.preventClick = true
+    if (!state.selectionLocked) {
+      state.selectionLocked = true
+      document.body.style.userSelect = 'none'
+      el.classList.add('is-table-dragging')
+      state.scrollContainer.classList.add('is-table-dragging')
+    }
     state.scrollContainer.scrollLeft = state.startScrollLeft - deltaX
     syncTableScrollLeft(el, state.scrollContainer, state)
     event.preventDefault()
@@ -309,7 +322,10 @@ function bindTableScrollEnhance(el, value) {
       return
     }
     state.dragging = false
-    document.body.style.userSelect = state.previousUserSelect || ''
+    if (state.selectionLocked) {
+      document.body.style.userSelect = state.previousUserSelect || ''
+      state.selectionLocked = false
+    }
     document.removeEventListener('mousemove', state.onMouseMove, true)
     document.removeEventListener('mouseup', state.onMouseUp, true)
     el.classList.remove('is-table-dragging')
