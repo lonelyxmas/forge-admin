@@ -143,3 +143,14 @@
   git diff --check
   ```
 - **验收**：实际执行结果与未执行项均写入 `execution-log.md`，不把警告或跳过项表述为通过。
+
+## Task 7: 修复关闭加解密后的启动失败
+
+- [x] 已完成
+- **目标**：全局关闭时不因数据库残留的无效 SM4/AES/RSA 密钥阻断 Bean 初始化；运行时重新开启后读取最新密钥。
+- **涉及文件**：
+  - `forge-server/forge-framework/forge-starter-parent/forge-starter-crypto/src/main/java/com/mdframe/forge/starter/crypto/crypto/impl/SM4Encryptor.java`
+  - `forge-server/forge-framework/forge-starter-parent/forge-starter-crypto/src/main/java/com/mdframe/forge/starter/crypto/crypto/impl/AESEncryptor.java`
+  - `forge-server/forge-framework/forge-starter-parent/forge-starter-crypto/src/main/java/com/mdframe/forge/starter/crypto/config/CryptoAutoConfiguration.java`
+  - `forge-server/forge-framework/forge-starter-parent/forge-starter-crypto/src/test/java/com/mdframe/forge/starter/crypto/crypto/impl/CryptoEncryptorLifecycleTest.java`
+- **验收**：关闭状态构造加密器不解析无效历史密钥；关闭状态忽略无效 RSA 配置；重新开启并设置有效密钥后 SM4/AES 往返成功。

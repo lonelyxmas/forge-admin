@@ -15,7 +15,7 @@
 | 项目 | 值 |
 |------|-----|
 | 前端 | Vitest + Vue 3；Node v20.19.0 |
-| 后端 | JUnit 5 / Spring Boot Test（Excel Starter 独立执行） |
+| 后端 | JUnit 5 / Spring Boot Test（Excel、Crypto Starter 独立执行） |
 | Excel | EasyExcel 写入，Apache POI/工作簿读取验证 |
 | SQL | `xmllint` + 静态契约检查；不连接真实 MySQL |
 
@@ -33,6 +33,8 @@
 | `crypto-config.js` | API 子开关关闭 | `enabled=true, enableApiCrypto=false` | 前端 API 加密关闭 |
 | `crypto-config.js` | 配置加载失败 | 请求异常 | 保持静态 `enabled=true`，不降级明文 |
 | `ExcelImportTemplateWriter` | 生成导入模板 | 必填、可选两列 | 两个工作表、样例行、字段说明均存在 |
+| `CryptoEncryptorLifecycleTest` | 关闭状态启动 | `enabled=false` + 无效 SM4/AES/RSA 历史值 | 加密器和 RSA Holder 可创建，不在启动阶段校验无效密钥 |
+| `CryptoEncryptorLifecycleTest` | 运行时重新开启 | 先关闭并设置无效值，再切换有效 16 字节密钥 | 同一 SM4/AES 实例读取最新密钥并完成加解密往返 |
 
 ### P1 — 数据访问层
 
@@ -71,6 +73,8 @@
 | 2026-07-15 | 后端集成 | Admin reactor package | `JAVA_HOME=...17... mvn -pl forge-admin-server -am package -DskipTests` | passed，42/42 modules | 测试按命令跳过；存在既有 deprecated/unchecked 警告 |
 | 2026-07-15 | 前端集成 | production build | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm build` | passed，8684 modules | 既有组件命名冲突、CSS 注释及 chunk 警告；脚本内部将 heap 设为 40961MB |
 | 2026-07-15 | 差异卫生 | 空白检查 | `git diff --check` | passed | 工作区原有大量未提交改动均保留 |
+| 2026-07-16 | 加解密关闭启动回归 | Crypto Starter JUnit | `JAVA_HOME=...17... mvn -pl forge-framework/forge-starter-parent/forge-starter-crypto -Penable-tests -Dtest=CryptoEncryptorLifecycleTest test` | passed，3/3 | 未启动真实服务 |
+| 2026-07-16 | 主应用装配 | Admin reactor package | `JAVA_HOME=...17... mvn -pl forge-admin-server -am package -DskipTests` | passed，42/42 modules | 测试按命令跳过；存在既有 deprecated/unchecked 警告 |
 
 ## 6. 执行证据
 

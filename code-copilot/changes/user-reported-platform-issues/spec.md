@@ -37,6 +37,7 @@
 - `ConfigManagerService#saveCryptoConfig` 只更新 `sys_config_group`，没有同步 `sys_config` 并刷新 `@RefreshScope` 运行时属性。
 - `forge-admin-ui/src/utils/crypto/crypto-config.js` 静态设置 `enabled: true`，应用启动时没有读取后端配置。
 - `JacksonCryptoConfiguration` 只在启动阶段按属性注册字段加解密，已注册的 `CryptoFieldSerializer/CryptoFieldDeserializer` 没有在每次序列化时检查动态总开关。
+- 后续运行验证发现 `SM4Encryptor/AESEncryptor` 会在 Bean 构造阶段无条件解析默认密钥；即使总开关关闭，历史无效密钥仍会阻断服务启动。RSA 配置密钥对也存在同类风险。
 
 ### 2.4 模型列表操作列
 
@@ -56,6 +57,7 @@
 - [x] 新增匿名、明文、安全裁剪的前端加解密运行配置接口。
 - [x] 配置中心保存加解密配置后立即同步后端运行时，并同步当前浏览器内存配置。
 - [x] 全局关闭时字段级序列化/反序列化同样停止。
+- [x] 全局关闭且残留无效 SM4/AES/RSA 密钥时服务仍可启动，重新开启后读取最新有效密钥。
 - [x] 模型操作列完整展示删除按钮。
 - [x] 用户组织角色名称查询兼容 `ONLY_FULL_GROUP_BY`。
 
@@ -118,6 +120,7 @@
 - 新增聚焦的 `AiCrudImportModal`，避免继续扩大已有 5000 行以上的 `AiCrudPage.vue`。
 - 模板说明采用第二工作表，不改变第一工作表表头，确保现有导入解析兼容。
 - 后端运行配置继续以 `CryptoProperties` 为单一运行时事实源；配置中心保存后通过现有 `ConfigSyncService` 同步并刷新。
+- SM4/AES 默认密钥改为实际执行静态加解密时读取和校验，避免关闭状态启动失败，并支持运行时密钥更新；关闭状态不加载配置中的 RSA 密钥对。
 - 前端启动先读取安全裁剪的 `/crypto/config`，失败时保留静态加密开启默认值。
 - 角色名称去重使用 `GROUP BY r.id, r.role_name, r.sort`，保证排序字段确定且兼容同名不同角色。
 
@@ -131,10 +134,11 @@
 | Task 4 | complete | `provider-model.vue` | 操作列 `160px`、横向宽度 `1030px` |
 | Task 5 | complete | `SysUserOrgRoleMapper.xml` | 严格模式兼容 SQL 已落地 |
 | Task 6 | complete | `test-spec.md`、`execution-log.md` | 单测、Lint、XML、前后端构建和空白检查已完成 |
+| Task 7 | complete | `SM4Encryptor.java`、`AESEncryptor.java`、`CryptoAutoConfiguration.java` 及回归测试 | 修复全局关闭后无效历史密钥阻断启动 |
 
 ## 12. 审查结论
 
-实现与静态审查通过，新增前端测试 11/11、Excel 模板测试 1/1 通过，Admin 42 模块打包和前端生产构建通过。未启动真实服务或数据库；匿名运行配置、开关切换后的明文/密文以及用户关联管理接口需在部署环境做运行态冒烟。
+实现与静态审查通过，新增前端测试 11/11、Excel 模板测试 1/1、加密器生命周期测试 3/3 通过，Admin 42 模块打包和前端生产构建通过。未启动真实服务或数据库；匿名运行配置、开关切换后的明文/密文以及用户关联管理接口需在部署环境做运行态冒烟。
 
 ## 13. 确认记录（HARD-GATE）
 

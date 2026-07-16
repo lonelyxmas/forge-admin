@@ -39,6 +39,9 @@
 | 2026-07-15 | Admin 聚合打包 | `JAVA_HOME=...17... mvn -pl forge-admin-server -am package -DskipTests` | passed，42/42 modules，42.257s | 测试按命令跳过；存在既有 deprecated/unchecked 警告 |
 | 2026-07-15 | 前端生产构建 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm build` | passed，8684 modules，1m41s | 既有组件命名冲突、CSS `//` 注释、动态/静态导入和 chunk 警告；脚本内部 heap 为 40961MB |
 | 2026-07-15 | 差异空白检查 | `git diff --check` 及新增文件尾随空白扫描 | passed | 无 |
+| 2026-07-16 | 关闭加解密启动失败定位 | 检查 `SM4Encryptor`、`AESEncryptor`、`CryptoAutoConfiguration` 初始化链 | passed | 根因是 Bean 构造阶段无条件解析无效历史密钥，未遵守全局关闭状态 |
+| 2026-07-16 | 加密器生命周期回归 | `JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=... mvn -pl forge-framework/forge-starter-parent/forge-starter-crypto -Penable-tests -Dtest=CryptoEncryptorLifecycleTest test` | passed，3/3 | 覆盖关闭状态无效 SM4/AES/RSA 配置及重新开启后读取最新密钥 |
+| 2026-07-16 | Admin 聚合打包 | `JAVA_HOME=...17... mvn -pl forge-admin-server -am package -DskipTests` | passed，42/42 modules，47.131s | 测试按命令跳过；存在既有 deprecated/unchecked 警告 |
 
 ## 4. 未执行项
 

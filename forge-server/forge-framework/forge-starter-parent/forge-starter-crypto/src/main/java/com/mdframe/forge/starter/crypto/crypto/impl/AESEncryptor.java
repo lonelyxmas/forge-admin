@@ -16,30 +16,16 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 public class AESEncryptor implements Encryptor {
 
-    private final AES defaultAes;
     private final CryptoProperties properties;
 
     public AESEncryptor(CryptoProperties properties) {
         this.properties = properties;
-        // 如果配置了默认密钥，则初始化默认加密器
-        if (properties.getSecretKey() != null && !properties.getSecretKey().isEmpty()) {
-            byte[] keyBytes = Base64.decode(properties.getSecretKey());
-            if (keyBytes.length != 16 && keyBytes.length != 24 && keyBytes.length != 32) {
-                throw new IllegalArgumentException("AES密钥长度必须为16/24/32字节");
-            }
-            this.defaultAes = SecureUtil.aes(keyBytes);
-        } else {
-            this.defaultAes = null;
-        }
         log.info("AES加密器初始化完成");
     }
 
     @Override
     public String encrypt(String plainText) {
-        if (defaultAes == null) {
-            throw new IllegalStateException("默认密钥未配置");
-        }
-        return doEncrypt(plainText, defaultAes);
+        return doEncrypt(plainText, resolveDefaultAes());
     }
 
     @Override
@@ -53,10 +39,7 @@ public class AESEncryptor implements Encryptor {
 
     @Override
     public String decrypt(String cipherText) {
-        if (defaultAes == null) {
-            throw new IllegalStateException("默认密钥未配置");
-        }
-        return doDecrypt(cipherText, defaultAes);
+        return doDecrypt(cipherText, resolveDefaultAes());
     }
 
     @Override
@@ -71,6 +54,14 @@ public class AESEncryptor implements Encryptor {
     @Override
     public CryptoAlgorithm algorithm() {
         return CryptoAlgorithm.AES;
+    }
+
+    private AES resolveDefaultAes() {
+        String secretKey = properties.getSecretKey();
+        if (secretKey == null || secretKey.isEmpty()) {
+            throw new IllegalStateException("默认密钥未配置");
+        }
+        return createAes(secretKey);
     }
 
     private AES createAes(String base64Key) {

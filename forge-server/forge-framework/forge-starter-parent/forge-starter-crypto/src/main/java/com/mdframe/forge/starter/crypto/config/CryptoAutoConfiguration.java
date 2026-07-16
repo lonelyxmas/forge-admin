@@ -43,7 +43,8 @@ public class CryptoAutoConfiguration {
 
     @Bean
     public RsaKeyPairHolder rsaKeyPairHolder(CryptoProperties properties) {
-        if (StringUtils.hasText(properties.getRsaPublicKey())
+        if (Boolean.TRUE.equals(properties.getEnabled())
+            && StringUtils.hasText(properties.getRsaPublicKey())
             && StringUtils.hasText(properties.getRsaPrivateKey())) {
             log.info("使用配置的 RSA 密钥对");
             return new RsaKeyPairHolder(properties.getRsaPublicKey(), properties.getRsaPrivateKey());

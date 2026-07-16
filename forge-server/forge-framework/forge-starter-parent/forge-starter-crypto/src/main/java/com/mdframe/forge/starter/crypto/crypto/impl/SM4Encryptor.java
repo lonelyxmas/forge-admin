@@ -16,30 +16,16 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 public class SM4Encryptor implements Encryptor {
 
-    private final SM4 defaultSm4;
     private final CryptoProperties properties;
 
     public SM4Encryptor(CryptoProperties properties) {
         this.properties = properties;
-        // 如果配置了默认密钥，则初始化默认加密器
-        if (properties.getSecretKey() != null && !properties.getSecretKey().isEmpty()) {
-            byte[] keyBytes = Base64.decode(properties.getSecretKey());
-            if (keyBytes.length != 16) {
-                throw new IllegalArgumentException("SM4密钥长度必须为16字节");
-            }
-            this.defaultSm4 = SmUtil.sm4(keyBytes);
-        } else {
-            this.defaultSm4 = null;
-        }
         log.info("SM4加密器初始化完成");
     }
 
     @Override
     public String encrypt(String plainText) {
-        if (defaultSm4 == null) {
-            throw new IllegalStateException("默认密钥未配置");
-        }
-        return doEncrypt(plainText, defaultSm4);
+        return doEncrypt(plainText, resolveDefaultSm4());
     }
 
     @Override
@@ -53,10 +39,7 @@ public class SM4Encryptor implements Encryptor {
 
     @Override
     public String decrypt(String cipherText) {
-        if (defaultSm4 == null) {
-            throw new IllegalStateException("默认密钥未配置");
-        }
-        return doDecrypt(cipherText, defaultSm4);
+        return doDecrypt(cipherText, resolveDefaultSm4());
     }
 
     @Override
@@ -71,6 +54,14 @@ public class SM4Encryptor implements Encryptor {
     @Override
     public CryptoAlgorithm algorithm() {
         return CryptoAlgorithm.SM4;
+    }
+
+    private SM4 resolveDefaultSm4() {
+        String secretKey = properties.getSecretKey();
+        if (secretKey == null || secretKey.isEmpty()) {
+            throw new IllegalStateException("默认密钥未配置");
+        }
+        return createSm4(secretKey);
     }
 
     private SM4 createSm4(String base64Key) {
