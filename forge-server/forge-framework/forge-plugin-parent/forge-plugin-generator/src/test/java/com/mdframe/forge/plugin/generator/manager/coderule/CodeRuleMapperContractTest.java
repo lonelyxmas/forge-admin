@@ -32,6 +32,15 @@ class CodeRuleMapperContractTest {
     }
 
     @Test
+    void segmentMapperShouldRoundTripExcludedCharacters() throws IOException {
+        String xml = Files.readString(resolveSegmentMapper());
+
+        assertTrue(xml.contains("column=\"excluded_characters\" property=\"excludedCharacters\""));
+        assertTrue(xml.contains("exclude_ambiguous, excluded_characters"));
+        assertTrue(xml.contains("#{segment.excludedCharacters}"));
+    }
+
+    @Test
     void ruleCodeHistoryCheckShouldIncludeLogicallyDeletedRules() throws IOException {
         String xml = Files.readString(resolveMapper());
         int start = xml.indexOf("<select id=\"countRuleCodeHistory\"");

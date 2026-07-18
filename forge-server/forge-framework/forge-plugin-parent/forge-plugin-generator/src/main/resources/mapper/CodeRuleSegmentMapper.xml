@@ -22,6 +22,7 @@
         <result column="reset_policy" property="resetPolicy"/>
         <result column="start_value" property="startValue"/>
         <result column="exclude_ambiguous" property="excludeAmbiguous"/>
+        <result column="excluded_characters" property="excludedCharacters"/>
         <result column="del_flag" property="delFlag"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
@@ -33,7 +34,7 @@
     <sql id="Base_Columns">
         id, tenant_id, rule_id, segment_key, segment_order, segment_type, segment_value, variable_source,
         segment_length, pad_enabled, pad_char, pad_direction, group_enabled, include_in_code,
-        radix_type, reset_enabled, reset_policy, start_value, exclude_ambiguous, del_flag,
+        radix_type, reset_enabled, reset_policy, start_value, exclude_ambiguous, excluded_characters, del_flag,
         create_by, create_time, create_dept, update_by, update_time
     </sql>
 
@@ -61,7 +62,7 @@
         INSERT INTO ai_code_rule_segment (
             id, tenant_id, rule_id, segment_key, segment_order, segment_type, segment_value, variable_source,
             segment_length, pad_enabled, pad_char, pad_direction, group_enabled, include_in_code,
-            radix_type, reset_enabled, reset_policy, start_value, exclude_ambiguous, del_flag,
+            radix_type, reset_enabled, reset_policy, start_value, exclude_ambiguous, excluded_characters, del_flag,
             create_by, create_time, create_dept, update_by, update_time
         ) VALUES
         <foreach collection="segments" item="segment" separator=",">
@@ -72,7 +73,7 @@
                 #{segment.segmentLength}, #{segment.padEnabled}, #{segment.padChar},
                 #{segment.padDirection}, #{segment.groupEnabled}, #{segment.includeInCode},
                 #{segment.radixType}, #{segment.resetEnabled}, #{segment.resetPolicy},
-                #{segment.startValue}, #{segment.excludeAmbiguous}, '0',
+                #{segment.startValue}, #{segment.excludeAmbiguous}, #{segment.excludedCharacters}, '0',
                 #{segment.createBy}, #{segment.createTime}, #{segment.createDept},
                 #{segment.updateBy}, #{segment.updateTime}
             )

@@ -161,8 +161,25 @@
 
               <div class="preview-card__sample">
                 <span>编码结果</span>
-                <strong :class="{ 'is-invalid': preview?.valid === false }">
-                  {{ preview?.previewCode || '等待有效配置' }}
+                <strong
+                  v-if="preview?.previewCode"
+                  :class="{ 'is-invalid': preview?.valid === false }"
+                >
+                  <template v-if="coloredPreviewSegments.length">
+                    <span
+                      v-for="segment in coloredPreviewSegments"
+                      :key="segment.segmentKey"
+                      class="preview-code-chunk"
+                      :class="`preview-code-chunk--${segment.tone}`"
+                      :title="segment.typeLabel"
+                    >{{ segment.value }}</span>
+                  </template>
+                  <template v-else>
+                    {{ preview.previewCode }}
+                  </template>
+                </strong>
+                <strong v-else class="preview-code-empty">
+                  {{ previewBlockReason }}
                 </strong>
                 <code>{{ preview?.formatExpression || '—' }}</code>
               </div>
@@ -214,7 +231,14 @@
                   :key="segment.segmentKey"
                   class="preview-segment"
                 >
-                  <span>{{ segment.segmentOrder }} · {{ segment.segmentType }}</span>
+                  <span>
+                    <i
+                      class="preview-segment__dot"
+                      :class="`preview-segment__dot--${segmentTone(segment.segmentType)}`"
+                    />
+                    {{ segment.segmentOrder }} · {{ segmentTypeLabel(segment.segmentType) }}
+                    <em v-if="segment.included === false">（不输出）</em>
+                  </span>
                   <code>{{ segment.value || '∅' }}</code>
                 </div>
               </div>
@@ -330,6 +354,7 @@ import {
 import {
   applyLowCodeVariableMapping,
   buildCodeRulePreviewPayload,
+  codeRuleSegmentTypeMeta,
   createEmptyCodeRuleDraft,
   createLatestRequestGuard,
   isCanceledRequest,
@@ -388,6 +413,8 @@ const workspaceTitle = computed(() => props.ruleId
   ? `编辑 · ${draft.ruleName || draft.ruleCode || '加载中'}`
   : '新增编码规则')
 const validation = computed(() => validateCodeRuleDraft(draft))
+// 预览只要求分段配置有效，规则编码/名称等基础信息由预览载荷兜底，不需要先保存或填全
+const previewValidation = computed(() => validateCodeRuleDraft(draft, { forPreview: true }))
 const variableSegments = computed(() => draft.segments.filter(segment => segment.segmentType === 'VARIABLE'))
 const lowCodeVariableSegments = computed(() => variableSegments.value
   .filter(segment => segment.variableSource === 'LOWCODE'))
@@ -408,6 +435,32 @@ const mappingObjectChanged = computed(() => Boolean(mappingDraft.sourceObjectId)
   && String(mappingDraft.sourceObjectId) !== String(draft.sourceObjectId || ''))
 const mappingSelectedField = computed(() => mappingFieldOptions.value
   .find(option => option.value === mappingDraft.fieldCode))
+const coloredPreviewSegments = computed(() => {
+  const code = preview.value?.previewCode
+  const segments = preview.value?.segmentPreviews || []
+  if (!code || !segments.length)
+    return []
+  const included = segments
+    .filter(segment => segment.included !== false && segment.value)
+    .map((segment) => {
+      const meta = codeRuleSegmentTypeMeta(segment.segmentType)
+      return {
+        segmentKey: segment.segmentKey || `order_${segment.segmentOrder}`,
+        value: segment.value,
+        tone: meta.tone,
+        typeLabel: meta.label,
+      }
+    })
+  // 分段值拼接与整体编码不一致时回退为整体单色渲染，避免错位着色
+  return included.map(segment => segment.value).join('') === code ? included : []
+})
+const previewBlockReason = computed(() => {
+  if (previewing.value)
+    return '预览生成中…'
+  if (!previewValidation.value.valid)
+    return previewValidation.value.errors[0]
+  return '等待预览结果'
+})
 const canConfirmMapping = computed(() => Boolean(
   mappingDraft.sourceObjectId
   && mappingDraft.fieldCode
@@ -496,7 +549,7 @@ function schedulePreview(delay = 450) {
   clearTimeout(previewTimer)
   cancelPreviewRequest()
   previewRequestGuard.invalidate()
-  if (loading.value || !validation.value.valid) {
+  if (loading.value || !previewValidation.value.valid) {
     previewing.value = false
     preview.value = null
     return
@@ -504,9 +557,17 @@ function schedulePreview(delay = 450) {
   previewTimer = setTimeout(refreshPreview, delay)
 }
 
+function segmentTypeLabel(type) {
+  return codeRuleSegmentTypeMeta(type).label
+}
+
+function segmentTone(type) {
+  return codeRuleSegmentTypeMeta(type).tone
+}
+
 async function refreshPreview() {
   clearTimeout(previewTimer)
-  if (!validation.value.valid)
+  if (!previewValidation.value.valid)
     return
   cancelPreviewRequest()
   const abortController = new AbortController()
@@ -1064,6 +1125,80 @@ function closeWorkspace() {
   padding-top: 9px;
   color: var(--text-tertiary, #86909c);
   font-size: 11px;
+}
+
+.preview-segment > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.preview-segment em {
+  font-style: normal;
+}
+
+.preview-segment__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.preview-code-chunk--date {
+  color: var(--primary-color, #4242f7);
+}
+
+.preview-segment__dot--date {
+  background: var(--primary-color, #4242f7);
+}
+
+.preview-code-chunk--fixed {
+  color: var(--warning-500, #f59e0b);
+}
+
+.preview-segment__dot--fixed {
+  background: var(--warning-500, #f59e0b);
+}
+
+.preview-code-chunk--sequence {
+  color: var(--success-500, #10b981);
+}
+
+.preview-segment__dot--sequence {
+  background: var(--success-500, #10b981);
+}
+
+.preview-code-chunk--variable {
+  color: var(--info-500, #0ea5e9);
+}
+
+.preview-segment__dot--variable {
+  background: var(--info-500, #0ea5e9);
+}
+
+.preview-code-chunk--sysvar {
+  color: var(--purple-500, #8b5cf6);
+}
+
+.preview-segment__dot--sysvar {
+  background: var(--purple-500, #8b5cf6);
+}
+
+.preview-code-chunk--unknown {
+  color: var(--text-secondary, #4e5969);
+}
+
+.preview-segment__dot--unknown {
+  background: var(--text-disabled, #c9cdd4);
+}
+
+.preview-code-empty {
+  color: var(--text-tertiary, #86909c) !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 400;
+  letter-spacing: 0 !important;
 }
 
 .preview-segment code {

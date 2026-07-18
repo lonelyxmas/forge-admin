@@ -53,4 +53,8 @@ public class CodeRuleSegmentDTO {
     private Long startValue;
 
     private Integer excludeAmbiguous;
+
+    /** 具体排除的易混淆字符，规范值为 I、O、Z 的逗号分隔组合。 */
+    @Size(max = 16, message = "易混淆字符配置长度不能超过16个字符")
+    private String excludedCharacters;
 }

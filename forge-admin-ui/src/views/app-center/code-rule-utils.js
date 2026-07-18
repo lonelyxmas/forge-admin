@@ -29,6 +29,52 @@ const TYPE_DEFAULTS = {
   },
 }
 
+/**
+ * 分段类型展示元数据：中文标签 + 预览着色标识
+ * 着色标识对应编辑器中的 CSS 类名后缀
+ */
+export const CODE_RULE_SEGMENT_TYPE_META = {
+  DATE: { label: '日期', tone: 'date' },
+  FIXED: { label: '固定值', tone: 'fixed' },
+  SEQ: { label: '流水号', tone: 'sequence' },
+  VARIABLE: { label: '变量', tone: 'variable' },
+  SYS_VAR: { label: '系统变量', tone: 'sysvar' },
+}
+
+export const CODE_RULE_AMBIGUOUS_CHARACTER_OPTIONS = [
+  { label: 'I', value: 'I', description: '易与数字 1 混淆' },
+  { label: 'O', value: 'O', description: '易与数字 0 混淆' },
+  { label: 'Z', value: 'Z', description: '易与数字 2 混淆' },
+]
+
+const ALL_AMBIGUOUS_CHARACTERS = CODE_RULE_AMBIGUOUS_CHARACTER_OPTIONS
+  .map(option => option.value)
+  .join(',')
+
+export function codeRuleSegmentTypeMeta(type) {
+  return CODE_RULE_SEGMENT_TYPE_META[type] || { label: type || '未知', tone: 'unknown' }
+}
+
+/**
+ * 规范化具体排除字符。新字段有值时以新字段为准；字段为空时才读取旧总开关。
+ */
+export function normalizeExcludedCharacters(value, legacyExcludeAmbiguous = 0) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\s,]+/)
+  const hasExplicitValue = Array.isArray(value)
+    ? value.length > 0
+    : Boolean(String(value || '').trim())
+  const selected = new Set(rawValues.map(item => String(item || '').trim().toUpperCase()))
+  const normalized = CODE_RULE_AMBIGUOUS_CHARACTER_OPTIONS
+    .map(option => option.value)
+    .filter(character => selected.has(character))
+    .join(',')
+  if (!hasExplicitValue && Number(legacyExcludeAmbiguous) === 1)
+    return ALL_AMBIGUOUS_CHARACTERS
+  return normalized
+}
+
 let segmentSeed = 0
 
 export function createLatestRequestGuard() {
@@ -88,6 +134,7 @@ export function createCodeRuleSegment(type = 'FIXED', order = 1) {
     resetPolicy: 'NONE',
     startValue: 1,
     excludeAmbiguous: 0,
+    excludedCharacters: '',
     ...TYPE_DEFAULTS[normalizedType],
   }
 }
@@ -156,19 +203,27 @@ export function applyLowCodeVariableMapping(
 export function normalizeCodeRuleSegments(segments = []) {
   return [...segments]
     .sort((left, right) => Number(left?.segmentOrder || 0) - Number(right?.segmentOrder || 0))
-    .map((segment, index) => ({
-      ...segment,
-      segmentKey: segment?.segmentKey || nextSegmentKey(segment?.segmentType),
-      segmentOrder: index + 1,
-      includeInCode: Number(segment?.includeInCode) === 0 ? 0 : 1,
-      groupEnabled: Number(segment?.groupEnabled) === 1 ? 1 : 0,
-      padEnabled: Number(segment?.padEnabled) === 1 ? 1 : 0,
-      resetEnabled: Number(segment?.resetEnabled) === 1 ? 1 : 0,
-      excludeAmbiguous: Number(segment?.excludeAmbiguous) === 1 ? 1 : 0,
-      variableSource: segment?.segmentType === 'VARIABLE' && segment?.variableSource === 'LOWCODE'
-        ? 'LOWCODE'
-        : 'CUSTOM',
-    }))
+    .map((segment, index) => {
+      const excludedCharacters = normalizeExcludedCharacters(
+        segment?.excludedCharacters,
+        segment?.excludeAmbiguous,
+      )
+      return {
+        ...segment,
+        segmentKey: segment?.segmentKey || nextSegmentKey(segment?.segmentType),
+        segmentOrder: index + 1,
+        includeInCode: Number(segment?.includeInCode) === 0 ? 0 : 1,
+        groupEnabled: Number(segment?.groupEnabled) === 1 ? 1 : 0,
+        padEnabled: Number(segment?.padEnabled) === 1 ? 1 : 0,
+        resetEnabled: Number(segment?.resetEnabled) === 1 ? 1 : 0,
+        excludedCharacters,
+        // 旧字段只在全选时保持 1，旧客户端仍能理解历史“全部排除”语义
+        excludeAmbiguous: excludedCharacters === ALL_AMBIGUOUS_CHARACTERS ? 1 : 0,
+        variableSource: segment?.segmentType === 'VARIABLE' && segment?.variableSource === 'LOWCODE'
+          ? 'LOWCODE'
+          : 'CUSTOM',
+      }
+    })
 }
 
 export function segmentDeclaredLength(segment) {
@@ -180,26 +235,33 @@ export function segmentDeclaredLength(segment) {
   return 0
 }
 
-export function validateCodeRuleDraft(draft = {}) {
+export function validateCodeRuleDraft(draft = {}, options = {}) {
+  const { forPreview = false } = options
   const errors = []
   const warnings = []
   const segments = normalizeCodeRuleSegments(draft.segments)
-  if (!String(draft.ruleCode || '').match(/^[A-Z]\w{0,63}$/i))
-    errors.push('规则编码必须以字母开头，且只能包含字母、数字和下划线')
-  if (!String(draft.ruleName || '').trim())
-    errors.push('规则名称不能为空')
-  if (!String(draft.category || '').trim())
-    errors.push('编码分类不能为空')
-  if (!String(draft.scene || '').trim())
-    errors.push('适用场景不能为空')
+  if (!forPreview) {
+    // 基础信息只在保存时校验；预览只需要分段有效，规则编码/名称等由预览载荷兜底
+    if (!String(draft.ruleCode || '').match(/^[A-Z]\w{0,63}$/i))
+      errors.push('规则编码必须以字母开头，且只能包含字母、数字和下划线')
+    if (!String(draft.ruleName || '').trim())
+      errors.push('规则名称不能为空')
+    if (!String(draft.category || '').trim())
+      errors.push('编码分类不能为空')
+    if (!String(draft.scene || '').trim())
+      errors.push('适用场景不能为空')
+  }
   if (!segments.length)
     errors.push('至少添加一个编码分段')
   if (!segments.some(segment => Number(segment.includeInCode) === 1))
     errors.push('至少需要一个列入编码的分段')
   if (segments.filter(segment => segment.segmentType === 'SEQ').length > 1)
     errors.push('一条规则最多只能包含一个流水号段')
-  if (segments.some(segment => segment.segmentType === 'VARIABLE' && segment.variableSource === 'LOWCODE') && !draft.sourceObjectId)
+  if (!forPreview
+    && segments.some(segment => segment.segmentType === 'VARIABLE' && segment.variableSource === 'LOWCODE')
+    && !draft.sourceObjectId) {
     errors.push('业务变量段必须选择字段来源业务对象')
+  }
 
   const keys = new Set()
   segments.forEach((segment, index) => {
@@ -234,7 +296,7 @@ export function validateCodeRuleDraft(draft = {}) {
 }
 
 export function buildCodeRulePreviewPayload(draft = {}, fields = {}) {
-  const validation = validateCodeRuleDraft(draft)
+  const validation = validateCodeRuleDraft(draft, { forPreview: true })
   return {
     id: draft.id || null,
     ruleCode: draft.ruleCode || 'preview_rule',

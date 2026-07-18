@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodeRuleServiceObjectBindingTest {
 
@@ -92,6 +93,20 @@ class CodeRuleServiceObjectBindingTest {
                 List.of(segment("fixed_1", "FIXED")),
                 List.of(currentSequence)
         ));
+    }
+
+    @Test
+    void shouldTreatLegacyExcludeAllAsEquivalentToExplicitCharacters() throws Exception {
+        CodeRuleSegmentDTO legacy = segment("seq_1", "SEQ");
+        legacy.setExcludeAmbiguous(1);
+        CodeRuleSegmentDTO explicit = segment("seq_1", "SEQ");
+        explicit.setExcludeAmbiguous(0);
+        explicit.setExcludedCharacters("Z,I,O");
+        Method method = CodeRuleService.class.getDeclaredMethod(
+                "segmentsEquivalent", List.class, List.class);
+        method.setAccessible(true);
+
+        assertTrue((Boolean) method.invoke(service, List.of(legacy), List.of(explicit)));
     }
 
     private CodeRuleSaveDTO variableRule(String variableSource) {

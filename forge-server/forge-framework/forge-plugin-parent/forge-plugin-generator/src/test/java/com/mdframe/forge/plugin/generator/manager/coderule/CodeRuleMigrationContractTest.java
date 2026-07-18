@@ -13,6 +13,8 @@ class CodeRuleMigrationContractTest {
 
     private static final String MIGRATION = "V1.0.36__add_structured_code_rule_segments.sql";
     private static final String RUNTIME_MIGRATION = "V1.0.37__optimize_code_rule_runtime.sql";
+    private static final String EXCLUDED_CHARACTERS_MIGRATION =
+            "V1.0.39__add_code_rule_excluded_characters.sql";
 
     @Test
     void categoryBackfillShouldDependOnDataStateInsteadOfColumnCreationSession() throws IOException {
@@ -65,6 +67,16 @@ class CodeRuleMigrationContractTest {
         assertTrue(sql.contains("legacy_compat_enabled tinyint NOT NULL DEFAULT 1"));
         assertTrue(sql.contains("tenant_id, rule_id, del_flag, segment_order, id"));
         assertTrue(sql.contains("information_schema.STATISTICS"));
+    }
+
+    @Test
+    void excludedCharactersMigrationShouldAddColumnAndBackfillLegacyAllSelection() throws IOException {
+        String sql = Files.readString(resolveMigration(EXCLUDED_CHARACTERS_MIGRATION));
+
+        assertTrue(sql.contains("COLUMN_NAME = 'excluded_characters'"));
+        assertTrue(sql.contains("excluded_characters varchar(16)"));
+        assertTrue(sql.contains("exclude_ambiguous = 1"));
+        assertTrue(sql.contains("excluded_characters = 'I,O,Z'"));
     }
 
     private Path resolveMigration() {

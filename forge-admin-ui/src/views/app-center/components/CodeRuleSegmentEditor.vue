@@ -13,7 +13,7 @@
       <n-dropdown
         v-if="!disabled"
         trigger="click"
-        :options="segmentTypeOptions"
+        :options="segmentTypeDropdownOptions"
         @select="addSegment"
       >
         <n-button type="primary" size="small">
@@ -21,6 +21,9 @@
             <i class="i-material-symbols:add-rounded" />
           </template>
           添加段
+          <template #suffix>
+            <i class="i-material-symbols:arrow-drop-down-rounded" />
+          </template>
         </n-button>
       </n-dropdown>
     </header>
@@ -235,14 +238,25 @@
                       @update:value="value => patchSegment(index, { resetPolicy: value })"
                     />
                   </div>
-                  <div class="advanced-field advanced-field--switch">
-                    <label>排除 I / O / Z</label>
-                    <n-switch
-                      size="small"
-                      :value="Number(segment.excludeAmbiguous) === 1"
-                      :disabled="disabled || ['DECIMAL', 'HEX'].includes(segment.radixType)"
-                      @update:value="value => patchSegment(index, { excludeAmbiguous: value ? 1 : 0 })"
-                    />
+                  <div class="advanced-field advanced-field--ambiguous">
+                    <label>排除易混淆字符</label>
+                    <n-checkbox-group
+                      class="ambiguous-character-options"
+                      :value="selectedAmbiguousCharacters(segment)"
+                      :disabled="disabled"
+                      @update:value="value => patchExcludedCharacters(index, value)"
+                    >
+                      <n-checkbox
+                        v-for="option in ambiguousCharacterOptions"
+                        :key="option.value"
+                        :value="option.value"
+                        :label="option.label"
+                        :title="option.description"
+                      />
+                    </n-checkbox-group>
+                    <span class="advanced-field__hint">
+                      可单独选择；仅对字母进制生效，切换进制不会清空选择。
+                    </span>
                   </div>
                 </template>
 
@@ -291,8 +305,10 @@ import draggable from 'vuedraggable'
 import {
   changeCodeRuleSegmentType,
   changeCodeRuleVariableSource,
+  CODE_RULE_AMBIGUOUS_CHARACTER_OPTIONS,
   createCodeRuleSegment,
   normalizeCodeRuleSegments,
+  normalizeExcludedCharacters,
 } from '../code-rule-utils'
 
 const props = defineProps({
@@ -324,6 +340,12 @@ const rows = computed({
 })
 
 const segmentTypeOptions = computed(() => props.capabilities.segmentTypes || [])
+// n-dropdown 以 key 作为选中值回传，后端能力项只有 label/value，需要显式映射出 key，
+// 否则 @select 拿到 undefined，添加段会兜底成固定值
+const segmentTypeDropdownOptions = computed(() => segmentTypeOptions.value.map(option => ({
+  key: option.value,
+  label: option.label,
+})))
 const dateFormatOptions = computed(() => props.capabilities.dateFormats || [])
 const radixTypeOptions = computed(() => props.capabilities.radixTypes || [])
 const resetPolicyOptions = computed(() => props.capabilities.resetPolicies || [])
@@ -345,6 +367,7 @@ const padDirectionOptions = [
   { label: '左侧补位', value: 'LEFT' },
   { label: '右侧补位', value: 'RIGHT' },
 ]
+const ambiguousCharacterOptions = CODE_RULE_AMBIGUOUS_CHARACTER_OPTIONS
 
 function emitRows(value) {
   emit('update:modelValue', normalizeCodeRuleSegments(value))
@@ -368,7 +391,22 @@ function patchSequenceRadix(index, value) {
   patchSegment(index, {
     radixType: value,
     padChar,
-    excludeAmbiguous: ['DECIMAL', 'HEX'].includes(value) ? 0 : rows.value[index].excludeAmbiguous,
+  })
+}
+
+function selectedAmbiguousCharacters(segment) {
+  const normalized = normalizeExcludedCharacters(
+    segment?.excludedCharacters,
+    segment?.excludeAmbiguous,
+  )
+  return normalized ? normalized.split(',') : []
+}
+
+function patchExcludedCharacters(index, value) {
+  const excludedCharacters = normalizeExcludedCharacters(value)
+  patchSegment(index, {
+    excludedCharacters,
+    excludeAmbiguous: excludedCharacters === 'I,O,Z' ? 1 : 0,
   })
 }
 
@@ -638,6 +676,27 @@ function toggleExpanded(key) {
   align-items: flex-start;
 }
 
+.advanced-field--ambiguous {
+  grid-column: span 2;
+}
+
+.ambiguous-character-options {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-light, #e5e6eb);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+}
+
+.advanced-field__hint {
+  color: var(--text-tertiary, #86909c);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .segment-editor__empty {
   padding: 34px 0;
 }
@@ -662,6 +721,10 @@ function toggleExpanded(key) {
 @media (max-width: 900px) {
   .segment-editor__advanced {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .advanced-field--ambiguous {
+    grid-column: 1 / -1;
   }
 }
 </style>

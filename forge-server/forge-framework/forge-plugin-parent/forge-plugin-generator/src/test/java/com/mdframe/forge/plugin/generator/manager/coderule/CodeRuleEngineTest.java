@@ -39,6 +39,39 @@ class CodeRuleEngineTest {
     }
 
     @Test
+    void shouldExcludeSelectedAmbiguousCharactersIndependentlyAndKeepLegacyAllSelection() {
+        String onlyI = codec.alphabet("ALPHA_UPPER", "I");
+        assertFalse(onlyI.contains("I"));
+        assertTrue(onlyI.contains("O"));
+        assertTrue(onlyI.contains("Z"));
+
+        String lowerOAndZ = codec.alphabet("ALPHA_LOWER", "O,Z");
+        assertTrue(lowerOAndZ.contains("i"));
+        assertFalse(lowerOAndZ.contains("o"));
+        assertFalse(lowerOAndZ.contains("z"));
+        assertEquals(codec.alphabet("ALPHANUMERIC", true),
+                codec.alphabet("ALPHANUMERIC", "I,O,Z"));
+        assertEquals("0123456789ABCDEF", codec.alphabet("HEX", "I,O,Z"));
+        assertThrows(BusinessException.class, () -> codec.alphabet("DECIMAL", "X"));
+    }
+
+    @Test
+    void engineShouldUseSelectedCharactersForEncodingAndCapacity() {
+        CountingSequenceService sequenceService = new CountingSequenceService(8L);
+        CodeRuleSegmentDTO sequence = sequence("selected-characters", 1, 1,
+                "ALPHA_UPPER", "NONE", 1L);
+        sequence.setExcludedCharacters("I");
+        CodeRuleDefinition definition = definition(List.of(sequence));
+        definition.setLegacyCompatEnabled(0);
+
+        CodeRuleGenerateVO result = engine(sequenceService).generate(
+                definition, Map.of(), Map.of("tenantId", 1L));
+
+        assertEquals("J", result.getCode());
+        assertEquals(24L, sequenceService.lastMaxValue);
+    }
+
+    @Test
     void previewShouldRenderFiveSegmentsWithoutTakingSequence() {
         CountingSequenceService sequenceService = new CountingSequenceService(8L);
         CodeRuleEngine engine = engine(sequenceService);

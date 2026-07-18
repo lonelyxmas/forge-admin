@@ -13,6 +13,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.CodeRuleSegmentDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.CodeRuleStatusDTO;
 import com.mdframe.forge.plugin.generator.manager.coderule.CodeRuleDefinition;
 import com.mdframe.forge.plugin.generator.manager.coderule.CodeRuleEngine;
+import com.mdframe.forge.plugin.generator.manager.coderule.CodeRuleRadixCodec;
 import com.mdframe.forge.plugin.generator.manager.coderule.LegacyCodeRuleParser;
 import com.mdframe.forge.plugin.generator.mapper.CodeRuleMapper;
 import com.mdframe.forge.plugin.generator.mapper.CodeRuleSegmentMapper;
@@ -482,13 +483,16 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
     }
 
     private String segmentFingerprint(CodeRuleSegmentDTO value) {
+        String excludedCharacters = CodeRuleRadixCodec.normalizeExcludedCharacters(
+                value.getExcludedCharacters(),
+                Integer.valueOf(1).equals(value.getExcludeAmbiguous()));
         return String.join("|",
                 text(value.getSegmentKey()), text(value.getSegmentType()), text(value.getSegmentValue()),
                 text(value.getVariableSource()),
                 text(value.getSegmentLength()), text(value.getPadEnabled()), text(value.getPadChar()),
                 text(value.getPadDirection()), text(value.getGroupEnabled()), text(value.getIncludeInCode()),
                 text(value.getRadixType()), text(value.getResetEnabled()), text(value.getResetPolicy()),
-                text(value.getStartValue()), text(value.getExcludeAmbiguous()));
+                text(value.getStartValue()), excludedCharacters);
     }
 
     private void replaceSegments(Long ruleId, Long tenantId, List<CodeRuleSegmentDTO> segments) {
@@ -687,6 +691,7 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
         dto.setResetPolicy(entity.getResetPolicy());
         dto.setStartValue(entity.getStartValue());
         dto.setExcludeAmbiguous(entity.getExcludeAmbiguous());
+        dto.setExcludedCharacters(entity.getExcludedCharacters());
         return dto;
     }
 
@@ -708,6 +713,7 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
         entity.setResetPolicy(dto.getResetPolicy());
         entity.setStartValue(dto.getStartValue());
         entity.setExcludeAmbiguous(dto.getExcludeAmbiguous());
+        entity.setExcludedCharacters(dto.getExcludedCharacters());
         return entity;
     }
 
@@ -872,7 +878,8 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
                                            Integer resetEnabled,
                                            String resetPolicy,
                                            Long startValue,
-                                           Integer excludeAmbiguous) {
+                                           Integer excludeAmbiguous,
+                                           String excludedCharacters) {
 
         private static CodeRuleSegmentSnapshot from(CodeRuleSegmentDTO source) {
             return new CodeRuleSegmentSnapshot(
@@ -891,7 +898,8 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
                     source.getResetEnabled(),
                     source.getResetPolicy(),
                     source.getStartValue(),
-                    source.getExcludeAmbiguous());
+                    source.getExcludeAmbiguous(),
+                    source.getExcludedCharacters());
         }
 
         private CodeRuleSegmentDTO toDto() {
@@ -912,6 +920,7 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
             target.setResetPolicy(resetPolicy);
             target.setStartValue(startValue);
             target.setExcludeAmbiguous(excludeAmbiguous);
+            target.setExcludedCharacters(excludedCharacters);
             return target;
         }
     }

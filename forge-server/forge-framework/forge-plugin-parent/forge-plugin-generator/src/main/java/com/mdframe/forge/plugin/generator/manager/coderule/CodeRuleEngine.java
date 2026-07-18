@@ -202,16 +202,15 @@ public class CodeRuleEngine {
                 boolean legacyCompatible = isLegacyCompatible(definition);
                 String legacyKeyPrefix = legacyCompatible
                         ? keyFactory.legacyKeyPrefix(definition) : null;
-                boolean excludeAmbiguous = Integer.valueOf(1)
-                        .equals(sequenceSegment.getExcludeAmbiguous());
+                String excludedCharacters = sequenceSegment.getExcludedCharacters();
                 int allocationStep = legacyCompatible ? 1_000 : radixCodec.recommendedAllocationStep(
                         sequenceSegment.getRadixType(),
                         sequenceSegment.getSegmentLength(),
-                        excludeAmbiguous);
+                        excludedCharacters);
                 long maxValue = legacyCompatible ? Long.MAX_VALUE : radixCodec.maxValue(
                         sequenceSegment.getRadixType(),
                         sequenceSegment.getSegmentLength(),
-                        excludeAmbiguous);
+                        excludedCharacters);
                 sequence = sequenceService.nextId(
                         sequenceKey.key(),
                         startValue,
@@ -304,14 +303,14 @@ public class CodeRuleEngine {
                                   String period,
                                   boolean previewMode) {
         String radixType = sequenceSegment.getRadixType();
-        boolean excludeAmbiguous = Integer.valueOf(1).equals(sequenceSegment.getExcludeAmbiguous());
+        String excludedCharacters = sequenceSegment.getExcludedCharacters();
         int configuredLength = sequenceSegment.getSegmentLength();
-        int requiredLength = radixCodec.requiredLength(sequence, radixType, excludeAmbiguous);
+        int requiredLength = radixCodec.requiredLength(sequence, radixType, excludedCharacters);
         if (previewMode || requiredLength <= configuredLength) {
-            return radixCodec.encode(sequence, radixType, configuredLength, excludeAmbiguous);
+            return radixCodec.encode(sequence, radixType, configuredLength, excludedCharacters);
         }
         if (!isLegacyCompatible(definition)) {
-            return radixCodec.encode(sequence, radixType, configuredLength, excludeAmbiguous);
+            return radixCodec.encode(sequence, radixType, configuredLength, excludedCharacters);
         }
 
         LegacyWidthCacheKey cacheKey = new LegacyWidthCacheKey(
@@ -321,11 +320,11 @@ public class CodeRuleEngine {
                 period,
                 radixType,
                 configuredLength,
-                excludeAmbiguous
+                excludedCharacters
         );
         int compatibleLength = resolveCompatibleLength(
-                cacheKey, definition, startValue, period, radixType, configuredLength, excludeAmbiguous);
-        return radixCodec.encode(sequence, radixType, compatibleLength, excludeAmbiguous);
+                cacheKey, definition, startValue, period, radixType, configuredLength, excludedCharacters);
+        return radixCodec.encode(sequence, radixType, compatibleLength, excludedCharacters);
     }
 
     private boolean isLegacyCompatible(CodeRuleDefinition definition) {
@@ -338,7 +337,7 @@ public class CodeRuleEngine {
                                         String period,
                                         String radixType,
                                         int configuredLength,
-                                        boolean excludeAmbiguous) {
+                                        String excludedCharacters) {
         synchronized (legacyWidthCache) {
             Integer cachedLength = legacyWidthCache.get(cacheKey);
             if (cachedLength != null) {
@@ -352,7 +351,7 @@ public class CodeRuleEngine {
                 period
         );
         int resolvedLength = Math.max(configuredLength,
-                radixCodec.requiredLength(legacyStartValue, radixType, excludeAmbiguous));
+                radixCodec.requiredLength(legacyStartValue, radixType, excludedCharacters));
         synchronized (legacyWidthCache) {
             Integer cachedLength = legacyWidthCache.get(cacheKey);
             if (cachedLength != null) {
@@ -459,7 +458,17 @@ public class CodeRuleEngine {
         segment.setResetPolicy(StringUtils.upperCase(StringUtils.defaultIfBlank(segment.getResetPolicy(), "NONE")));
         segment.setRadixType(StringUtils.upperCase(StringUtils.defaultIfBlank(segment.getRadixType(), "DECIMAL")));
         segment.setStartValue(segment.getStartValue() == null ? 1L : segment.getStartValue());
-        segment.setExcludeAmbiguous(Integer.valueOf(1).equals(segment.getExcludeAmbiguous()) ? 1 : 0);
+        if ("SEQ".equals(segment.getSegmentType())) {
+            String excludedCharacters = CodeRuleRadixCodec.normalizeExcludedCharacters(
+                    segment.getExcludedCharacters(),
+                    Integer.valueOf(1).equals(segment.getExcludeAmbiguous()));
+            segment.setExcludedCharacters(excludedCharacters);
+            segment.setExcludeAmbiguous(
+                    CodeRuleRadixCodec.ALL_AMBIGUOUS_CHARACTERS.equals(excludedCharacters) ? 1 : 0);
+        } else {
+            segment.setExcludedCharacters(null);
+            segment.setExcludeAmbiguous(0);
+        }
         if (StringUtils.isBlank(segment.getSegmentKey()) || !segment.getSegmentKey().matches("[A-Za-z0-9_-]{1,32}")) {
             throw new BusinessException("分段键只能包含字母、数字、下划线或短横线，且长度不超过32");
         }
@@ -481,7 +490,7 @@ public class CodeRuleEngine {
         segment.setPadEnabled(1);
         segment.setPadDirection("LEFT");
         segment.setPadChar(radixCodec.alphabet(segment.getRadixType(),
-                Integer.valueOf(1).equals(segment.getExcludeAmbiguous())).substring(0, 1));
+                segment.getExcludedCharacters()).substring(0, 1));
         if (!Integer.valueOf(1).equals(segment.getResetEnabled())) {
             segment.setResetPolicy("NONE");
         }
@@ -489,7 +498,7 @@ public class CodeRuleEngine {
             throw new BusinessException("不支持的流水重置周期: " + segment.getResetPolicy());
         }
         radixCodec.encode(segment.getStartValue(), segment.getRadixType(), segment.getSegmentLength(),
-                Integer.valueOf(1).equals(segment.getExcludeAmbiguous()));
+                segment.getExcludedCharacters());
     }
 
     private void validateValueSegment(CodeRuleSegmentDTO segment) {
@@ -625,6 +634,6 @@ public class CodeRuleEngine {
                                        String period,
                                        String radixType,
                                        int configuredLength,
-                                       boolean excludeAmbiguous) {
+                                       String excludedCharacters) {
     }
 }

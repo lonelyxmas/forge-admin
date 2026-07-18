@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.property.refresh;
 
+import com.mdframe.forge.starter.property.DbConfigLoader;
 import com.mdframe.forge.starter.property.DbPropertySource;
 import com.mdframe.forge.starter.property.event.ConfigRefreshEvent;
 import com.mdframe.forge.starter.property.scope.RefreshScopeImpl;
@@ -93,58 +94,10 @@ public class ConfigRefresher {
     }
     
     /**
-     * 从数据库加载配置
+     * 从数据库加载配置（sys_config 与 sys_config_group 内存合并，分组优先）
      */
     private Map<String, String> loadPropertiesFromDb() {
-        Map<String, String> result = new HashMap<>();
-        // 优先尝试从 sys_config 表加载（企业级配置表）
-        try {
-            String sql = "SELECT config_key, config_value FROM sys_config WHERE config_type = 'Y'";
-            List<Map<String, Object>> data = jdbcTemplate.queryForList(sql);
-            data.forEach(row -> {
-                Object keyObj = row.get("config_key");
-                Object valueObj = row.get("config_value");
-                if (keyObj != null && valueObj != null) {
-                    String key = keyObj.toString();
-                    String value = valueObj.toString();
-                    result.put(key, value);
-                    // 同时添加驼峰格式的key，支持双向兼容
-                    String camelCaseKey = convertToCamelCase(key);
-                    if (!camelCaseKey.equals(key)) {
-                        result.put(camelCaseKey, value);
-                    }
-                }
-            });
-            //log.debug("从 config_properties 表加载了 {} 个配置项", data.size());
-        } catch (Exception e) {
-            log.warn("从 config_properties 表加载配置失败:{}", e.getMessage());
-        }
-        return result;
-    }
-    
-    /**
-     * 将中划线格式转换为驼峰格式
-     * 例如：max-login-attempts -> maxLoginAttempts
-     */
-    private String convertToCamelCase(String key) {
-        if (key == null || !key.contains("-")) {
-            return key;
-        }
-        StringBuilder result = new StringBuilder();
-        boolean capitalizeNext = false;
-        for (char c : key.toCharArray()) {
-            if (c == '-') {
-                capitalizeNext = true;
-            } else {
-                if (capitalizeNext) {
-                    result.append(Character.toUpperCase(c));
-                    capitalizeNext = false;
-                } else {
-                    result.append(c);
-                }
-            }
-        }
-        return result.toString();
+        return DbConfigLoader.load(jdbcTemplate);
     }
     
     /**

@@ -1,7 +1,5 @@
 package com.mdframe.forge.starter.config.service;
 
-import com.mdframe.forge.starter.config.converter.ConfigConverter;
-import com.mdframe.forge.starter.config.entity.SysConfigGroup;
 import com.mdframe.forge.starter.property.refresh.ConfigRefresher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,139 +8,72 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 /**
  * 配置同步服务
- * 负责将SysConfigGroup中的配置同步到sys_config表，以兼容现有的配置刷新机制
+ * <p>
+ * 历史版本会将 sys_config_group 的分组 JSON 拍平后双写到 sys_config，
+ * 造成两表数据重复。现在 sys_config 与 sys_config_group 由
+ * {@link com.mdframe.forge.starter.property.DbConfigLoader} 在加载时内存合并
+ * （分组配置优先），本服务不再写入派生键值，只负责：
+ * <ul>
+ *   <li>清理历史双写遗留的派生行（config_desc 为 '配置中心[xx]同步项'）</li>
+ *   <li>触发配置刷新，让最新合并结果生效</li>
+ * </ul>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConfigSyncService implements ApplicationRunner {
 
-    private static final String UPSERT_SYS_CONFIG_SQL = """
-            INSERT INTO sys_config (
-                tenant_id, config_name, config_key, config_value, config_type,
-                config_desc, sort, create_time, update_time
-            ) VALUES (1, ?, ?, ?, 'Y', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON DUPLICATE KEY UPDATE
-                config_name = VALUES(config_name),
-                config_value = VALUES(config_value),
-                config_type = 'Y',
-                config_desc = VALUES(config_desc),
-                update_time = CURRENT_TIMESTAMP
-            """;
+    /**
+     * 历史派生行的描述前缀，仅用于识别和清理双写遗留数据
+     */
+    private static final String DERIVED_DESC_PATTERN = "配置中心%同步项";
 
-    private final ISysConfigGroupService sysConfigGroupService;
     private final JdbcTemplate jdbcTemplate;
-    private final ConfigRefresher configRefresher; // 复用现有的配置刷新器
-    private final ConfigConverter configConverter; // 使用配置转换器
+    private final ConfigRefresher configRefresher;
 
     /**
-     * 同步所有配置到sys_config表
+     * 清理历史派生行并刷新全部配置
      */
     public boolean syncAllConfigs() {
-        try {
-            // 获取所有启用的配置分组
-            List<SysConfigGroup> configGroups = sysConfigGroupService.selectEnabledGroups();
-            
-            Map<String, String> groupToSysConfigAll = new HashMap<>();
-            for (SysConfigGroup configGroup : configGroups) {
-                Map<String, String> groupToSysConfig = syncConfigGroupToSysConfig(configGroup);
-                if (groupToSysConfig != null) {
-                    groupToSysConfigAll.putAll(groupToSysConfig);
-                }
-            }
-            // 触发配置刷新
-            boolean refreshResult = configRefresher.refresh(groupToSysConfigAll);
-            log.info("配置同步完成，刷新结果: {}", refreshResult);
-            return refreshResult;
-        } catch (Exception e) {
-            log.error("同步配置失败", e);
-            return false;
-        }
+        cleanupDerivedSysConfigRows();
+        boolean refreshResult = configRefresher.refresh();
+        log.info("配置同步完成，刷新结果: {}", refreshResult);
+        return refreshResult;
     }
 
     /**
-     * 同步特定配置分组到sys_config表
+     * 指定分组变更后刷新配置
+     * 分组 JSON 已由 ConfigManagerService 写入 sys_config_group，这里只需触发刷新，
+     * 加载器会实时拍平分组配置，无需再落库 sys_config
      */
     public boolean syncConfigGroup(String groupCode) {
-        try {
-            SysConfigGroup configGroup = sysConfigGroupService.selectByGroupCode(groupCode);
-            if (configGroup == null) {
-                log.warn("配置分组不存在: {}", groupCode);
-                return false;
-            }
-            
-            Map<String, String> groupToSysConfig = syncConfigGroupToSysConfig(configGroup);
-            
-            if (groupToSysConfig != null) {
-                // 触发配置刷新
-                boolean refreshResult = configRefresher.refresh(groupToSysConfig);
-                log.info("配置分组[{}]同步完成，刷新结果: {}", groupCode, refreshResult);
-                return refreshResult;
-            }
-            return false;
-        } catch (Exception e) {
-            log.error("同步配置分组[{}]失败", groupCode, e);
-            return false;
-        }
+        boolean refreshResult = configRefresher.refresh();
+        log.info("配置分组[{}]同步完成，刷新结果: {}", groupCode, refreshResult);
+        return refreshResult;
     }
 
     /**
-     * 将配置分组同步到sys_config表
+     * 物理删除历史双写遗留的派生配置行。
+     * 这些行只是分组 JSON 的缓存副本，真实来源在 sys_config_group；
+     * 数据库配置源使用原生 JDBC 加载、不过滤 del_flag，逻辑删除无法让其失效，因此物理删除。
+     * 语句幂等，每次启动执行一次，删除失败不阻断启动。
      */
-    private Map<String, String> syncConfigGroupToSysConfig(SysConfigGroup configGroup) {
+    private void cleanupDerivedSysConfigRows() {
         try {
-            String groupCode = configGroup.getGroupCode();
-            String configValue = configGroup.getConfigValue();
-            
-            if (configValue == null || configValue.trim().isEmpty()) {
-                log.debug("配置分组[{}]的配置值为空，跳过同步", groupCode);
-                return null;
+            int deleted = jdbcTemplate.update(
+                    "DELETE FROM sys_config WHERE config_desc LIKE ?", DERIVED_DESC_PATTERN);
+            if (deleted > 0) {
+                log.info("已清理 sys_config 历史派生配置行 {} 条", deleted);
             }
-
-            // 根据分组类型解析配置
-            Map<String, String> configMap = switch (groupCode) {
-                case "login" -> configConverter.convertLoginConfig(configValue);
-                case "watermark" -> configConverter.convertWatermarkConfig(configValue);
-                case "crypto" -> configConverter.convertCryptoConfig(configValue);
-                case "auth" -> configConverter.convertAuthConfig(configValue);
-                case "log" -> configConverter.convertLogConfig(configValue);
-                default -> {
-                    log.warn("未知的配置分组: {}", groupCode);
-                    yield null;
-                }
-            };
-            persistSysConfig(groupCode, configMap);
-            return configMap;
         } catch (Exception e) {
-            log.error("同步配置分组[{}]到sys_config表失败", configGroup.getGroupCode(), e);
+            log.warn("清理 sys_config 历史派生配置行失败（不影响启动）: {}", e.getMessage());
         }
-        return null;
     }
 
-    private void persistSysConfig(String groupCode, Map<String, String> configMap) {
-        if (configMap == null || configMap.isEmpty()) {
-            return;
-        }
-        List<Object[]> batchArgs = configMap.entrySet().stream()
-                .map(entry -> new Object[]{
-                        entry.getKey(),
-                        entry.getKey(),
-                        entry.getValue(),
-                        "配置中心[" + groupCode + "]同步项"
-                })
-                .toList();
-        jdbcTemplate.batchUpdate(UPSERT_SYS_CONFIG_SQL, batchArgs);
-        log.info("配置分组[{}]已写入 sys_config，共 {} 项", groupCode, batchArgs.size());
-    }
-    
     @Override
-    public void run(ApplicationArguments args) throws Exception {
+    public void run(ApplicationArguments args) {
         syncAllConfigs();
     }
 }

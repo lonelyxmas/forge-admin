@@ -43,14 +43,26 @@ public class CryptoAutoConfiguration {
 
     @Bean
     public RsaKeyPairHolder rsaKeyPairHolder(CryptoProperties properties) {
+        String publicKey = normalizeKey(properties.getRsaPublicKey());
+        String privateKey = normalizeKey(properties.getRsaPrivateKey());
         if (Boolean.TRUE.equals(properties.getEnabled())
-            && StringUtils.hasText(properties.getRsaPublicKey())
-            && StringUtils.hasText(properties.getRsaPrivateKey())) {
+            && publicKey != null
+            && privateKey != null) {
             log.info("使用配置的 RSA 密钥对");
-            return new RsaKeyPairHolder(properties.getRsaPublicKey(), properties.getRsaPrivateKey());
+            return new RsaKeyPairHolder(publicKey, privateKey);
         }
         log.info("自动生成 RSA 密钥对");
         return new RsaKeyPairHolder();
+    }
+
+    /**
+     * 归一化配置的 RSA 密钥：空白或历史脏数据 "null" 字符串一律按未配置处理
+     */
+    private String normalizeKey(String key) {
+        if (!StringUtils.hasText(key) || "null".equalsIgnoreCase(key.trim())) {
+            return null;
+        }
+        return key.trim();
     }
 
     @Bean

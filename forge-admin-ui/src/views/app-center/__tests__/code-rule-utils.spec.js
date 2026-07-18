@@ -4,11 +4,13 @@ import {
   buildCodeRulePreviewPayload,
   changeCodeRuleSegmentType,
   changeCodeRuleVariableSource,
+  codeRuleSegmentTypeMeta,
   createCodeRuleSegment,
   createLatestRequestGuard,
   hasCodeRulePermission,
   isCanceledRequest,
   normalizeCodeRuleSegments,
+  normalizeExcludedCharacters,
   validateCodeRuleDraft,
 } from '../code-rule-utils'
 
@@ -24,6 +26,21 @@ describe('code rule utilities', () => {
       startValue: 1,
       padDirection: 'LEFT',
     })
+    expect(segment.excludedCharacters).toBe('')
+  })
+
+  it('normalizes independently selected ambiguous characters and legacy all-selection', () => {
+    expect(normalizeExcludedCharacters(['Z', 'I', 'I', 'X'])).toBe('I,Z')
+    expect(normalizeExcludedCharacters('O')).toBe('O')
+    expect(normalizeExcludedCharacters('', 1)).toBe('I,O,Z')
+    expect(normalizeExcludedCharacters('', 0)).toBe('')
+
+    const [legacy, partial] = normalizeCodeRuleSegments([
+      { ...createCodeRuleSegment('SEQ', 1), excludeAmbiguous: 1 },
+      { ...createCodeRuleSegment('FIXED', 2), excludedCharacters: 'Z,I' },
+    ])
+    expect(legacy).toMatchObject({ excludedCharacters: 'I,O,Z', excludeAmbiguous: 1 })
+    expect(partial).toMatchObject({ excludedCharacters: 'I,Z', excludeAmbiguous: 0 })
   })
 
   it('keeps the stable key while clearing sequence-only properties', () => {
@@ -166,6 +183,50 @@ describe('code rule utilities', () => {
       expect.objectContaining({ segmentKey: sibling.segmentKey, variableSource: 'LOWCODE', segmentValue: null }),
       expect.objectContaining({ segmentKey: custom.segmentKey, variableSource: 'CUSTOM', segmentValue: 'customerLevel' }),
     ]))
+  })
+
+  it('allows previewing a draft without basic info or low-code object binding', () => {
+    const variable = createCodeRuleSegment('VARIABLE', 1)
+    variable.variableSource = 'LOWCODE'
+    variable.segmentValue = 'warehouseCode'
+    const draft = {
+      ruleCode: '',
+      ruleName: '',
+      category: '',
+      scene: '',
+      segments: [createCodeRuleSegment('FIXED', 1), variable],
+    }
+
+    const saveValidation = validateCodeRuleDraft(draft)
+    expect(saveValidation.valid).toBe(false)
+
+    const previewValidation = validateCodeRuleDraft(draft, { forPreview: true })
+    expect(previewValidation.valid).toBe(true)
+
+    const payload = buildCodeRulePreviewPayload(draft, { warehouseCode: 'WH1' })
+    expect(payload.ruleCode).toBe('preview_rule')
+    expect(payload.ruleName).toBe('编码规则预览')
+    expect(payload.segments).toHaveLength(2)
+  })
+
+  it('still rejects invalid segments in preview mode', () => {
+    const result = validateCodeRuleDraft({
+      ruleCode: '',
+      ruleName: '',
+      segments: [
+        { ...createCodeRuleSegment('SEQ', 1), segmentLength: 60 },
+        { ...createCodeRuleSegment('SEQ', 2), segmentLength: 60 },
+      ],
+    }, { forPreview: true })
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('一条规则最多只能包含一个流水号段')
+  })
+
+  it('exposes display meta for every segment type', () => {
+    expect(codeRuleSegmentTypeMeta('DATE')).toEqual({ label: '日期', tone: 'date' })
+    expect(codeRuleSegmentTypeMeta('SEQ').tone).toBe('sequence')
+    expect(codeRuleSegmentTypeMeta('SYS_VAR').label).toBe('系统变量')
+    expect(codeRuleSegmentTypeMeta('UNKNOWN').tone).toBe('unknown')
   })
 
   it('ignores expired asynchronous responses', () => {

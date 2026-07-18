@@ -32,11 +32,9 @@ public class ConfigAutoConfiguration {
     
     @Bean
     @ConditionalOnMissingBean(ConfigSyncService.class)
-    public ConfigSyncService configSyncService(ISysConfigGroupService sysConfigGroupService, 
-                                              JdbcTemplate jdbcTemplate,
-                                              com.mdframe.forge.starter.property.refresh.ConfigRefresher configRefresher,
-                                              ConfigConverter configConverter) {
-        return new ConfigSyncService(sysConfigGroupService, jdbcTemplate, configRefresher, configConverter);
+    public ConfigSyncService configSyncService(JdbcTemplate jdbcTemplate,
+                                              com.mdframe.forge.starter.property.refresh.ConfigRefresher configRefresher) {
+        return new ConfigSyncService(jdbcTemplate, configRefresher);
     }
     
     @Bean

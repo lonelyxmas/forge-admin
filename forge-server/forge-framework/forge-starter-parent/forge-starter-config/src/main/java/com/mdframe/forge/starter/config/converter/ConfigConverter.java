@@ -20,6 +20,21 @@ public class ConfigConverter {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
+     * 按分组编码将配置分组JSON拍平为 sys_config 键值对
+     * 统一供配置同步、数据库配置源加载使用，未知分组返回 null
+     */
+    public Map<String, String> convertByGroupCode(String groupCode, String configJson) throws JsonProcessingException {
+        return switch (groupCode) {
+            case "login" -> convertLoginConfig(configJson);
+            case "watermark" -> convertWatermarkConfig(configJson);
+            case "crypto" -> convertCryptoConfig(configJson);
+            case "auth" -> convertAuthConfig(configJson);
+            case "log" -> convertLogConfig(configJson);
+            default -> null;
+        };
+    }
+
+    /**
      * 将登录配置JSON转换为键值对
      */
     public Map<String, String> convertLoginConfig(String configJson) throws JsonProcessingException {
@@ -171,11 +186,13 @@ public class ConfigConverter {
     }
 
     /**
-     * 辅助方法：如果JSON节点存在，则将其值放入map中
+     * 辅助方法：如果JSON节点存在且非null，则将其值放入map中
+     * 注意：JSON中的 null 会解析为 NullNode（非Java null），其 asText() 返回字符串 "null"，
+     * 必须显式排除，否则会把 "null" 字符串写入 sys_config
      */
     private void putIfNotNull(Map<String, String> map, String key, JsonNode node, String fieldName) {
         JsonNode fieldNode = node.get(fieldName);
-        if (fieldNode != null) {
+        if (fieldNode != null && !fieldNode.isNull()) {
             String value = fieldNode.asText();
             if (fieldNode.isBoolean()) {
                 value = String.valueOf(fieldNode.asBoolean());

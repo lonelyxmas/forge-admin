@@ -62,6 +62,9 @@ public class AiCodeRuleSegment extends TenantEntity {
 
     private Integer excludeAmbiguous;
 
+    /** 具体排除的易混淆字符，规范值为 I、O、Z 的逗号分隔组合。 */
+    private String excludedCharacters;
+
     @TableLogic
     private String delFlag;
 }
