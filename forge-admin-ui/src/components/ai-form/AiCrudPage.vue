@@ -736,6 +736,7 @@ import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
 import { normalizeExpandConfig, shouldExpandRow } from './expand-utils'
+import { isNumberFieldType } from './field-type-utils'
 
 /**
  * ==================== Props 定义 ====================
@@ -2689,7 +2690,7 @@ function normalizeRuntimeFormulaSampleValue(value, field = {}, config = {}, fiel
 function isRuntimeNumericField(field = {}) {
   const type = String(field.type || field.componentType || '').toLowerCase()
   const dataType = String(field.dataType || field.fieldDataType || field.props?.dataType || '').toLowerCase()
-  return ['number', 'inputnumber'].includes(type)
+  return isNumberFieldType(type)
     || ['int', 'integer', 'bigint', 'decimal', 'double', 'float', 'number'].includes(dataType)
 }
 
@@ -3311,7 +3312,7 @@ watch(
 
 /**
  * 统一规范化编辑表单回填数据
- * - number/inputNumber：字符串 → 数字
+ * - number/inputNumber/input-number：字符串 → 数字
  * - select/radio/checkbox：数字 → 字符串（匹配字典选项的 string value）
  */
 function normalizeEditData(data) {
@@ -3324,7 +3325,7 @@ function normalizeEditData(data) {
       result[key] = value
       continue
     }
-    if (['number', 'inputNumber'].includes(fieldConfig.type)) {
+    if (isNumberFieldType(fieldConfig.type)) {
       // 数字字段：字符串转数字
       if (typeof value === 'string') {
         result[key] = Number.parseFloat(value)

@@ -210,7 +210,7 @@ const editSchema = computed(() => [
   {
     field: 'maxTokens',
     label: '最大Token数',
-    type: 'input-number',
+    type: 'number',
     props: { placeholder: '如 128000', min: 0, style: { width: '100%' } },
   },
   {
@@ -241,7 +241,7 @@ const editSchema = computed(() => [
   {
     field: 'sortOrder',
     label: '排序号',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: { placeholder: '排序值', min: 0 },
   },

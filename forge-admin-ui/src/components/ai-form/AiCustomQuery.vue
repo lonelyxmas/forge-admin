@@ -325,6 +325,7 @@ import {
   customQuerySchemeUpdate,
 } from '@/api/ai'
 import AiFormItem from './AiFormItem.vue'
+import { isNumberFieldType } from './field-type-utils'
 
 const props = defineProps({
   configKey: {
@@ -700,7 +701,7 @@ function normalizeComponentType(field = {}) {
     return 'userSelect'
   if (componentType === 'regionName')
     return 'regionTreeSelect'
-  if (['inputNumber', 'number'].includes(componentType))
+  if (isNumberFieldType(componentType))
     return 'number'
   if (['int', 'bigint', 'decimal', 'double', 'float'].includes(field.dataType) || ['int', 'bigint', 'decimal', 'double', 'float'].includes(componentType))
     return 'number'

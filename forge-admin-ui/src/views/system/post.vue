@@ -341,7 +341,7 @@ const editSchema = computed(() => [
   {
     field: 'sort',
     label: '排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       placeholder: '排序值',

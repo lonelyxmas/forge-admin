@@ -141,6 +141,7 @@ import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runti
 import { createFieldPermissionMap } from '@/utils/field-permissions'
 import { normalizeRulePattern, normalizeValidationRules } from '@/utils/validation-presets'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
+import { isInputLikeFieldType, isNumberFieldType } from './field-type-utils'
 
 const props = defineProps({
   // 表单配置 schema
@@ -341,14 +342,13 @@ function collectRuntimeFieldRules(field = {}) {
 }
 
 function buildRequiredRule(field) {
-  const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
-  const isNumericType = field.type === 'number' || field.type === 'inputNumber'
+  const isNumericType = isNumberFieldType(field.type)
   const isDateType = isDateLikeType(field.type)
   const isSelectionType = isSelectionLikeType(field.type)
   const rule = {
     key: field.field,
     required: true,
-    message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
+    message: field.requiredMessage || `请${isInputLikeFieldType(field.type) ? '输入' : '选择'}${field.label}`,
     trigger: field.trigger || (isNumericType || isDateType || isSelectionType ? 'change' : ['blur', 'change']),
   }
   // number/date/treeSelect 等类型需要自定义 validator，避免 0、数字 ID、数组等有效值被误判为空
@@ -415,7 +415,7 @@ function hasFormValue(value) {
 
 function normalizeFieldRules(field, fieldRules) {
   const rules = Array.isArray(fieldRules) ? fieldRules : [fieldRules]
-  const needsCustomEmptyValidator = isDateLikeType(field.type) || isSelectionLikeType(field.type) || field.type === 'number' || field.type === 'inputNumber'
+  const needsCustomEmptyValidator = isDateLikeType(field.type) || isSelectionLikeType(field.type) || isNumberFieldType(field.type)
 
   const normalizedRules = rules.map((sourceRule) => {
     const withKeyRule = normalizeRulePattern({ ...(sourceRule || {}), key: sourceRule?.key || field.field })

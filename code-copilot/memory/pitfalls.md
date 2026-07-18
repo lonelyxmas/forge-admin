@@ -3099,3 +3099,20 @@ Flyway 脚本为新环境写了包含完整字段的 `CREATE TABLE IF NOT EXISTS
 
 **影响范围**:
 - 所有按租户、业务字段、组织、日期周期动态构造 key 的数据库号段/本地缓存生成器。
+
+## 122. AiForm 数字字段类型必须统一归一化
+
+**发现日期**: 2026-07-18
+
+**问题描述**:
+页面 `editSchema` 使用 `type: 'input-number'` 时，如果 `AiFormItem`、必填校验、编辑回填和高级查询分别硬编码 `number/inputNumber`，字段会回退为普通 `n-input`，`min/max/step` 约束同时失效。只补渲染分支仍会让校验、回填或查询链路继续出现类型分叉。
+
+**解决方案**:
+- 页面 Schema 标准写法统一为 `type: 'number'`；
+- 共享层通过单一 `isNumberFieldType` 兼容 `number`、`inputNumber`、`input-number` 历史值；
+- AiFormItem、AiForm、AiCrudPage 和 AiCustomQuery 共用同一判断，禁止继续散落字符串数组；
+- 批量清理后使用静态扫描保证 `src/views` 中 `type: 'input-number'` 零残留，并增加 NInputNumber 与约束透传组件测试。
+
+**影响范围**:
+- AiForm/AiCrudPage 的数字渲染、必填校验、详情回填和高级查询；
+- 所有手写、生成或从历史配置恢复的表单 Schema。

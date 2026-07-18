@@ -407,7 +407,7 @@ const editSchema = computed(() => [
   {
     field: 'retryCount',
     label: '失败重试次数',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       placeholder: '0',

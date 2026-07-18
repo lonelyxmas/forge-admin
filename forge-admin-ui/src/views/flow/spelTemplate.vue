@@ -147,7 +147,7 @@ const editSchema = computed(() => [
   {
     field: 'sort',
     label: '排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 100,
     props: { min: 0, max: 999, placeholder: '数值越小优先级越高' },
   },

@@ -166,7 +166,7 @@ const editSchema = [
   {
     field: 'sort',
     label: '排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       min: 0,

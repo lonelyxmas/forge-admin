@@ -264,7 +264,7 @@ const editSchema = computed(() => [
   {
     field: 'orderNum',
     label: '排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       placeholder: '数字越小越靠前',
@@ -429,7 +429,7 @@ const editSchema = computed(() => [
   {
     field: 'maxFileSize',
     label: '最大文件(MB)',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 100,
     props: {
       placeholder: '单位：MB',

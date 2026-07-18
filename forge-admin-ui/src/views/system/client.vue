@@ -278,7 +278,7 @@ const editSchema = [
   {
     field: 'tokenTimeout',
     label: 'Token有效期(秒)',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 7200,
     rules: [{ required: true, message: '请输入Token有效期' }],
     props: {
@@ -290,7 +290,7 @@ const editSchema = [
   {
     field: 'tokenActivityTimeout',
     label: 'Token活跃超时(秒)',
-    type: 'input-number',
+    type: 'number',
     defaultValue: -1,
     props: {
       placeholder: '-1表示不限制',

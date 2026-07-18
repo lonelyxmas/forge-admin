@@ -314,7 +314,7 @@ const editSchema = computed(() => [
   {
     field: 'maxRows',
     label: '最大导出行数',
-    type: 'input-number',
+    type: 'number',
     vIf: formData => isExportType(formData.configType),
     props: {
       placeholder: '最大导出条数',

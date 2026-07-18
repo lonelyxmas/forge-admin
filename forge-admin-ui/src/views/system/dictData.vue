@@ -331,7 +331,7 @@ const editSchema = computed(() => [
   {
     field: 'dictSort',
     label: '排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       placeholder: '排序值',

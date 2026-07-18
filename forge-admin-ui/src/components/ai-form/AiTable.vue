@@ -61,6 +61,7 @@
       :checked-row-keys="innerCheckedRowKeys"
       :expanded-row-keys="expandedRowKeys"
       v-bind="$attrs"
+      :row-class-name="resolveRowClassName"
       @update:checked-row-keys="handleUpdateCheckedKeys"
       @update:expanded-row-keys="handleUpdateExpandedKeys"
       @update:sorter="handleUpdateSorter"
@@ -172,6 +173,7 @@
 import { NCheckbox, NEmpty, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
 import { computed, h, ref, useSlots, watch } from 'vue'
 import AiToolbarAction from './AiToolbarAction.vue'
+import { resolveTableRowClassName } from './table-state-utils'
 
 const props = defineProps({
   // 列配置
@@ -204,6 +206,11 @@ const props = defineProps({
   rowKey: {
     type: [String, Function],
     default: 'id',
+  },
+  // 自定义行类名，支持字符串或 (row, index) => string
+  rowClassName: {
+    type: [String, Function],
+    default: '',
   },
   // 是否显示斑马纹
   striped: {
@@ -946,6 +953,15 @@ function isRowChecked(row) {
   return innerCheckedRowKeys.value.includes(rowKeyFn.value(row))
 }
 
+function resolveRowClassName(row, index) {
+  return resolveTableRowClassName(
+    props.rowClassName,
+    row,
+    index,
+    isRowChecked(row),
+  )
+}
+
 function setRowChecked(row, checked) {
   const key = rowKeyFn.value(row)
   const keys = new Set(innerCheckedRowKeys.value)
@@ -1365,6 +1381,24 @@ defineExpose({
 /* 表格层 hover 效果增强 */
 :deep(.n-data-table-tr:hover .n-data-table-td) {
   background: var(--bg-secondary) !important;
+}
+
+/* 选中态统一覆盖普通、排序和固定列背景，避免同一行出现颜色断层 */
+:deep(.n-data-table-tr.ai-table-row--checked .n-data-table-td) {
+  transition: none;
+  background-color: color-mix(
+    in srgb,
+    var(--primary-color, #165dff) 9%,
+    var(--n-merged-td-color, var(--bg-primary, #fff))
+  ) !important;
+}
+
+:deep(.n-data-table-tr.ai-table-row--checked:hover .n-data-table-td) {
+  background-color: color-mix(
+    in srgb,
+    var(--primary-color, #165dff) 14%,
+    var(--n-merged-td-color, var(--bg-primary, #fff))
+  ) !important;
 }
 
 /* 头部单元格样式 */

@@ -367,7 +367,7 @@ const editSchema = computed(() => [
   {
     field: 'topSort',
     label: '置顶排序',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: {
       placeholder: '数字越大越靠前',

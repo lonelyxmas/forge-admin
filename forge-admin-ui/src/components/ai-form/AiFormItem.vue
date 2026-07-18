@@ -101,7 +101,7 @@
 
         <!-- 数字输入框 -->
         <n-input-number
-          v-else-if="field.type === 'number' || field.type === 'inputNumber'"
+          v-else-if="isNumberFieldType(field.type)"
           :value="value"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
@@ -744,6 +744,7 @@ import AiCustomSelect from './AiCustomSelect.vue'
 import AiFormGroupTitle from './AiFormGroupTitle.vue'
 import AiFormSectionTitle from './AiFormSectionTitle.vue'
 import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
+import { isInputLikeFieldType, isNumberFieldType } from './field-type-utils'
 import { applyRecordFieldMappings, extractSelectorRawRecord, normalizeRecordSelectorConfig } from './record-selector-utils'
 
 const props = defineProps({
@@ -835,8 +836,7 @@ function getPlaceholder(field) {
     return field.placeholder
   }
 
-  const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
-  const prefix = inputTypes.includes(field.type) ? '请输入' : '请选择'
+  const prefix = isInputLikeFieldType(field.type) ? '请输入' : '请选择'
   return `${prefix}${field.label}`
 }
 

@@ -618,7 +618,7 @@ const editSchema = computed(() => [
   {
     field: 'userLimit',
     label: '人员上限',
-    type: 'input-number',
+    type: 'number',
     defaultValue: 0,
     props: { placeholder: '0表示无限制', min: 0 },
   },
