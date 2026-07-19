@@ -107,6 +107,7 @@
 import { NInput, NTag, NTooltip } from 'naive-ui'
 import { computed, defineComponent, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import { request } from '@/utils'
 
 defineOptions({ name: 'DataScopeConfig' })
@@ -339,27 +340,21 @@ function renderTextTooltip(text, triggerClass, displayText) {
 }
 
 function renderResourceCell(row) {
-  return h('div', { class: 'resource-cell' }, [
-    h('div', { class: 'resource-name-line' }, [
-      h('span', { class: 'resource-name' }, row.resourceName || '-'),
-      isEnabled(row)
-        ? h(NTag, { type: 'success', size: 'small', bordered: false, round: true }, { default: () => '启用' })
-        : h(NTag, { type: 'default', size: 'small', bordered: false, round: true }, { default: () => '禁用' }),
-    ]),
-    renderTextTooltip(row.resourceCode, 'resource-code', row.resourceCode || '-'),
-  ])
+  return h(SystemTableCell, {
+    title: row.resourceName,
+    subtitle: row.resourceCode,
+    interactive: true,
+    tooltip: `查看数据权限配置：${row.resourceName || row.resourceCode || '-'}`,
+    onActivate: () => crudRef.value?.showDetail(row),
+  })
 }
 
 function renderMapperCell(row) {
-  return h('div', { class: 'mapper-cell' }, [
-    renderTextTooltip(row.mapperMethod, 'mapper-method', getShortMapperMethod(row.mapperMethod)),
-  ])
-}
-
-function renderAliasCell(row) {
-  return h('span', {
-    class: row.tableAlias ? 'alias-badge' : 'alias-badge is-empty',
-  }, row.tableAlias || '未配置')
+  return h(SystemTableCell, {
+    title: getShortMapperMethod(row.mapperMethod),
+    subtitle: row.tableAlias ? `表别名：${row.tableAlias}` : '',
+    tooltip: row.mapperMethod || '-',
+  })
 }
 
 function renderScopeFields(row) {
@@ -374,21 +369,9 @@ function renderScopeFields(row) {
     return h('span', { class: 'empty-text' }, '未配置')
   }
 
-  return h('div', { class: 'scope-field-tags' }, fields.map(item => h(NTooltip, {
-    key: item.label,
-    trigger: 'hover',
-    placement: 'top-start',
-    width: 420,
-  }, {
-    trigger: () => h(NTag, {
-      type: item.type,
-      size: 'small',
-      bordered: false,
-      round: true,
-      class: 'scope-field-tag',
-    }, { default: () => `${item.label} ${getFieldPreview(item.value)}` }),
-    default: () => h('span', { class: 'tooltip-text' }, item.value),
-  })))
+  return h(SystemTableCell, {
+    values: fields.map(item => `${item.label}：${getFieldPreview(item.value)}`),
+  })
 }
 
 function renderRemark(row) {
@@ -400,25 +383,19 @@ const tableColumns = computed(() => [
   {
     prop: 'resource',
     label: '资源',
-    width: 240,
+    width: 250,
     render: renderResourceCell,
   },
   {
     prop: 'mapperMethod',
-    label: 'Mapper 精确匹配',
-    width: 280,
+    label: '查询方法',
+    width: 240,
     render: renderMapperCell,
-  },
-  {
-    prop: 'tableAlias',
-    label: '表别名',
-    width: 90,
-    render: renderAliasCell,
   },
   {
     prop: 'scopeFields',
     label: '权限字段',
-    width: 300,
+    width: 220,
     render: renderScopeFields,
   },
   {
@@ -441,13 +418,13 @@ const tableColumns = computed(() => [
   {
     prop: 'remark',
     label: '备注',
-    width: 140,
+    width: 180,
     render: renderRemark,
   },
   {
     prop: 'action',
     label: '操作',
-    width: 120,
+    width: 140,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },

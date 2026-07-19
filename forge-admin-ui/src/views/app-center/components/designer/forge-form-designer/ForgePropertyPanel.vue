@@ -1811,9 +1811,9 @@
               </div>
               <n-form-item label="表格尺寸">
                 <n-select
-                  :value="crudOptions.tableSize || 'small'"
-                  :options="componentSizeOptions.filter(item => item.value)"
-                  @update:value="updateCrudOption('tableSize', $event || 'small')"
+                  :value="crudOptions.tableSize || 'medium'"
+                  :options="tableDensityOptions"
+                  @update:value="updateCrudOption('tableSize', $event || 'medium')"
                 />
               </n-form-item>
               <n-form-item label="渲染模式">
@@ -4390,6 +4390,11 @@ const componentSizeOptions = [
   { label: '小', value: 'small' },
   { label: '中', value: 'medium' },
   { label: '大', value: 'large' },
+]
+const tableDensityOptions = [
+  { label: '紧凑', value: 'small' },
+  { label: '默认', value: 'medium' },
+  { label: '宽松', value: 'large' },
 ]
 const requestMethodOptions = [
   { label: 'GET', value: 'get' },

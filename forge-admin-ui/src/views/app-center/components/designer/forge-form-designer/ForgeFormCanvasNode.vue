@@ -653,7 +653,7 @@ const crudPreviewOptions = computed(() => ({
   editShowFeedback: false,
   editXGap: 12,
   editYGap: 8,
-  tableSize: 'small',
+  tableSize: 'medium',
   renderMode: 'table',
   showRenderModeSwitch: false,
   hideToolbar: false,

@@ -120,6 +120,7 @@
 <script setup>
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables'
 import { request } from '@/utils'
@@ -197,21 +198,16 @@ const searchSchema = computed(() => [
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'id',
-    label: 'ID',
-    width: 80,
-  },
-  {
     prop: 'apiName',
-    label: '接口名称',
-    width: 150,
-    showOverflowTooltip: true,
-  },
-  {
-    prop: 'apiCode',
-    label: '接口编码',
-    width: 150,
-    showOverflowTooltip: true,
+    label: '接口',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: row.apiName,
+      subtitle: row.apiCode,
+      interactive: true,
+      tooltip: `查看接口配置：${row.apiName || row.apiCode || '-'}`,
+      onActivate: () => handleView(row),
+    }),
   },
   {
     prop: 'reqMethod',
@@ -315,7 +311,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 140,
     fixed: 'right',
     actions: [
       { label: '查看', key: 'view', type: 'primary', onClick: handleView },
@@ -497,7 +493,7 @@ async function handleView(row) {
       detailVisible.value = true
     }
   }
-  catch (error) {
+  catch {
     window.$message.error('获取详情失败')
   }
 }
@@ -524,7 +520,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -547,7 +543,7 @@ async function handleRegisterApiConfigs() {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('自动注册失败')
       }
       finally {
@@ -572,7 +568,7 @@ async function handleRefreshCache() {
           window.$message.success('缓存刷新成功')
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('缓存刷新失败')
       }
       finally {
@@ -600,8 +596,6 @@ function handleBeforeRenderDetail(data) {
 
 // 表单提交前钩子 - 处理数据
 function handleBeforeSubmit(formData) {
-  console.log('提交的表单数据:', formData)
-
   // 确保数字字段是数字类型
   const numberFields = ['status', 'authFlag', 'encryptFlag', 'tenantFlag', 'limitFlag']
   numberFields.forEach((field) => {

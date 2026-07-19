@@ -127,6 +127,7 @@
 import { NButton, NInput, NPopover } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables'
 import { request } from '@/utils'
@@ -206,14 +207,15 @@ const searchSchema = computed(() => [
 const tableColumns = computed(() => [
   {
     prop: 'jobName',
-    label: '任务名称',
-    minWidth: 180,
-    ellipsis: { tooltip: true },
-  },
-  {
-    prop: 'jobGroup',
-    label: '任务分组',
-    width: 120,
+    label: '任务',
+    minWidth: 200,
+    render: row => h(SystemTableCell, {
+      title: row.jobName,
+      subtitle: row.jobGroup,
+      interactive: true,
+      tooltip: `查看任务：${row.jobName || row.jobGroup || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'executeMode',
@@ -284,7 +286,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 176,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },

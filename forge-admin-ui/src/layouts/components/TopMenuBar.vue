@@ -428,22 +428,46 @@ watch(() => props.activeKey, () => {
   position: absolute;
   top: 50%;
   z-index: 35;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 50%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
   color: var(--top-menu-text-color, #fff);
-  background: rgba(15, 23, 42, 0.28);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+  background: transparent;
+  opacity: 0.62;
   cursor: pointer;
   transform: translateY(-50%);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.forge-top-menu-scroll i {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
 }
 
 .forge-top-menu-scroll:hover {
-  background: rgba(15, 23, 42, 0.42);
+  color: var(--top-menu-text-color-hover, var(--top-menu-text-color, #fff));
+  background: color-mix(in srgb, var(--top-menu-text-color, #fff) 14%, transparent);
+  opacity: 1;
+}
+
+.forge-top-menu-scroll:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+.forge-top-menu-scroll:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--top-menu-text-color, #fff) 78%, transparent);
+  outline-offset: 1px;
+  opacity: 1;
 }
 
 .forge-top-menu-scroll.is-left {
@@ -461,7 +485,7 @@ watch(() => props.activeKey, () => {
   top: 0;
   bottom: 0;
   z-index: 30;
-  width: 38px;
+  width: 32px;
   pointer-events: none;
 }
 

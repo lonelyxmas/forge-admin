@@ -203,10 +203,10 @@
               <label class="config-control">
                 <span>表格尺寸</span>
                 <NSelect
-                  :value="tableZone?.props?.tableSize || 'small'"
+                  :value="tableZone?.props?.tableSize || 'medium'"
                   :options="sizeOptions"
                   size="small"
-                  @update:value="updateTableProp('tableSize', $event || 'small')"
+                  @update:value="updateTableProp('tableSize', $event || 'medium')"
                 />
               </label>
               <label class="config-control">
@@ -1267,7 +1267,7 @@ const crudPreviewBlock = computed(() => {
       hideBatchDelete: tableProps.hideBatchDelete === true,
       hideSelection: tableProps.hideSelection === true,
       showRenderModeSwitch: tableProps.showRenderModeSwitch !== false,
-      tableSize: tableProps.tableSize || 'small',
+      tableSize: tableProps.tableSize || 'medium',
       renderMode: tableProps.renderMode || 'table',
       bordered: tableProps.bordered === true,
       striped: tableProps.striped === true,

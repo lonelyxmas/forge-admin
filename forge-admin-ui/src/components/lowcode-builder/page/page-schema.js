@@ -2212,7 +2212,7 @@ function createDefaultAiCrudPageProps() {
     searchYGap: 16,
     searchFieldRefs: [],
     searchFieldSettings: {},
-    tableSize: 'small',
+    tableSize: 'medium',
     renderMode: 'table',
     showRenderModeSwitch: true,
     hideSelection: false,

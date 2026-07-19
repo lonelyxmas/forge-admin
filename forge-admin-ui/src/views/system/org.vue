@@ -1,85 +1,92 @@
 <template>
   <div class="system-org-page">
-    <div class="org-workspace" :class="{ 'is-org-collapsed': leftOrgPanelCollapsed }">
-      <aside class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
-        <div class="org-tree-header">
-          <div class="header-title">
-            <div v-if="!leftOrgPanelCollapsed" class="header-copy">
-              <span>组织架构</span>
-              <small>{{ orgTreeSummaryText }}</small>
+    <MasterDetailWorkspace
+      class="org-workspace"
+      :collapsed="leftOrgPanelCollapsed"
+      :aside-width="220"
+      :collapsed-aside-width="64"
+    >
+      <template #aside>
+        <div class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
+          <div class="org-tree-header">
+            <div class="header-title">
+              <div v-if="!leftOrgPanelCollapsed" class="header-copy">
+                <span>组织架构</span>
+                <small>{{ orgTreeSummaryText }}</small>
+              </div>
+            </div>
+            <div class="header-actions">
+              <n-button
+                v-if="!leftOrgPanelCollapsed"
+                quaternary
+                circle
+                size="small"
+                title="新增顶级组织"
+                @click="handleAddRootOrg"
+              >
+                <template #icon>
+                  <i class="i-material-symbols:add-rounded" />
+                </template>
+              </n-button>
+              <n-button
+                quaternary
+                circle
+                size="small"
+                :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
+                @click="toggleLeftOrgPanel"
+              >
+                <template #icon>
+                  <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
+                </template>
+              </n-button>
             </div>
           </div>
-          <div class="header-actions">
-            <n-button
-              v-if="!leftOrgPanelCollapsed"
-              quaternary
-              circle
+
+          <div v-show="!leftOrgPanelCollapsed && userStore.isAdmin" class="org-tree-tools">
+            <n-select
+              v-if="userStore.isAdmin"
+              v-model:value="selectedTenantId"
+              :options="tenantSelectOptions"
+              clearable
+              filterable
               size="small"
-              title="新增顶级组织"
-              @click="handleAddRootOrg"
-            >
-              <template #icon>
-                <i class="i-material-symbols:add-rounded" />
-              </template>
-            </n-button>
-            <n-button
-              quaternary
-              circle
-              size="small"
-              :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
-              @click="toggleLeftOrgPanel"
-            >
-              <template #icon>
-                <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
-              </template>
-            </n-button>
+              placeholder="全部租户"
+              @update:value="handleTenantChange"
+            />
+          </div>
+
+          <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
+            <n-spin :show="leftOrgTreeLoading">
+              <PremiumTree
+                v-if="leftOrgTreeData.length > 0"
+                :data="leftOrgTreeData"
+                :selected-keys="selectedOrgKeys"
+                :expanded-keys="leftOrgExpandedKeys"
+                key-field="id"
+                label-field="orgName"
+                children-field="children"
+                :get-node-icon="getLeftOrgNodeIcon"
+                :get-node-tone="getLeftOrgNodeTone"
+                :actions="orgTreeActions"
+                @update:selected-keys="handleOrgNodeSelect"
+                @update:expanded-keys="handleLeftOrgExpandedKeysChange"
+                @action="handleOrgTreeAction"
+              />
+              <n-empty v-else description="暂无组织数据" size="small" />
+            </n-spin>
+          </div>
+
+          <div
+            v-show="leftOrgPanelCollapsed"
+            class="org-tree-collapsed-hint"
+            :class="{ 'has-active-filter': selectedOrgNode && !isShowAllOrganizations }"
+            @click="toggleLeftOrgPanel"
+          >
+            <i class="i-material-symbols:account-tree-rounded" />
+            <span>组织架构</span>
           </div>
         </div>
-
-        <div v-show="!leftOrgPanelCollapsed && userStore.isAdmin" class="org-tree-tools">
-          <n-select
-            v-if="userStore.isAdmin"
-            v-model:value="selectedTenantId"
-            :options="tenantSelectOptions"
-            clearable
-            filterable
-            size="small"
-            placeholder="全部租户"
-            @update:value="handleTenantChange"
-          />
-        </div>
-
-        <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
-          <n-spin :show="leftOrgTreeLoading">
-            <PremiumTree
-              v-if="leftOrgTreeData.length > 0"
-              :data="leftOrgTreeData"
-              :selected-keys="selectedOrgKeys"
-              :expanded-keys="leftOrgExpandedKeys"
-              key-field="id"
-              label-field="orgName"
-              children-field="children"
-              :get-node-icon="getLeftOrgNodeIcon"
-              :get-node-tone="getLeftOrgNodeTone"
-              :actions="orgTreeActions"
-              @update:selected-keys="handleOrgNodeSelect"
-              @update:expanded-keys="handleLeftOrgExpandedKeysChange"
-              @action="handleOrgTreeAction"
-            />
-            <n-empty v-else description="暂无组织数据" size="small" />
-          </n-spin>
-        </div>
-
-        <div
-          v-show="leftOrgPanelCollapsed"
-          class="org-tree-collapsed-hint"
-          :class="{ 'has-active-filter': selectedOrgNode && !isShowAllOrganizations }"
-          @click="toggleLeftOrgPanel"
-        >
-          <i class="i-material-symbols:account-tree-rounded" />
-          <span>组织架构</span>
-        </div>
-      </aside>
+      </template>
 
       <section class="org-detail-panel">
         <n-tabs v-model:value="orgWorkspaceTab" type="line" animated class="org-workspace-tabs">
@@ -202,7 +209,7 @@
           </n-tab-pane>
         </n-tabs>
       </section>
-    </div>
+    </MasterDetailWorkspace>
 
     <UserSelectModal
       v-model:show="userSelectVisible"
@@ -280,7 +287,9 @@
 <script setup>
 import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
 import PremiumTree from '@/components/common/PremiumTree.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import UserSelectModal from '@/components/common/UserSelectModal.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
@@ -652,11 +661,14 @@ const userTableColumns = computed(() => [
     prop: 'realName',
     label: '用户',
     minWidth: 180,
-    render: row => h('div', { class: 'member-user-inline' }, [
-      h('strong', resolveUserDisplayName(row)),
-      h('em', ' / '),
-      h('span', row.username || '-'),
-    ]),
+    render: row => h(SystemTableCell, {
+      title: resolveUserDisplayName(row),
+      subtitle: resolveUserAccountLabel(row),
+      interactive: true,
+      avatar: true,
+      tooltip: `查看用户详情：${row.username || resolveUserDisplayName(row)}`,
+      onActivate: () => userCrudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'phone',
@@ -675,9 +687,10 @@ const userTableColumns = computed(() => [
     ? [{
         prop: 'orgName',
         label: '所属组织',
-        minWidth: 150,
-        ellipsis: { tooltip: true },
-        render: row => row.orgName || '-',
+        minWidth: 180,
+        render: row => h(SystemTableCell, {
+          values: splitTableCellValues(row.orgName || row.orgNames),
+        }),
       }]
     : []),
   {
@@ -1392,6 +1405,19 @@ function normalizeNumberList(values = []) {
 function resolveUserDisplayName(row = {}) {
   return row.realName || row.name || row.nickname || row.username || `用户${row.id}`
 }
+
+function resolveUserAccountLabel(row = {}) {
+  const username = String(row.username || '').trim()
+  return username && username !== resolveUserDisplayName(row) ? `@${username}` : ''
+}
+
+function splitTableCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return rawValues
+    .flatMap(item => String(item || '').split(/[、,，]/))
+    .map(item => item.trim())
+    .filter(Boolean)
+}
 </script>
 
 <style scoped>
@@ -1401,39 +1427,20 @@ function resolveUserDisplayName(row = {}) {
 }
 
 .org-workspace {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 8px;
   height: 100%;
   min-height: 0;
 }
 
-.org-workspace.is-org-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
-}
-
 .org-tree-panel,
 .org-detail-panel {
+  height: 100%;
   min-height: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: none;
 }
 
 .org-tree-panel {
-  min-width: 220px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition:
-    min-width 0.24s ease,
-    width 0.24s ease;
-}
-
-.org-tree-panel.is-collapsed {
-  width: 64px;
-  min-width: 64px;
 }
 
 .org-tree-header {
@@ -1869,13 +1876,6 @@ function resolveUserDisplayName(row = {}) {
   opacity: 1;
 }
 
-.dark .org-tree-panel,
-.dark .org-detail-panel {
-  border-color: #334155 !important;
-  background: #0f172a !important;
-  box-shadow: none;
-}
-
 .dark .org-tree-header {
   border-bottom-color: #334155;
   background: #0f172a;
@@ -1943,38 +1943,5 @@ function resolveUserDisplayName(row = {}) {
 .dark .post-actions button.type-error:hover {
   background: rgba(239, 68, 68, 0.14);
   color: #fca5a5;
-}
-
-@media (max-width: 1280px) {
-  .org-workspace {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .org-workspace.is-org-collapsed {
-    grid-template-columns: 64px minmax(0, 1fr);
-  }
-
-  .org-tree-panel {
-    min-width: 220px;
-  }
-}
-
-@media (max-width: 1080px) {
-  .org-workspace {
-    grid-template-columns: 1fr;
-    grid-auto-rows: minmax(260px, auto);
-    overflow-y: auto;
-  }
-
-  .org-tree-panel,
-  .org-tree-panel.is-collapsed {
-    width: auto;
-    min-width: 0;
-    min-height: 320px;
-  }
-
-  .org-tree-panel.is-collapsed {
-    min-height: 72px;
-  }
 }
 </style>

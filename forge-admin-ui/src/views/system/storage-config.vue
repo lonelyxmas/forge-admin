@@ -87,6 +87,7 @@
 import { NButton, NDynamicTags, NInput, NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
@@ -141,14 +142,16 @@ const searchSchema = computed(() => [
 const tableColumns = computed(() => [
   {
     prop: 'configName',
-    label: '配置名称',
-    minWidth: 150,
-    render: (row) => {
-      return h('div', { class: 'flex items-center gap-8' }, [
-        row.isDefault ? h(NTag, { type: 'success', size: 'small' }, { default: () => '默认' }) : null,
-        h('span', row.configName),
-      ])
-    },
+    label: '存储配置',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: row.configName,
+      subtitle: row.isDefault ? '默认配置' : '备用配置',
+      interactive: true,
+      avatar: true,
+      tooltip: `查看存储配置：${row.configName || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'storageType',
@@ -204,7 +207,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 220,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },

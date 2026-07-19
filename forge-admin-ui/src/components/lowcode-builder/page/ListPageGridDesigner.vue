@@ -1490,9 +1490,9 @@
                     <n-form-item label="表格展示">
                       <div class="style-grid four">
                         <n-select
-                          :value="selectedBlock.props?.tableSize || 'small'"
-                          :options="componentSizeOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { tableSize: $event || 'small' })"
+                          :value="selectedBlock.props?.tableSize || 'medium'"
+                          :options="tableDensityOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { tableSize: $event || 'medium' })"
                         />
                         <n-select
                           :value="selectedBlock.props?.renderMode || 'table'"
@@ -4999,6 +4999,11 @@ const componentSizeOptions = [
   { label: '小', value: 'small' },
   { label: '中', value: 'medium' },
   { label: '大', value: 'large' },
+]
+const tableDensityOptions = [
+  { label: '紧凑', value: 'small' },
+  { label: '默认', value: 'medium' },
+  { label: '宽松', value: 'large' },
 ]
 const renderModeOptions = [
   { label: '表格', value: 'table' },

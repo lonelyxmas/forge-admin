@@ -350,7 +350,7 @@
           :render-mode="block.props?.renderMode || 'table'"
           :show-render-mode-switch="block.props?.showRenderModeSwitch !== false"
           :enable-tree-add-child="block.props?.enableTreeAddChild === true"
-          :table-size="block.props?.tableSize || 'small'"
+          :table-size="block.props?.tableSize || 'medium'"
           :bordered="!!block.props?.bordered"
           :striped="!!block.props?.striped"
           :hide-selection="block.props?.hideSelection === true"

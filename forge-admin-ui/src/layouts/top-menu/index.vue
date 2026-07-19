@@ -35,7 +35,7 @@
       <AppCard :bordered="false" :padding="false" class="top-layout-tab-bar px-8 py-0" shadow="none" radius="none">
         <AppTab class="w-0 flex-1" />
       </AppCard>
-      <div class="layout-page-content flex-1 bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
+      <div class="layout-page-content flex-1 bg-[#f2f3f5]" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -116,9 +116,11 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 }
 
 .layout-page-content {
+  box-sizing: border-box;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  padding: 8px;
 }
 
 .top-layout-tab-bar {

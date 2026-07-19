@@ -78,7 +78,7 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 16px;
+  padding: 8px;
   min-height: 0;
 }
 

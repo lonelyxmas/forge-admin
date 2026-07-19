@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 10px;
+  padding: 8px;
   background: var(--bg-primary);
   min-height: 0;
 }

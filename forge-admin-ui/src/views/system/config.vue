@@ -23,6 +23,7 @@
 <script setup>
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables'
 import { request } from '@/utils'
@@ -67,24 +68,21 @@ const searchSchema = computed(() => [
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'configId',
-    label: '参数ID',
-    width: 100,
-  },
-  {
     prop: 'configName',
-    label: '参数名称',
-    width: 200,
-  },
-  {
-    prop: 'configKey',
-    label: '参数键名',
-    width: 200,
+    label: '参数',
+    minWidth: 240,
+    render: row => h(SystemTableCell, {
+      title: row.configName,
+      subtitle: row.configKey,
+      interactive: true,
+      tooltip: `查看参数：${row.configName || row.configKey || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'configValue',
     label: '参数键值',
-    width: 200,
+    minWidth: 180,
   },
   {
     prop: 'configType',
@@ -106,17 +104,17 @@ const tableColumns = computed(() => [
   {
     prop: 'configDesc',
     label: '参数描述',
-    width: 200,
+    minWidth: 200,
   },
   {
     prop: 'createTime',
     label: '创建时间',
-    width: 180,
+    width: 172,
   },
   {
     prop: 'action',
     label: '操作',
-    width: 120,
+    width: 140,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },

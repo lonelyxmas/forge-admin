@@ -59,6 +59,7 @@ import { NPageHeader, NTag } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import { request } from '@/utils'
 
 defineOptions({ name: 'DictData', title: '字典数据' })
@@ -176,19 +177,16 @@ const searchSchema = [
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'dictCode',
-    label: '字典编码',
-    width: 100,
-  },
-  {
     prop: 'dictLabel',
-    label: '字典标签',
-    width: 150,
-  },
-  {
-    prop: 'dictValue',
-    label: '字典键值',
-    width: 150,
+    label: '字典项',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: row.dictLabel,
+      subtitle: row.dictValue,
+      interactive: true,
+      tooltip: `查看字典项：${row.dictLabel || row.dictValue || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'parentDictCode',
@@ -255,17 +253,17 @@ const tableColumns = computed(() => [
   {
     prop: 'remark',
     label: '备注',
-    width: 200,
+    minWidth: 180,
   },
   {
     prop: 'createTime',
     label: '创建时间',
-    width: 180,
+    width: 172,
   },
   {
     prop: 'action',
     label: '操作',
-    width: 180,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '新增下级', key: 'addChild', type: 'primary', onClick: handleAddChild },

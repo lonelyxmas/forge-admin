@@ -200,6 +200,7 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -509,13 +510,16 @@ const searchSchema = computed(() => [
 const tableColumns = computed(() => [
   {
     prop: 'tenantName',
-    label: '租户名称',
-    width: 180,
-  },
-  {
-    prop: 'contactPerson',
-    label: '负责人',
-    width: 120,
+    label: '租户',
+    minWidth: 200,
+    render: row => h(SystemTableCell, {
+      title: row.tenantName,
+      subtitle: row.contactPerson ? `负责人：${row.contactPerson}` : '',
+      interactive: true,
+      avatar: true,
+      tooltip: `查看租户：${row.tenantName || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'contactPhone',
@@ -546,7 +550,7 @@ const tableColumns = computed(() => [
   {
     prop: 'defaultBusinessDatasourceCode',
     label: '业务数据源',
-    minWidth: 150,
+    minWidth: 140,
     render: (row) => {
       const datasource = findBusinessDatasource(row.defaultBusinessDatasourceId)
       return h(NTag, {
@@ -560,7 +564,7 @@ const tableColumns = computed(() => [
   {
     prop: 'tenantDesc',
     label: '描述',
-    minWidth: 150,
+    minWidth: 180,
   },
   {
     prop: 'action',

@@ -91,12 +91,14 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
   background: var(--gray-100);
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0;
+  box-sizing: border-box;
+  padding: 8px;
   min-height: 0;
 }
 
 .content-area-flush {
   overflow: hidden;
+  padding: 0;
 }
 
 /* 响应式 */

@@ -24,6 +24,7 @@
 import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import { closeAndOpen, request } from '@/utils'
 
 defineOptions({ name: 'DictType' })
@@ -111,19 +112,16 @@ function handleDelete(row) {
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'dictId',
-    label: '字典ID',
-    width: 100,
-  },
-  {
     prop: 'dictName',
-    label: '字典名称',
-    width: 200,
-  },
-  {
-    prop: 'dictType',
-    label: '字典类型',
-    width: 200,
+    label: '字典',
+    minWidth: 240,
+    render: row => h(SystemTableCell, {
+      title: row.dictName,
+      subtitle: row.dictType,
+      interactive: true,
+      tooltip: `管理字典数据：${row.dictName || row.dictType || '-'}`,
+      onActivate: () => handleManageData(row),
+    }),
   },
   {
     prop: 'dictStatus',
@@ -137,17 +135,17 @@ const tableColumns = computed(() => [
   {
     prop: 'remark',
     label: '备注',
-    width: 200,
+    minWidth: 200,
   },
   {
     prop: 'createTime',
     label: '创建时间',
-    width: 180,
+    width: 172,
   },
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '字典数据', key: 'dictData', onClick: handleManageData },

@@ -105,6 +105,7 @@
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import AuthImage from '@/components/common/AuthImage.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
@@ -155,11 +156,6 @@ const searchSchema = computed(() => [
 
 const tableColumns = computed(() => [
   {
-    prop: 'id',
-    label: 'ID',
-    width: 80,
-  },
-  {
     prop: 'platform',
     label: '平台类型',
     width: 120,
@@ -170,8 +166,15 @@ const tableColumns = computed(() => [
   },
   {
     prop: 'platformName',
-    label: '平台名称',
-    width: 120,
+    label: '平台',
+    minWidth: 150,
+    render: row => h(SystemTableCell, {
+      title: row.platformName,
+      subtitle: row.platform,
+      interactive: true,
+      tooltip: `查看三方登录配置：${row.platformName || row.platform || '-'}`,
+      onActivate: () => handleView(row),
+    }),
   },
   {
     prop: 'platformLogo',
@@ -216,7 +219,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 140,
     fixed: 'right',
     actions: [
       { label: '查看', key: 'view', type: 'primary', onClick: handleView },
@@ -362,7 +365,7 @@ async function handleView(row) {
       detailVisible.value = true
     }
   }
-  catch (error) {
+  catch {
     window.$message.error('获取详情失败')
   }
 }
@@ -387,7 +390,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -408,7 +411,7 @@ async function handleRefreshCache() {
           window.$message.success('缓存刷新成功')
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('缓存刷新失败')
       }
       finally {
@@ -430,8 +433,6 @@ function handleBeforeRenderDetail(data) {
 }
 
 function handleBeforeSubmit(formData) {
-  console.log('提交的表单数据:', formData)
-
   if (formData.status !== null && formData.status !== undefined) {
     formData.status = Number(formData.status)
   }

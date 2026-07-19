@@ -75,6 +75,7 @@
 import { NButton, NForm, NFormItem, NInput, NModal } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { managedFetch } from '@/composables/useGlobalLoading'
@@ -146,12 +147,6 @@ const searchSchema = computed(() => [
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'configKey',
-    label: '配置键',
-    minWidth: 180,
-    showOverflowTooltip: true,
-  },
-  {
     prop: 'configType',
     label: '配置类型',
     width: 110,
@@ -159,8 +154,15 @@ const tableColumns = computed(() => [
   },
   {
     prop: 'exportName',
-    label: '配置名称',
-    minWidth: 150,
+    label: '导出配置',
+    minWidth: 210,
+    render: row => h(SystemTableCell, {
+      title: row.exportName,
+      subtitle: row.configKey,
+      interactive: true,
+      tooltip: `查看导出配置：${row.exportName || row.configKey || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'sheetName',
@@ -197,7 +199,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },

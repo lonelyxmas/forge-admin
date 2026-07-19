@@ -1,212 +1,197 @@
-# Forge Admin Design System
+# Forge Admin 设计与公共组件约束
 
-## 1. Visual Theme & Atmosphere
+本文件定义 `forge-admin-ui` 的界面设计原则、公共页面组件和高频交互约束。它服务于长期维护：新页面、新组件和改版都应先遵循这里的视觉与交互规则，再补充具体业务逻辑。
 
-Forge Admin is a compact enterprise operations interface. The default style is restrained, clear, and built for repeated daily use. It should feel like a professional permission, organization, and data management console, not a marketing site.
+项目级开发约束以仓库根目录 `AGENTS.md` 为准；目录、命名、接口、字典和编码细则见 [Forge Admin前端开发与组件规范.md](./Forge%20Admin%E5%89%8D%E7%AB%AF%E5%BC%80%E5%8F%91%E4%B8%8E%E7%BB%84%E4%BB%B6%E8%A7%84%E8%8C%83.md)。
 
-- **Density:** 7/10. Information should be compact and scannable, with enough spacing to avoid crowding.
-- **Variance:** 4/10. Use subtle layout variation only when it clarifies hierarchy. Avoid decorative asymmetry.
-- **Motion:** 2/10. Keep motion restrained. Use hover, active, and loading feedback only where it helps operation clarity.
-- **Primary goal:** Users should immediately understand the main object, the current selection, and where each action belongs.
+## 1. 设计目标
 
-## 2. Color Palette & Roles
+Forge Admin 是供日常反复使用的企业管理控制台，不是营销网站。
 
-- **App Canvas** (#F6F8FB) — page background and large empty areas.
-- **Panel Surface** (#FFFFFF) — main content panels, list containers, and form surfaces.
-- **Ink Text** (#0F172A) — primary text and active object labels.
-- **Steel Text** (#64748B) — secondary metadata, helper text, role keys, usernames, and descriptions.
-- **Quiet Border** (#E5E7EB) — panel borders, toolbar separators, input grouping lines.
-- **Soft Hover** (#F8FAFC) — hover backgrounds and low-emphasis grouped surfaces.
-- **Selected Wash** (#F3F7FF) — selected object background.
-- **Action Blue** (#2563EB) — the single primary accent for primary buttons, selected borders, focus states, and active tabs.
-- **Danger Red** (#DC2626) — destructive actions only.
+- 信息密度保持中高：内容紧凑、可扫读，但不拥挤。
+- 页面首先明确“当前管理什么对象、已选择什么对象、操作作用于哪里”。
+- 用边框、间距、字重和主题色表达层级；不靠渐变、大阴影或装饰卡片堆砌效果。
+- 动效只用于确认操作、悬停和加载状态，不能妨碍阅读或降低列表性能。
 
-Rules:
+## 2. 颜色、文字与表面
 
-- Use only one normal accent color: **Action Blue**.
-- Do not use purple-blue neon, gradient glows, oversaturated colors, or heavy shadows.
-- Do not use pure black.
-- Prefer borders, background contrast, and typography weight over decorative effects.
+| 角色 | 变量或参考色 | 用途 |
+| --- | --- | --- |
+| 页面底色 | `--gray-100` / `#f6f8fb` | Layout 内容背景 |
+| 面板底色 | `--bg-primary` / `#fff` | 工作台、表格和表单 |
+| 主文字 | `--text-primary` | 标题、核心值和当前对象 |
+| 次要文字 | `--text-tertiary` | 编码、账号、说明和时间 |
+| 边框 | `--border-light` | 面板分隔、工具栏和控件边界 |
+| 主题色 | `--primary-color` | 主操作、可点击实体、选中态和焦点 |
+| 危险色 | `--error-color` | 删除和不可逆操作 |
 
-## 3. Typography Rules
+- 正常交互只使用一个主题强调色；不要再引入独立的绿色、紫色或渐变体系。
+- 系统页标题通常为 14–17px，表格正文 13px，辅助信息 11–12px。
+- 管理页禁止使用营销式大标题、英文装饰标签、虚假指标卡和重阴影。
+- 面板圆角通常为 6px，控件间距通常为 6–8px；页面根节点不再额外叠加大留白。
 
-- Use the project’s existing sans-serif stack. Dashboard and admin pages must stay sans-serif.
-- Page and panel titles: 14px, weight 650, compact line-height.
-- Table/list body: 13px.
-- Metadata and helper text: 11-12px, Steel Text.
-- Do not use oversized headings inside management pages.
-- Do not add explanatory marketing copy inside operational pages.
+## 3. 页面边界与工作台
 
-## 4. Layout Principles
+### 3.1 页面级边界
 
-### Main Pattern: Object Rail + Workspace
+`/system/**` 已由 `SystemPageLayout` 负责满高和页面滚动边界。各 Layout 统一提供 8px 页面外边距。
 
-For pages where one entity controls the detail view, use a clear master-detail layout:
+- 页面和 `AiCrudPage` 内部不得自行增加页面级 `padding`、外层白卡或大圆角。
+- 业务组件只处理自身内容的留白；页面边界必须由 Layout 统一维护。
+- 所有可滚动的 Flex 或 Grid 子区域必须同时设置 `min-height: 0`，再由真正承载内容的子元素声明 `overflow: auto`。
 
-- Left side: primary object rail, such as roles, organizations, categories, tenants, or posts.
-- Right side: selected object workspace, such as members, permissions, details, or related records.
-- The left rail is the “first position” when that entity is the page’s main subject.
-- The selected object must be visually obvious.
+### 3.2 左侧对象区 + 右侧工作区
 
-Reference pattern:
+当树、角色、组织、分类等对象决定右侧内容时，必须使用 `MasterDetailWorkspace`：
 
-- `/system/role`: left role management rail, right current role user workspace.
+```vue
+<MasterDetailWorkspace
+  :collapsed="collapsed"
+  :aside-width="220"
+  :collapsed-aside-width="72"
+>
+  <template #aside>
+    <OrgTreePanel />
+  </template>
 
-Recommended dimensions:
+  <AiCrudPage ... />
+</MasterDetailWorkspace>
+```
 
-- If the object is the page’s main subject, let the object rail/work area take the remaining flexible width.
-- Secondary detail areas may use a fixed width, normally 460-540px when they contain filters and cards.
-- For role management, keep roles flexible on the left and users fixed around 520px on the right.
-- Gap between panels: 8px.
-- Panel radius: 6px.
-- Panel border: 1px Quiet Border.
-- Avoid attached panels with no spacing unless the UI is intentionally a single compound control.
+- 默认使用连体工作台：一个外框、内部一条细分隔线，避免左树和右表像两张无关卡片。
+- `aside` 放树、对象列表或筛选导航；默认插槽放表格、详情或页签工作区。
+- 仅当两块区域确实无业务关联时，才设置 `:attached="false"`。
+- 窄屏由组件自动上下堆叠；页面不要复制一套响应式列宽逻辑。
 
-### Search And Toolbar
+### 3.3 三栏工作台
 
-- Search and filters stay close to the data they affect.
-- Search rows should be compact: 6-8px vertical padding, 8px gap.
-- Search rows inside fixed-width side workspaces must use responsive grid tracks. Group query/reset buttons together so they do not drift apart.
-- Query and reset buttons should use fixed width when placed in a grid, normally 72px.
-- Do not create large top banners for CRUD management pages.
-- Remove fake metrics, descriptive hero copy, or unused summary cards from management screens.
+菜单、资源等“树 + 列表 + 详情”页面遵循以下滚动边界：
 
-## 5. Component Rules
+```text
+工作台（固定高度）
+├─ 左侧树：自身滚动
+├─ 中间列表：工具栏固定，列表区域自身滚动
+└─ 右侧详情：标题与操作固定，详情正文自身滚动
+```
 
-### Object Cards
+- 禁止将内容放进 `overflow: hidden` 的面板后却没有内部滚动容器。
+- 列表和详情的滚动容器应使用 `flex: 1`、`min-height: 0`、`overflow: auto` 和 `scrollbar-gutter: stable`。
+- 不依赖一次性的 JavaScript `max-height` 计算维持滚动；布局变化后应仍能正确滚动。
 
-Use compact object cards when an item is selected and controls another panel.
+## 4. 公共组件约束
 
-- Card height: about 58-66px.
-- Primary object cards should normally use four columns on desktop and two columns on small screens. Avoid cramming five or six object cards into one row.
-- Card radius: 6px.
-- Card border: Quiet Border.
-- Main label on first line.
-- Metadata and status on second line.
-- Selected state uses Action Blue border plus subtle Selected Wash.
-- Add an explicit selected marker when useful, such as “当前”.
-- Avoid generic thick left blue bars as the only selected state.
+### 4.1 `SystemPageLayout`
 
-### Actions
+- 仅负责系统页面的满高与边界，不承担业务区 `padding`。
+- 已在应用根节点按 `/system/**` 自动包裹；页面内不要重复套用。
 
-Actions must follow ownership.
+### 4.2 `MasterDetailWorkspace`
 
-- Role actions belong on the role card, not in the member list header.
-- Organization actions belong on the organization tree node or organization panel.
-- Member/user actions belong on the member/user item.
-- Page-level actions only belong in the page toolbar when they affect the whole dataset.
-- Use vertical three-dot menus for low-frequency object actions.
-- Do not hide a single common action behind “更多”; only group when there are multiple secondary actions.
+- Props：`asideWidth`、`collapsedAsideWidth`、`mainWidth`、`collapsed`、`attached`。
+- 插槽：`aside` 仅放主对象区域，默认插槽放从属工作区。
+- 组件必须同时支持亮色、暗色和窄屏上下布局。
+- 左右内容区不得向外撑破工作台；内部滚动由各自内容区负责。
 
-### Buttons
+### 4.3 `SystemTableCell`
 
-- Primary button: Action Blue, used for one main action in the local area.
-- Secondary/ghost buttons: restrained, no glow.
-- Icon-only buttons must have a clear title/aria-label.
-- Active state should feel tactile but not animated heavily.
+`SystemTableCell` 是系统 CRUD 列表的统一单元格能力，不是通用装饰容器。
 
-### Trees
+- 实体模式：传入 `title`、`subtitle`、`interactive`；用户、租户、客户端等可传 `avatar` 显示首字标识。
+- 实体主标题是可识别的业务名称；辅助标题只能放账号、编码、键名或稳定标识，必须换行显示。
+- 关联模式：传入 `values`，仅显示主值和可点击的 `+N`；点击后用浮层查看全部值。
+- `interactive` 必须提供真实的 `activate` 动作，例如详情、编辑或进入下级管理，禁止制造无动作的蓝色链接。
+- 用户优先显示真实姓名或昵称，登录名显示为 `@username`；当两者相同时不要重复显示。
 
-- Tree rows should be compact and stable.
-- Node actions appear on hover, but icons must be recognizable.
-- Tree selection should not use heavy backgrounds or large shadows.
-- Filter trees should use a consistent, restrained icon treatment. Do not mix multiple visually heavy organization icons in the same tree.
-- Organization trees use `account-tree` for branch nodes and `domain` for leaf nodes. Avoid folder, settings, or managed-folder icons in organization trees.
-- Selected tree nodes should use a subtle wash plus 1px border. Avoid thick left bars for normal filter trees.
-- Left tree pages should keep consistent spacing and panel width.
-- Organization trees inside modals, such as user selection dialogs, follow the same icons, row height, hover, and selected states as left-side organization trees.
+### 4.4 `AiCrudPage` 与 `AiTable`
 
-### Member Lists
+- `AiCrudPage` 只负责搜索、工具栏、表格和表单；不负责页面级外框、间距和背景。
+- 默认表格密度为 `medium`。日志、审计、纯对比列表才可使用 `small`。
+- 列表/卡片切换通过 `showRenderModeSwitch` 控制；不适合卡片浏览的树表、日志页应显式关闭。
+- 详情页必须优先提供完整 `editSchema`；无 Schema 的只读兜底只用于防止空弹窗，不能替代正式详情。
 
-When fields are few, member/user cards are acceptable:
+## 5. CRUD 列规范
 
-- Avatar/initial on left.
-- Name and status on first line.
-- Account and phone/metadata on second line.
-- Destructive action on the right.
-- Keep pagination visible and compact.
-- In fixed-width side workspaces, member cards must use self-adaptive grid columns. Around 520px, compact member cards should fit more than two columns when content allows.
+每个单元格只表达一种信息层级，避免用多个小色块抢注意力。
 
-Use tables when:
+| 列类型 | 规则 |
+| --- | --- |
+| 实体 | 主标题 + 换行辅助标识；可点击时整块点击 |
+| 关联关系 | 主值 + 可展开 `+N` |
+| 状态、类型、布尔枚举 | 使用 `DictTag` 或单个语义 Tag |
+| 普通属性 | 纯文字，长文本可省略并提供完整提示 |
+| 编码、键名、账号 | 优先作为实体辅助标识，不单独挤占主表列 |
+| ID、性别、低频技术字段 | 放入详情或列设置，不占高频列表首屏 |
+| 操作 | 最多两个常用文字操作直显，其余收入“更多” |
 
-- More than 5-6 fields are shown.
-- Sorting, column scanning, or dense comparison matters.
-- Batch operations are core to the workflow.
+- 不要在同一个单元格同时叠加图标、多个 Tag、徽章、描边和多种颜色。
+- 名称与编码成对出现时优先合并为实体列，例如“字典名称 + 字典类型”“参数名称 + 参数键名”。
+- 字典类型的主体列点击进入字典数据；配置、资源、用户等主体列点击进入真实详情或编辑，不要只做视觉链接。
+- 多个 Tag 同时出现会破坏扫描节奏；只有状态、类型等确有语义的字段才保留 Tag。
 
-## 6. Loading, Empty, And Error States
+## 6. 工具栏、操作与对象归属
 
-- Prefer local loading inside the panel or list that is loading.
-- Do not stack global loading over table/list loading for normal CRUD requests.
-- Global loading is reserved for transfer-like actions: import, export, upload, download, or long blocking operations.
-- Empty states should be compact and local to the area.
-- Error messages should identify the failed operation clearly.
+- 操作必须贴近其作用对象：组织操作在组织树或组织面板，用户操作在用户行，页面级操作才放顶栏。
+- 一个区域只保留一个主按钮；低频动作使用三点菜单。
+- 图标按钮必须提供中文 `title` 或 `aria-label`。
+- 不要把单个常用操作藏进“更多”；只有两个以上低频操作才折叠。
+- 批量操作只在可批量选择的列表中显示，选中数量必须清晰可见。
 
-## 7. System Page Patterns
+## 7. 树、菜单与性能
 
-### `/system/role`
+- 树节点保持紧凑、稳定；选中态使用轻主题底色和细边框，禁止粗左边条和重阴影。
+- 左树首次进入默认展开当前层级，不应无条件全量展开深层树。
+- 树 + 列表页面的中间列表默认展示当前节点的直属子项；筛选时才递归检索当前范围。
+- 不要将同一批树数据同时全展开渲染到树和扁平渲染到列表。
+- 数据量增长后，树应改为按 `parentId` 懒加载，列表应使用服务端分页；前端假分页不能减少接口传输、构树和 DOM 创建成本。
+- Loading 应局部显示在树、列表或详情区域，禁止普通刷新时遮住整张工作台。
 
-- Role is the primary object.
-- Left side uses a role management rail.
-- Role cards show role name, key, status, selected marker, system marker, and object menu.
-- Role object menu contains edit, organization scope, permission authorization, and delete.
-- Right side is the selected role workspace.
-- Adding users requires a concrete authorized organization. If only one organization is available, auto-select it. If multiple exist, disable Add User until one is selected.
+## 8. 加载、空态、错误与动效
+
+- 普通 CRUD 请求使用区域级 Loading；导入、导出、上传和下载等真正阻塞的操作才使用全局 Loading。
+- 空态必须贴近对应区域，并区分“暂无数据”和“没有匹配结果”。
+- 错误提示要说明失败的具体动作，例如“加载资源树失败”。
+- 动效只允许使用 `color`、`background`、`border`、`opacity`、`transform`，时长 120–180ms。
+- 禁止动画 `width`、`height`、`top`、`left`；禁止系统 CRUD 页持续动画。
+
+## 9. 系统页面约束
+
+### `/system/user`、`/system/post`、`/system/tenant`
+
+- 使用统一紧凑 CRUD 工作面。
+- 用户列采用首字标识、真实姓名/昵称和 `@username` 两行信息。
+- 组织、岗位、租户使用主值 + `+N`，不能平铺多个标签。
 
 ### `/system/org`
 
-- Organization tree is the primary navigation object.
-- User and post views should stay in one right workspace using tabs or clear sections.
-- Add user belongs in the user list toolbar, not in an extra context header.
+- 组织树决定右侧用户、岗位工作区；新增用户放在用户列表工具栏，不额外制造上下文大标题。
 
-### `/system/user`, `/system/post`, `/system/tenant`
+### `/system/role`
 
-- Use the same compact CRUD surface.
-- Keep top toolbars minimal.
-- Batch actions are visible when they are the only secondary action; use More only for multiple secondary actions.
-- More button uses vertical three dots.
+- 左侧角色对象区优先展示角色名称、键、状态和当前标记；右侧管理当前角色的用户或权限。
+- 角色本身的编辑、授权和删除操作属于角色对象，不放到成员列表工具栏。
 
 ### `/system/menu`
 
-- Keep menu creation convenient.
-- Do not let explanatory headers or metrics consume the first viewport.
-- Client switching may remain at the top, but it must be compact.
+- 客户端切换保持紧凑，不增加占首屏的大说明或指标卡。
+- 左树、中间资源列表、右侧详情必须各自可滚动。
+- 首屏只渲染顶级资源和当前层级，避免全树展开与全量扁平列表同时创建。
 
-## 8. Motion And Interaction
+## 10. 禁止项与交付检查
 
-- Use transitions only for color, background, border, opacity, and transform.
-- Duration should stay around 120-180ms.
-- Do not animate width, height, top, or left.
-- No perpetual animation in admin CRUD screens.
-- Hover states must not shift layout.
-- Keyboard focus should remain visible for clickable cards and icon buttons.
+禁止：
 
-## 9. Anti-Patterns
+- 紫蓝霓虹渐变、按钮发光、重阴影和超大圆角。
+- 管理页中的营销式 Hero、大段功能文案和假指标卡。
+- 没有真实行为的可点击蓝色文本。
+- 外层隐藏溢出、内部没有滚动区的工作台。
+- 为了“丰富”而给每一列增加图标、Tag 或色块。
+- 使用 Emoji 作为系统图标，或使用虚构数据伪造真实业务状态。
 
-Never use:
+完成系统页前确认：
 
-- Purple-blue neon gradients or button glows.
-- Decorative dashboard cards filled with fake metrics.
-- Large hero sections in admin pages.
-- Long feature explanations inside operational pages.
-- Unclear action ownership, such as role actions placed in a user toolbar.
-- Horizontal hidden scrolling for primary objects unless there is an obvious carousel control.
-- Three equal decorative cards as a default layout.
-- Overlapping UI elements.
-- Emoji icons.
-- Fake data or invented statistics.
-- Heavy shadows, oversized radius, or marketing-style panels in system management pages.
-
-## 10. Implementation Checklist
-
-Before finishing a system page:
-
-- The primary object is visually first.
-- The selected object is obvious.
-- Actions are placed next to the object they affect.
-- Search/filter controls are close to their data.
-- Toolbar buttons are not excessive.
-- More menus only exist when there are multiple secondary actions.
-- Loading is local unless the operation blocks the whole app.
-- Empty states are local and compact.
-- Text fits at desktop and mobile widths.
-- No horizontal overflow on mobile.
+1. 主对象和当前选择是否一眼可见。
+2. 操作是否放在正确对象附近。
+3. 表格列是否符合实体、关联、状态、普通属性的分层规则。
+4. 树、列表、详情是否都有正确的独立滚动边界。
+5. 亮色、暗色和窄屏是否不会溢出。
+6. 已执行 ESLint、`git diff --check` 和必要的前端构建。

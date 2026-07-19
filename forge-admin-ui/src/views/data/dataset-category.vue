@@ -333,17 +333,9 @@ function handleDelete(row) {
 .category-content {
   flex: 1;
   min-height: 0;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
 .category-content :deep(.ai-crud-page) {
   height: 100%;
-}
-
-.dark .category-content {
-  background: #0f172a !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 </style>

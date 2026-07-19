@@ -722,6 +722,7 @@ import { customQueryExecute } from '@/api/ai'
 import { executeBusinessAction } from '@/api/business-app'
 import { previewFormula } from '@/api/formula'
 import AuthImage from '@/components/common/AuthImage.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { useUserStore } from '@/store'
@@ -2179,11 +2180,15 @@ function resolveColumnRender(col) {
   }
   else if (renderType === 'relationName') {
     const targetField = col.render.targetField || `${key}Name`
-    nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+    nextCol.render = row => h(SystemTableCell, {
+      values: splitTableCellValues(row[targetField] ?? row[key]),
+    })
   }
   else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
     const targetField = col.render.targetField || `${key}Name`
-    nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+    nextCol.render = row => h(SystemTableCell, {
+      values: splitTableCellValues(row[targetField] ?? row[key]),
+    })
   }
   else if (renderType === 'imageUpload') {
     nextCol.render = (row) => {
@@ -2209,6 +2214,14 @@ function resolveColumnRender(col) {
     }
   }
   return nextCol
+}
+
+function splitTableCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return rawValues
+    .flatMap(item => String(item || '').split(/[、,，]/))
+    .map(item => item.trim())
+    .filter(Boolean)
 }
 
 /**
@@ -2393,8 +2406,30 @@ const normalizedSearchSchema = computed(() => {
 const modalFormSchema = computed(() => {
   if (!isDetailMode.value)
     return props.editSchema
-  return props.editSchema.map(toReadonlyField)
+  const schema = props.editSchema.map(toReadonlyField)
+  return schema.length > 0 ? schema : buildDetailFallbackSchema(props.columns)
 })
+
+function buildDetailFallbackSchema(columns = []) {
+  const skippedKeys = new Set(['action', 'actions', 'operation', 'operations', 'selection', 'expand'])
+  return (Array.isArray(columns) ? columns : [])
+    .filter((column) => {
+      const field = column?.prop || column?.key || column?.dataIndex
+      return field && !skippedKeys.has(String(field)) && column?.visible !== false
+    })
+    .slice(0, 12)
+    .map(column => ({
+      field: column.prop || column.key || column.dataIndex,
+      label: column.label || column.title || column.prop || column.key,
+      type: 'input',
+      disabled: true,
+      readonly: true,
+      props: {
+        disabled: true,
+        readonly: true,
+      },
+    }))
+}
 
 const runtimeFormulaFields = computed(() => {
   return flattenRuntimeFormFields(props.editSchema)

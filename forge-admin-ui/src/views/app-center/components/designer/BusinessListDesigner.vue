@@ -1137,7 +1137,7 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     exportFileName: tableProps.exportFileName || '',
     renderMode: tableProps.renderMode || 'table',
     showRenderModeSwitch: tableProps.showRenderModeSwitch !== false,
-    tableSize: tableProps.tableSize || 'small',
+    tableSize: tableProps.tableSize || 'medium',
     bordered: Boolean(tableProps.bordered),
     striped: Boolean(tableProps.striped),
     hideSelection: tableProps.hideSelection === true,

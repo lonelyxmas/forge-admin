@@ -42,6 +42,7 @@
 <script setup lang="ts">
 import { NButton, NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemClient' })
@@ -121,14 +122,17 @@ const searchSchema = [
 // 表格列配置
 const tableColumns = computed(() => [
   {
-    prop: 'clientCode',
-    label: '客户端编码',
-    width: 120,
-  },
-  {
     prop: 'clientName',
-    label: '客户端名称',
-    width: 150,
+    label: '客户端',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: row.clientName,
+      subtitle: row.clientCode,
+      interactive: true,
+      avatar: true,
+      tooltip: `查看客户端：${row.clientName || row.clientCode || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'appId',
@@ -211,7 +215,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 350,
+    width: 160,
     actions: [
       { label: '编辑', key: 'edit', type: 'primary', onClick: row => crudRef.value?.showEdit(row) },
       { label: '在线用户', key: 'online', type: 'primary', onClick: handleViewOnline },

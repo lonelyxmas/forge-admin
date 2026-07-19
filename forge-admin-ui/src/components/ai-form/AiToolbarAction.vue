@@ -134,7 +134,7 @@ import {
   ResizeOutline,
   SearchOutline,
 } from '@vicons/ionicons5'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AiTableFilter from './AiTableFilter.vue'
 
 /**
@@ -184,6 +184,13 @@ const props = defineProps({
   showDensity: {
     type: Boolean,
     default: true,
+  },
+
+  /** 当前表格密度，仅用于在下拉菜单标记当前项。 */
+  density: {
+    type: String,
+    default: 'medium',
+    validator: value => ['small', 'medium', 'large'].includes(value),
   },
 
   /**
@@ -257,20 +264,20 @@ const emit = defineEmits([
 /**
  * 密度选项
  */
-const densityOptions = [
+const densityOptions = computed(() => [
   {
-    label: '紧凑',
+    label: props.density === 'small' ? '紧凑（当前）' : '紧凑',
     key: 'small',
   },
   {
-    label: '默认',
+    label: props.density === 'medium' ? '默认（当前）' : '默认',
     key: 'medium',
   },
   {
-    label: '宽松',
+    label: props.density === 'large' ? '宽松（当前）' : '宽松',
     key: 'large',
   },
-]
+])
 
 /**
  * 是否全屏

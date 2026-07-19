@@ -20,6 +20,7 @@
           :default-checked-columns="defaultCheckedColumns"
           :show-refresh="showRefresh"
           :show-density="showDensity"
+          :density="currentSize"
           :show-column-filter="showColumnFilter"
           :show-search-toggle="showSearchToggle"
           :show-fullscreen="showFullscreen"
@@ -230,7 +231,7 @@ const props = defineProps({
   // 尺寸
   size: {
     type: String,
-    default: 'small', // 'small' | 'medium' | 'large'
+    default: 'medium', // 'small' | 'medium' | 'large'
   },
   // 渲染模式
   renderMode: {

@@ -66,18 +66,29 @@
                 <slot name="formAction" :form-data="formValue" />
 
                 <!-- 折叠/展开按钮 -->
-                <n-button
-                  v-if="showCollapseToggle"
-                  class="af-collapse-toggle"
-                  :class="{ 'af-collapse-toggle--search': isSearchForm }"
-                  text
-                  type="primary"
-                  :circle="isSearchForm"
+                <button
+                  v-if="showCollapseToggle && isSearchForm"
+                  type="button"
+                  class="af-collapse-text-trigger"
                   :title="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
                   :aria-label="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
                   @click="toggleCollapse"
                 >
-                  <span v-if="!isSearchForm">{{ isCollapsed ? '展开' : '收起' }}</span>
+                  <n-icon aria-hidden="true">
+                    <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
+                  </n-icon>
+                  <span>{{ isCollapsed ? '展开' : '收起' }}</span>
+                </button>
+                <n-button
+                  v-else-if="showCollapseToggle"
+                  class="af-collapse-toggle"
+                  text
+                  type="primary"
+                  :title="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
+                  :aria-label="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
+                  @click="toggleCollapse"
+                >
+                  <span>{{ isCollapsed ? '展开' : '收起' }}</span>
                   <template #icon>
                     <n-icon>
                       <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
@@ -1108,10 +1119,28 @@ function isLegacyGroupTitleNode(node = {}) {
   column-gap: 6px !important;
 }
 
-.af-collapse-toggle--search {
-  width: 28px;
-  min-width: 28px;
+.af-collapse-text-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   height: 28px;
+  padding: 0 2px;
+  color: var(--primary-color);
+  font: inherit;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.af-collapse-text-trigger:hover {
+  color: var(--primary-color-hover, var(--primary-color));
+  background: transparent;
+}
+
+.af-collapse-text-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 42%, transparent);
+  outline-offset: 2px;
 }
 
 :global(.dark) .ai-form-section-nav {

@@ -18,7 +18,12 @@
         <router-view v-else v-slot="{ Component, route: curRoute }">
           <component :is="LayoutComponent" :key="curRoute.meta?.layout || appStore.layout">
             <!--        <transition name="fade-slide" mode="out-in" appear> -->
-            <KeepAlive :include="keepAliveNames">
+            <SystemPageLayout v-if="isSystemRoute">
+              <KeepAlive :include="keepAliveNames">
+                <component :is="Component" v-if="!tabStore.reloading" :key="resolveRouteViewKey(curRoute)" />
+              </KeepAlive>
+            </SystemPageLayout>
+            <KeepAlive v-else :include="keepAliveNames">
               <component :is="Component" v-if="!tabStore.reloading" :key="resolveRouteViewKey(curRoute)" />
             </KeepAlive>
             <!--        </transition> -->
@@ -42,6 +47,7 @@ import { computed, defineAsyncComponent, markRaw, onMounted, shallowRef, watch }
 import { useRoute } from 'vue-router'
 import { LayoutSetting } from '@/components'
 import GlobalLoadingOverlay from '@/components/common/GlobalLoadingOverlay.vue'
+import SystemPageLayout from '@/components/common/SystemPageLayout.vue'
 import { useWatermark } from '@/composables/useWatermark'
 import { useAppStore, usePermissionStore, useTabStore, useUserStore } from '@/store'
 import { initResponsiveFont } from '@/utils/responsive-font'
@@ -78,6 +84,7 @@ const route = useRoute()
 const appStore = useAppStore()
 const permissionStore = usePermissionStore()
 const userStore = useUserStore()
+const isSystemRoute = computed(() => route.path.startsWith('/system/'))
 
 // 监听布局变化，及时更新布局组件
 watch(() => route.meta?.layout || appStore.layout, (layoutName) => {

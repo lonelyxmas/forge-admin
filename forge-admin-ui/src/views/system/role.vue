@@ -1,90 +1,96 @@
 <template>
   <div class="system-role-page">
-    <div class="role-workspace">
-      <aside class="role-list-panel">
-        <div class="role-selector-header">
-          <div class="role-selector-title">
-            <span>角色管理</span>
-            <small>{{ roleList.length }} 个角色</small>
-          </div>
-          <n-button size="small" type="primary" @click="handleAddRole">
-            <template #icon>
-              <i class="i-material-symbols:add-rounded" />
-            </template>
-            新增
-          </n-button>
-        </div>
-
-        <div class="role-selector-tools">
-          <div class="role-tabs">
-            <button
-              v-for="tab in roleTypeTabs"
-              :key="tab.value"
-              type="button"
-              :class="{ 'is-active': String(activeRoleType) === String(tab.value) }"
-              @click="handleRoleTypeChange(tab.value)"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-          <n-input
-            v-model:value="roleKeyword"
-            class="role-search"
-            clearable
-            size="small"
-            placeholder="搜索角色"
-            @clear="handleRoleSearch"
-            @keyup.enter="handleRoleSearch"
-          >
-            <template #prefix>
-              <i class="i-material-symbols:search-rounded" />
-            </template>
-          </n-input>
-        </div>
-
-        <n-spin :show="roleListLoading" class="role-list-spin">
-          <div class="role-list">
-            <div
-              v-for="role in roleList"
-              :key="role.id"
-              class="role-list-item"
-              :class="{ 'is-selected': currentRole.id === role.id }"
-              role="button"
-              tabindex="0"
-              @click="handleSelectRole(role)"
-              @keydown.enter.prevent="handleSelectRole(role)"
-              @keydown.space.prevent="handleSelectRole(role)"
-            >
-              <span class="role-list-main">
-                <strong :title="role.roleName">{{ role.roleName }}</strong>
-                <span class="role-card-meta">
-                  <small :title="role.roleKey || '-'">{{ role.roleKey || '-' }}</small>
-                  <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="role.roleStatus" size="small" force-tag />
-                </span>
-              </span>
-              <span class="role-list-side" @click.stop>
-                <NTag v-if="currentRole.id === role.id" size="small" type="info" :bordered="false">
-                  当前
-                </NTag>
-                <NTag v-if="Number(role.isSystem) === 1" size="small" :bordered="false">
-                  系统
-                </NTag>
-                <n-dropdown
-                  trigger="click"
-                  placement="bottom-end"
-                  :options="getRoleActionOptions(role)"
-                  @select="key => handleRoleCardAction(key, role)"
-                >
-                  <button type="button" class="role-card-menu" title="角色操作" aria-label="角色操作" @click.stop>
-                    <i class="i-material-symbols:more-vert" />
-                  </button>
-                </n-dropdown>
-              </span>
+    <MasterDetailWorkspace
+      class="role-workspace"
+      aside-width="minmax(0, 1fr)"
+      :main-width="520"
+    >
+      <template #aside>
+        <div class="role-list-panel">
+          <div class="role-selector-header">
+            <div class="role-selector-title">
+              <span>角色管理</span>
+              <small>{{ roleList.length }} 个角色</small>
             </div>
-            <n-empty v-if="!roleListLoading && roleList.length === 0" description="暂无角色" size="small" />
+            <n-button size="small" type="primary" @click="handleAddRole">
+              <template #icon>
+                <i class="i-material-symbols:add-rounded" />
+              </template>
+              新增
+            </n-button>
           </div>
-        </n-spin>
-      </aside>
+
+          <div class="role-selector-tools">
+            <div class="role-tabs">
+              <button
+                v-for="tab in roleTypeTabs"
+                :key="tab.value"
+                type="button"
+                :class="{ 'is-active': String(activeRoleType) === String(tab.value) }"
+                @click="handleRoleTypeChange(tab.value)"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+            <n-input
+              v-model:value="roleKeyword"
+              class="role-search"
+              clearable
+              size="small"
+              placeholder="搜索角色"
+              @clear="handleRoleSearch"
+              @keyup.enter="handleRoleSearch"
+            >
+              <template #prefix>
+                <i class="i-material-symbols:search-rounded" />
+              </template>
+            </n-input>
+          </div>
+
+          <n-spin :show="roleListLoading" class="role-list-spin">
+            <div class="role-list">
+              <div
+                v-for="role in roleList"
+                :key="role.id"
+                class="role-list-item"
+                :class="{ 'is-selected': currentRole.id === role.id }"
+                role="button"
+                tabindex="0"
+                @click="handleSelectRole(role)"
+                @keydown.enter.prevent="handleSelectRole(role)"
+                @keydown.space.prevent="handleSelectRole(role)"
+              >
+                <span class="role-list-main">
+                  <strong :title="role.roleName">{{ role.roleName }}</strong>
+                  <span class="role-card-meta">
+                    <small :title="role.roleKey || '-'">{{ role.roleKey || '-' }}</small>
+                    <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="role.roleStatus" size="small" force-tag />
+                  </span>
+                </span>
+                <span class="role-list-side" @click.stop>
+                  <NTag v-if="currentRole.id === role.id" size="small" type="info" :bordered="false">
+                    当前
+                  </NTag>
+                  <NTag v-if="Number(role.isSystem) === 1" size="small" :bordered="false">
+                    系统
+                  </NTag>
+                  <n-dropdown
+                    trigger="click"
+                    placement="bottom-end"
+                    :options="getRoleActionOptions(role)"
+                    @select="key => handleRoleCardAction(key, role)"
+                  >
+                    <button type="button" class="role-card-menu" title="角色操作" aria-label="角色操作" @click.stop>
+                      <i class="i-material-symbols:more-vert" />
+                    </button>
+                  </n-dropdown>
+                </span>
+              </div>
+              <n-empty v-if="!roleListLoading && roleList.length === 0" description="暂无角色" size="small" />
+            </div>
+          </n-spin>
+        </div>
+      </template>
 
       <section class="role-user-panel">
         <header class="role-user-header">
@@ -203,7 +209,7 @@
           </div>
         </div>
       </section>
-    </div>
+    </MasterDetailWorkspace>
 
     <div class="crud-driver" aria-hidden="true">
       <AiCrudPage
@@ -555,6 +561,7 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
 import PremiumTree from '@/components/common/PremiumTree.vue'
 import DictTag from '@/components/DictTag.vue'
 import UserSelectPanel from '@/components/UserSelectPanel.vue'
@@ -1792,23 +1799,16 @@ onMounted(() => {
 }
 
 .role-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 520px;
-  gap: 8px;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
-  background: transparent;
 }
 
 .role-list-panel {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
   overflow: hidden;
 }
 
@@ -1936,7 +1936,10 @@ onMounted(() => {
   color: #0f172a;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .role-list-item:hover {
@@ -2014,13 +2017,11 @@ onMounted(() => {
 }
 
 .role-user-panel {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
   overflow: hidden;
 }
 
@@ -2426,13 +2427,6 @@ onMounted(() => {
 }
 
 /* 深色模式 */
-.dark .role-workspace,
-.dark .role-list-panel,
-.dark .role-user-panel {
-  background: #0f172a !important;
-  border-color: #334155;
-}
-
 .dark .role-tabs,
 .dark .role-selector-header,
 .dark .role-selector-tools,
@@ -2559,18 +2553,7 @@ onMounted(() => {
   border-color: #334155;
 }
 
-@media (max-width: 1120px) {
-  .role-workspace {
-    grid-template-columns: minmax(0, 1fr) 460px;
-  }
-}
-
 @media (max-width: 860px) {
-  .role-workspace {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(220px, 34vh) minmax(0, 1fr);
-  }
-
   .role-list-panel {
     min-height: 0;
   }

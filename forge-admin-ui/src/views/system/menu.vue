@@ -174,7 +174,7 @@
           </div>
         </div>
 
-        <div class="resource-list-scroll" :style="{ maxHeight: `${tableMaxHeight}px` }">
+        <div class="resource-list-scroll cus-scroll-y">
           <div v-if="loading" class="resource-list-skeleton">
             <div v-for="index in 9" :key="index" class="resource-list-skeleton-row">
               <n-skeleton circle size="small" />
@@ -358,50 +358,52 @@
             </NButton>
           </div>
 
-          <div class="detail-section">
-            <span class="section-label">基础信息</span>
-            <dl class="detail-grid">
-              <div>
-                <dt>客户端</dt>
-                <dd>{{ getClientDisplayName(activeResource.clientCode) }}</dd>
-              </div>
-              <div>
-                <dt>排序</dt>
-                <dd>{{ activeResource.sort ?? 0 }}</dd>
-              </div>
-              <div>
-                <dt>路由</dt>
-                <dd>{{ activeResource.path || '-' }}</dd>
-              </div>
-              <div>
-                <dt>组件</dt>
-                <dd>{{ activeResource.component || '-' }}</dd>
-              </div>
-              <div>
-                <dt>权限标识</dt>
-                <dd>{{ activeResource.perms || '-' }}</dd>
-              </div>
-              <div>
-                <dt>API</dt>
-                <dd>{{ activeResource.apiMethod || '-' }} {{ activeResource.apiUrl || '' }}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="detail-section">
-            <span class="section-label">子资源概览</span>
-            <div class="child-summary">
-              <span>目录/菜单 {{ activeChildSummary.menu }}</span>
-              <span>按钮 {{ activeChildSummary.button }}</span>
-              <span>API {{ activeChildSummary.api }}</span>
+          <div class="detail-scroll cus-scroll-y">
+            <div class="detail-section">
+              <span class="section-label">基础信息</span>
+              <dl class="detail-grid">
+                <div>
+                  <dt>客户端</dt>
+                  <dd>{{ getClientDisplayName(activeResource.clientCode) }}</dd>
+                </div>
+                <div>
+                  <dt>排序</dt>
+                  <dd>{{ activeResource.sort ?? 0 }}</dd>
+                </div>
+                <div>
+                  <dt>路由</dt>
+                  <dd>{{ activeResource.path || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>组件</dt>
+                  <dd>{{ activeResource.component || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>权限标识</dt>
+                  <dd>{{ activeResource.perms || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>API</dt>
+                  <dd>{{ activeResource.apiMethod || '-' }} {{ activeResource.apiUrl || '' }}</dd>
+                </div>
+              </dl>
             </div>
-          </div>
 
-          <div v-if="activeResource.remark" class="detail-section">
-            <span class="section-label">备注</span>
-            <p class="remark-text">
-              {{ activeResource.remark }}
-            </p>
+            <div class="detail-section">
+              <span class="section-label">子资源概览</span>
+              <div class="child-summary">
+                <span>目录/菜单 {{ activeChildSummary.menu }}</span>
+                <span>按钮 {{ activeChildSummary.button }}</span>
+                <span>API {{ activeChildSummary.api }}</span>
+              </div>
+            </div>
+
+            <div v-if="activeResource.remark" class="detail-section">
+              <span class="section-label">备注</span>
+              <p class="remark-text">
+                {{ activeResource.remark }}
+              </p>
+            </div>
           </div>
         </template>
 
@@ -632,9 +634,6 @@ const formIconTab = ref('font')
 const tableIconSelectorRef = ref(null)
 const tableIconEditRow = ref(null)
 const tableIconValue = ref('')
-const tableMaxHeight = ref(520)
-let pageResizeObserver = null
-let tableHeightFrame = null
 
 const publicParams = computed(() => {
   if (currentClientCode.value)
@@ -677,7 +676,7 @@ const visibleFilterOptions = computed(() => {
 const flatResources = computed(() => flattenResourceTree(allResources.value))
 
 const navigationSelectedKeys = computed(() => {
-  // 确保选中的 key 在当前树数据中存在，避免引用已删除节点导致树组件异常
+  // 确保选中的节点键仍在当前树数据中，避免引用已删除节点导致树组件异常
   if (!selectedResourceId.value)
     return []
   const exists = flatResources.value.some(item => item.id === selectedResourceId.value)
@@ -695,7 +694,7 @@ const activeResource = computed(() => selectedRow.value || currentNode.value)
 const currentContextTitle = computed(() => {
   if (resourceKeyword.value || resourceTypeFilter.value !== null || visibleFilter.value !== null)
     return currentNode.value ? `${currentNode.value.resourceName} 下的匹配资源` : '全部匹配资源'
-  return currentNode.value ? `${currentNode.value.resourceName} 下级资源` : '全部资源层级'
+  return currentNode.value ? `${currentNode.value.resourceName} 下级资源` : '顶级资源'
 })
 
 const activeChildSummary = computed(() => {
@@ -724,7 +723,7 @@ const navigationTreeData = computed(() => {
 
 const displayRows = computed(() => {
   const hasFilter = !!resourceKeyword.value.trim() || resourceTypeFilter.value !== null || visibleFilter.value !== null
-  const baseRows = getContextRows()
+  const baseRows = getContextRows({ includeDescendants: hasFilter })
 
   if (!hasFilter)
     return baseRows
@@ -781,22 +780,16 @@ watch(currentClientCode, async () => {
   checkedResourceIds.value = []
   pendingParentId.value = null
   pendingClientCode.value = null
-  await loadResourceTree({ expandAll: true })
+  await loadResourceTree({ expandAll: false })
 })
 
 onMounted(async () => {
   setupMenuPageLayout()
   await loadClientList()
-  await loadResourceTree({ expandAll: true })
+  await loadResourceTree({ expandAll: false })
 })
 
 onBeforeUnmount(() => {
-  pageResizeObserver?.disconnect?.()
-  pageResizeObserver = null
-  if (tableHeightFrame) {
-    cancelAnimationFrame(tableHeightFrame)
-    tableHeightFrame = null
-  }
   pageRef.value?.closest?.('.nexus-page')?.classList.remove('menu-page-host-no-scroll')
 })
 
@@ -807,29 +800,7 @@ function setupMenuPageLayout() {
       return
 
     pageEl.closest?.('.nexus-page')?.classList.add('menu-page-host-no-scroll')
-    pageResizeObserver?.disconnect?.()
-    pageResizeObserver = new ResizeObserver(() => scheduleTableHeightUpdate())
-    pageResizeObserver.observe(pageEl)
-    scheduleTableHeightUpdate()
   })
-}
-
-function scheduleTableHeightUpdate() {
-  if (tableHeightFrame)
-    cancelAnimationFrame(tableHeightFrame)
-  tableHeightFrame = requestAnimationFrame(updateTableHeight)
-}
-
-function updateTableHeight() {
-  tableHeightFrame = null
-  const pageEl = pageRef.value
-  if (!pageEl)
-    return
-  const bodyEl = pageEl.querySelector('.menu-workbench-body')
-  const toolbarEl = pageEl.querySelector('.list-toolbar')
-  const bodyHeight = bodyEl?.clientHeight || 560
-  const toolbarHeight = toolbarEl?.offsetHeight || 56
-  tableMaxHeight.value = Math.max(320, bodyHeight - toolbarHeight - 14)
 }
 
 async function loadClientList() {
@@ -865,7 +836,6 @@ async function loadResourceTree(options = {}) {
     keepSelectionAvailable()
     reconcileCheckedResourceIds()
     await nextTick()
-    scheduleTableHeightUpdate()
   }
   catch (error) {
     console.error('加载资源树失败:', error)
@@ -1022,7 +992,6 @@ function handleNavigationSelect(keys) {
   selectedRow.value = selectedResourceId.value
     ? flatResources.value.find(item => item.id === selectedResourceId.value) || null
     : null
-  scheduleTableHeightUpdate()
 }
 
 function renderNavigationLabel({ option }) {
@@ -1035,10 +1004,10 @@ function renderNavigationLabel({ option }) {
   ])
 }
 
-function getContextRows() {
-  if (!currentNode.value)
-    return flatResources.value
-  return flattenResourceTree(currentNode.value.children || [])
+function getContextRows(options = {}) {
+  const includeDescendants = !!options.includeDescendants
+  const contextRows = currentNode.value?.children || allResources.value
+  return includeDescendants ? flattenResourceTree(contextRows) : contextRows
 }
 
 function matchesResourceFilter(row) {
@@ -1099,8 +1068,9 @@ function getMoreActionOptions(row) {
 
 function getResourceSubtitle(row) {
   const parts = []
-  if (row.parent?.resourceName)
-    parts.push(`上级：${row.parent.resourceName}`)
+  const parent = row.parent || currentNode.value
+  if (parent?.resourceName)
+    parts.push(`上级：${parent.resourceName}`)
   else
     parts.push('顶级资源')
 
@@ -2161,6 +2131,8 @@ const editSchema = computed(() => [
 }
 
 .list-pane {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
@@ -2221,6 +2193,14 @@ const editSchema = computed(() => [
 .detail-pane {
   padding: 0;
   background: #fbfcfe;
+}
+
+.detail-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .detail-head {
@@ -2369,7 +2349,11 @@ const editSchema = computed(() => [
 }
 
 .resource-list-scroll {
+  min-height: 0;
+  flex: 1;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .resource-list-skeleton {

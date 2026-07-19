@@ -122,7 +122,7 @@ export const aiCrudPageProps = {
    */
   tableSize: {
     type: String,
-    default: 'small',
+    default: 'medium',
   },
 
   /**

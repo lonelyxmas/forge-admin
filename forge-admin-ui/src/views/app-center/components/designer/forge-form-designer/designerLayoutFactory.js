@@ -189,7 +189,7 @@ export function createForgeLayoutComponent(componentKey = 'title', schema = {}) 
           showSearch: true,
           showPagination: true,
           pageSize: 10,
-          tableSize: 'small',
+          tableSize: 'medium',
           renderMode: 'table',
           showRenderModeSwitch: true,
           hideToolbar: false,

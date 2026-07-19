@@ -1,84 +1,91 @@
 <template>
   <div class="system-user-page">
     <!-- 左侧组织树 + 右侧用户列表布局 -->
-    <div class="user-layout">
+    <MasterDetailWorkspace
+      class="user-layout"
+      :collapsed="leftOrgPanelCollapsed"
+      :aside-width="220"
+      :collapsed-aside-width="72"
+    >
       <!-- 左侧组织树面板 -->
-      <div class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
-        <div class="org-tree-header">
-          <div class="header-title">
-            <div class="header-icon">
-              <i class="i-material-symbols:account-tree-rounded" />
+      <template #aside>
+        <div class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
+          <div class="org-tree-header">
+            <div class="header-title">
+              <div class="header-icon">
+                <i class="i-material-symbols:account-tree-rounded" />
+              </div>
+              <div v-if="!leftOrgPanelCollapsed" class="header-copy">
+                <span>组织架构</span>
+                <small>{{ orgTreeSummaryText }}</small>
+              </div>
             </div>
-            <div v-if="!leftOrgPanelCollapsed" class="header-copy">
-              <span>组织架构</span>
-              <small>{{ orgTreeSummaryText }}</small>
+            <div class="header-actions">
+              <n-button
+                v-if="!leftOrgPanelCollapsed"
+                quaternary
+                circle
+                size="small"
+                title="展开或折叠树节点"
+                @click="toggleOrgExpandAll"
+              >
+                <template #icon>
+                  <i :class="leftOrgExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+                </template>
+              </n-button>
+              <n-button
+                quaternary
+                circle
+                size="small"
+                :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
+                @click="toggleLeftOrgPanel"
+              >
+                <template #icon>
+                  <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
+                </template>
+              </n-button>
             </div>
           </div>
-          <div class="header-actions">
-            <n-button
-              v-if="!leftOrgPanelCollapsed"
-              quaternary
-              circle
-              size="small"
-              title="展开或折叠树节点"
-              @click="toggleOrgExpandAll"
-            >
-              <template #icon>
-                <i :class="leftOrgExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-              </template>
-            </n-button>
-            <n-button
-              quaternary
-              circle
-              size="small"
-              :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
-              @click="toggleLeftOrgPanel"
-            >
-              <template #icon>
-                <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
-              </template>
-            </n-button>
+          <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
+            <n-spin :show="leftOrgTreeLoading">
+              <div
+                class="org-tree-all-node"
+                :class="{ 'is-selected': isShowAllUsers }"
+                @click="handleSelectAllUsers"
+              >
+                <i class="i-material-symbols:groups-rounded" />
+                <span>全部用户</span>
+              </div>
+              <PremiumTree
+                v-if="leftOrgTreeData.length > 0"
+                :data="leftOrgTreeData"
+                :selected-keys="selectedOrgKeys"
+                :expanded-keys="leftOrgExpandedKeys"
+                key-field="id"
+                label-field="orgName"
+                children-field="children"
+                :get-node-icon="getLeftOrgNodeIcon"
+                :get-node-tone="getLeftOrgNodeTone"
+                @update:selected-keys="handleOrgNodeSelect"
+                @update:expanded-keys="handleLeftOrgExpandedKeysChange"
+              />
+              <n-empty v-else description="暂无组织数据" size="small" />
+            </n-spin>
+          </div>
+          <div
+            v-show="leftOrgPanelCollapsed"
+            class="org-tree-collapsed-hint"
+            :class="{ 'has-active-filter': selectedOrgNode && !isShowAllUsers }"
+            @click="toggleLeftOrgPanel"
+          >
+            <i class="i-material-symbols:group-work-outline-rounded" />
+            <span>组织筛选</span>
           </div>
         </div>
-        <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
-          <n-spin :show="leftOrgTreeLoading">
-            <div
-              class="org-tree-all-node"
-              :class="{ 'is-selected': isShowAllUsers }"
-              @click="handleSelectAllUsers"
-            >
-              <i class="i-material-symbols:groups-rounded" />
-              <span>全部用户</span>
-            </div>
-            <PremiumTree
-              v-if="leftOrgTreeData.length > 0"
-              :data="leftOrgTreeData"
-              :selected-keys="selectedOrgKeys"
-              :expanded-keys="leftOrgExpandedKeys"
-              key-field="id"
-              label-field="orgName"
-              children-field="children"
-              :get-node-icon="getLeftOrgNodeIcon"
-              :get-node-tone="getLeftOrgNodeTone"
-              @update:selected-keys="handleOrgNodeSelect"
-              @update:expanded-keys="handleLeftOrgExpandedKeysChange"
-            />
-            <n-empty v-else description="暂无组织数据" size="small" />
-          </n-spin>
-        </div>
-        <div
-          v-show="leftOrgPanelCollapsed"
-          class="org-tree-collapsed-hint"
-          :class="{ 'has-active-filter': selectedOrgNode && !isShowAllUsers }"
-          @click="toggleLeftOrgPanel"
-        >
-          <i class="i-material-symbols:group-work-outline-rounded" />
-          <span>组织筛选</span>
-        </div>
-      </div>
+      </template>
 
       <!-- 右侧用户列表 -->
-      <div class="user-list-panel">
+      <section class="user-list-panel">
         <AiCrudPage
           ref="crudRef"
           api="/system/user"
@@ -135,8 +142,8 @@
             </n-dropdown>
           </template>
         </AiCrudPage>
-      </div>
-    </div>
+      </section>
+    </MasterDetailWorkspace>
 
     <!-- 重置密码弹窗 -->
     <n-modal
@@ -550,7 +557,9 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
 import PremiumTree from '@/components/common/PremiumTree.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -871,13 +880,16 @@ const searchSchema = computed(() => [
 const tableColumns = computed(() => [
   {
     prop: 'username',
-    label: '用户名',
-    minWidth: 140,
-  },
-  {
-    prop: 'realName',
-    label: '真实姓名',
-    minWidth: 120,
+    label: '用户',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: resolveUserDisplayName(row),
+      subtitle: resolveUserAccountLabel(row),
+      interactive: true,
+      avatar: true,
+      tooltip: `查看用户详情：${row.username || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
   },
   {
     prop: 'phone',
@@ -887,20 +899,24 @@ const tableColumns = computed(() => [
   {
     prop: 'orgName',
     label: '所属组织',
-    minWidth: 150,
-    render: row => row.orgName || '-',
+    minWidth: 160,
+    render: row => h(SystemTableCell, {
+      values: splitTableCellValues(row.orgName || row.orgNames),
+    }),
   },
   {
     prop: 'postName',
     label: '岗位',
-    minWidth: 120,
-    render: row => row.postName || '-',
+    minWidth: 130,
+    render: row => h(SystemTableCell, {
+      values: splitTableCellValues(row.postName || row.postNames),
+    }),
   },
   ...(userStore.isAdmin
     ? [{
         prop: 'tenantName',
         label: '所属租户',
-        minWidth: 240,
+        width: 160,
         ellipsis: false,
         render: row => renderTenantNames(row),
       }]
@@ -912,21 +928,15 @@ const tableColumns = computed(() => [
     render: row => renderDictTag(userTypeOptions.value, normalizeSingleNumber(row.userType)),
   },
   {
-    prop: 'gender',
-    label: '性别',
-    width: 80,
-    render: row => renderDictTag(genderOptions.value, normalizeSingleNumber(row.gender)),
-  },
-  {
     prop: 'userStatus',
     label: '状态',
-    width: 80,
+    width: 90,
     render: row => renderDictTag(userStatusOptions.value, normalizeSingleNumber(row.userStatus), 'user-status-tag'),
   },
   {
     prop: 'action',
     label: '操作',
-    width: 200,
+    width: 160,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
@@ -1370,17 +1380,24 @@ function formatTenantNameList(row = {}) {
 }
 
 function renderTenantNames(row = {}) {
-  const names = formatTenantNameList(row)
-  if (names.length === 0)
-    return '-'
-  return h('div', { class: 'tenant-name-list' }, names.map(name =>
-    h(NTag, {
-      size: 'small',
-      bordered: true,
-      class: 'tenant-name-tag',
-      title: name,
-    }, { default: () => name }),
-  ))
+  return h(SystemTableCell, { values: formatTenantNameList(row) })
+}
+
+function splitTableCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return rawValues
+    .flatMap(item => String(item || '').split(/[、,，]/))
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function resolveUserDisplayName(row = {}) {
+  return row.realName || row.nickname || row.username || `用户${row.id || ''}`
+}
+
+function resolveUserAccountLabel(row = {}) {
+  const username = String(row.username || '').trim()
+  return username && username !== resolveUserDisplayName(row) ? `@${username}` : ''
 }
 
 function resolveOptionLabel(options = [], value) {
@@ -2421,32 +2438,17 @@ async function handleSubmitBatchTenant() {
 
 /* 左右布局 */
 .user-layout {
-  display: flex;
   flex: 1;
   min-height: 0;
-  gap: 8px;
 }
 
 /* 左侧组织树面板 */
 .org-tree-panel {
-  width: 220px;
-  min-width: 220px;
-  background: var(--bg-primary, #fff);
-  border-radius: 6px;
-  border: 1px solid var(--border-light, #e5e7eb);
-  box-shadow: none;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition:
-    width 0.24s ease,
-    min-width 0.24s ease,
-    border-color 0.24s ease;
-}
-
-.org-tree-panel.is-collapsed {
-  width: 72px;
-  min-width: 72px;
 }
 
 .org-tree-panel.is-collapsed .org-tree-header {
@@ -2676,11 +2678,8 @@ async function handleSubmitBatchTenant() {
 /* 右侧用户列表面板 */
 .user-list-panel {
   flex: 1;
+  height: 100%;
   min-width: 0;
-  background: var(--bg-primary, #fff);
-  border-radius: 6px;
-  border: 1px solid var(--border-light, #e5e7eb);
-  box-shadow: none;
   overflow: hidden;
 }
 
@@ -2695,27 +2694,6 @@ async function handleSubmitBatchTenant() {
 
 .org-filter-tip :deep(.n-tag) {
   font-size: 13px;
-}
-
-.tenant-name-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  align-items: center;
-  padding: 3px 0;
-  line-height: 1;
-}
-
-.tenant-name-list :deep(.tenant-name-tag) {
-  max-width: 160px;
-  flex: 0 0 auto;
-}
-
-.tenant-name-list :deep(.tenant-name-tag .n-tag__content) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .user-table-tag {
@@ -2875,12 +2853,6 @@ async function handleSubmitBatchTenant() {
 /* ═══════════════════════════════════════
  * 深色模式
  * ═══════════════════════════════════════ */
-.dark .org-tree-panel {
-  background: #0f172a !important;
-  border-color: #334155 !important;
-  box-shadow: none;
-}
-
 .dark .org-tree-header {
   background: #0f172a;
   border-bottom-color: #334155;
@@ -2965,12 +2937,6 @@ async function handleSubmitBatchTenant() {
   background: #64748b;
 }
 
-.dark .user-list-panel {
-  background: #0f172a !important;
-  border-color: #334155 !important;
-  box-shadow: none;
-}
-
 .dark .org-filter-tip .n-tag {
   background: #1e293b;
   border-color: #334155;
@@ -2996,24 +2962,7 @@ async function handleSubmitBatchTenant() {
   background: #0f172a;
 }
 
-@media (max-width: 1200px) {
-  .org-tree-panel {
-    width: 224px;
-    min-width: 224px;
-  }
-}
-
 @media (max-width: 960px) {
-  .user-layout {
-    flex-direction: column;
-  }
-
-  .org-tree-panel,
-  .org-tree-panel.is-collapsed {
-    width: 100%;
-    min-width: 0;
-  }
-
   .org-tree-collapsed-hint {
     flex-direction: row;
     padding: 12px;
