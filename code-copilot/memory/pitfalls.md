@@ -3147,3 +3147,24 @@ Flyway 脚本为新环境写了包含完整字段的 `CREATE TABLE IF NOT EXISTS
 
 **影响范围**:
 - 所有为测试注入 Clock、Executor、随机源或外部适配器而增加重载构造器的 Spring Service/Component。
+
+## 125. AiCrudPage 的父容器必须提供明确高度
+
+**发现日期**: 2026-07-21
+
+**问题描述**:
+分页接口已经返回 `records`，表头和工具栏也能显示，但表格数据行、分页或无数据提示不可见。页面根容器只设置 `min-height: 100%` 时，这个问题容易被误判为分页协议或空状态组件缺失。
+
+**根本原因**:
+`AiCrudPage`、`AiTable` 和 Naive UI `NDataTable flex-height` 使用纵向 Flex 高度链路。父页面只有 `min-height`、没有可计算的 `height` 时，表格正文 Flex 区域可能塌陷；数据行和 `NEmpty` 共用该区域，因此会同时消失。页面再传入基于视口估算的固定 `max-height`，还会与主布局实际可用空间发生冲突。
+
+**解决方案**:
+- 使用 `AiCrudPage` 的页面根容器设置 `height: 100%`、`min-height: 0`，复杂页面同时设置纵向 Flex 和 `overflow: hidden`。
+- 让 `AiCrudPage` 占用 `flex: 1` 并保持 `min-height: 0`，确保正文获得剩余空间。
+- 页面无特殊需求时不要硬编码 `max-height="calc(100vh - ...)"`。
+- 多列表格优先使用 `AiCrudPage` 的自动 `scroll-x` 计算，避免固定宽度与列配置、固定操作列不一致。
+- 排查时先确认父级高度链路，再检查 `records/total` 解析；共享 `AiTable` 已有空状态时不要重复实现。
+
+**影响范围**:
+- 所有使用 `AiCrudPage` / `AiTable` Flex 高度模式的列表页面。
+- 数据行、分页、加载态和无数据提示的可见性。

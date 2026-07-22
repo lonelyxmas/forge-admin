@@ -20,8 +20,6 @@
       modal-type="drawer"
       modal-width="920px"
       add-button-text="新增提示词模板"
-      :scroll-x="1560"
-      max-height="calc(100vh - 300px)"
     />
 
     <n-modal
@@ -463,7 +461,17 @@ function sanitizeFilename(name) {
 
 <style scoped>
 .prompt-template-page {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prompt-template-page :deep(.ai-crud-page) {
+  flex: 1;
+  min-height: 0;
 }
 
 .template-preview {
