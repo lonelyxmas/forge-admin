@@ -32,6 +32,6 @@ public class AiCapabilityVersion extends TenantEntity {
     private String policySnapshot;
     private String schemaChecksum;
     private String status;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

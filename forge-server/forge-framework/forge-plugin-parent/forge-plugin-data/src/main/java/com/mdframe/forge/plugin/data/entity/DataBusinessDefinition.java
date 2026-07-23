@@ -35,8 +35,8 @@ public class DataBusinessDefinition extends TenantEntity {
 
     private Integer status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     @TableField(exist = false)
     private Integer datasetCount;

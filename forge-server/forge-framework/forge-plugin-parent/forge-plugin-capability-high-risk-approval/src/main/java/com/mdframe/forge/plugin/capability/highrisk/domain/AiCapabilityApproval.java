@@ -43,6 +43,6 @@ public class AiCapabilityApproval extends TenantEntity {
     private String errorCode;
     private LocalDateTime expiresAt;
     private LocalDateTime completedAt;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

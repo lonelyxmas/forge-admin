@@ -68,10 +68,10 @@ public class SysRole extends TenantEntity {
     private String remark;
 
     /**
-     * 删除标志（0正常 1删除）
+     * 删除标志（0正常，删除后写主键）
      */
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     /**
      * 租户名称（查询列表时填充）

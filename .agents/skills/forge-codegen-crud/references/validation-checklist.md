@@ -3,7 +3,12 @@
 ## Generated SQL
 
 - [ ] Flyway filename uses the next unused version and lower snake case description.
+- [ ] Existing-table migrations guard every `DROP INDEX` with `information_schema.STATISTICS` and tolerate renamed, missing, or partially migrated legacy indexes.
 - [ ] Business table has `id`, `tenant_id`, `create_by`, `create_time`, `create_dept`, `update_by`, `update_time`.
+- [ ] Logical-delete tables contain `del_flag`; no visible `logic_delete_active` generated column is created.
+- [ ] A business key that is active-only unique uses `(business_key..., del_flag)` with `BIGINT/Long` and `@TableLogic(delval = "id")`; tables without this requirement do not add the index mechanically.
+- [ ] Custom logical-delete SQL for an active-only unique key writes the current primary key, never the fixed value `1`.
+- [ ] Active-only uniqueness does not rely on `(business_key, deleted_at)` with `deleted_at = NULL`; MySQL allows multiple `NULL` values in a unique index.
 - [ ] Built-in data uses `tenant_id = 1`, never `0`.
 - [ ] Every insert has explicit column names.
 - [ ] Every dictionary/resource/Excel seed has `NOT EXISTS` protection.

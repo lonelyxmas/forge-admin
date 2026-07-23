@@ -16,4 +16,14 @@ public interface FlowNodeConfigMapper extends BaseMapper<FlowNodeConfig> {
      */
     FlowNodeConfig selectByModelKeyAndNode(@Param("modelKey") String modelKey,
                                            @Param("nodeId") String nodeId);
+
+    /**
+     * 使用当前字符串主键作为删除墓碑，避免同一模型节点只能保留一条删除历史。
+     */
+    int logicDeleteById(@Param("id") String id);
+
+    /**
+     * 按模型批量写入各行自身主键作为删除墓碑。
+     */
+    int logicDeleteByModelId(@Param("modelId") String modelId);
 }

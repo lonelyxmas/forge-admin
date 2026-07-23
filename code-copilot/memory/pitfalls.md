@@ -3168,3 +3168,21 @@ Flyway 脚本为新环境写了包含完整字段的 `CREATE TABLE IF NOT EXISTS
 **影响范围**:
 - 所有使用 `AiCrudPage` / `AiTable` Flex 高度模式的列表页面。
 - 数据行、分页、加载态和无数据提示的可见性。
+
+## 126. Flyway 替换旧索引时不能假设历史索引仍存在
+
+**发现日期**: 2026-07-23
+
+**问题描述**:
+逻辑删除迁移根据早期 Flyway 清单无条件执行 `DROP INDEX uk_xxx_active`，但后续迁移可能已经删除、改名或替换该索引。真实库仍有待迁移生成列，却没有预期索引名时，MySQL 会报 `Can't DROP ...; check that column/key exists`；如果只跳过缺失索引，还可能遗漏后续迁移留下的永久唯一索引，继续阻止逻辑删除后重建。
+
+**解决方案**:
+- 扫描目标索引完整迁移历史，不能只读取首次创建脚本。
+- 执行前查询 `information_schema.STATISTICS`，动态拼接实际存在的 `DROP INDEX` 子句。
+- 将实际旧索引删除、生成列删除和目标唯一索引创建放在同一个 `ALTER TABLE` 中，避免表级迁移留下无唯一约束窗口。
+- 对已知语义替代索引显式加入候选清单，例如 `ai_code_rule.uk_ai_code_rule_code`。
+- MySQL 非事务 DDL 迁移失败后，修复脚本前先确认 `flyway_schema_history` 失败记录；执行 Flyway repair 后再重跑幂等迁移。
+
+**影响范围**:
+- 所有修改、重建或重命名存量索引/约束的 Flyway 迁移。
+- 所有可能跨多个历史版本、手工修复或部分执行状态升级的数据库环境。

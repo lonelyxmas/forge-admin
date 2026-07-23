@@ -43,7 +43,7 @@ public class HighRiskActionPublisher {
         policy.setApprovalCandidateGroup(dto.getApprovalCandidateGroup());
         policy.setExpireSeconds(dto.getExpireSeconds());
         policy.setStatus("ENABLED");
-        policy.setDelFlag(0);
+        policy.setDelFlag(0L);
         policyService.save(policy);
         return capabilityId;
     }

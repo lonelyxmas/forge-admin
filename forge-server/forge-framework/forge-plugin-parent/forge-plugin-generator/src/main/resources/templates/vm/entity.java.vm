@@ -60,7 +60,11 @@ public class ${className}#if(${hasTenantEntity}) extends TenantEntity#elseif(${h
 #end
 #end
 #if($column.columnName == 'del_flag')
+#if($column.javaType == 'Long' && $pkColumn && $pkColumn.javaType == 'Long')
+    @TableLogic(value = "0", delval = "${pkColumn.columnName}")
+#else
     @TableLogic
+#end
 #end
 #if($column.dictType && $column.dictType != "")
     @TransField(dictType = "$column.dictType")

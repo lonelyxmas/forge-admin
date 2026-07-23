@@ -168,7 +168,11 @@
 #if($child.hasLogicDelete)
     <update id="clear${child.className}Rows">
         UPDATE ${child.tableName}
+#if($child.uniqueDeleteMarker)
+        SET del_flag = ${child.pkColumn.columnName}
+#else
         SET del_flag = '1'
+#end
         WHERE ${child.childFkColumn} = #{relationValue}
           AND del_flag = '0'
     </update>

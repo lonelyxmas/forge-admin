@@ -147,7 +147,7 @@ public class HighRiskApprovalSubmissionService {
         approval.setExecuteStatus("RESERVED");
         approval.setResultCode("RESERVED");
         approval.setExpiresAt(LocalDateTime.now().plusSeconds(policy.getExpireSeconds()));
-        approval.setDelFlag(0);
+        approval.setDelFlag(0L);
         byte[] aad = aad(approval);
         try {
             EncryptedCapabilityPayload encrypted = payloadCrypto.encrypt(

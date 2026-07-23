@@ -158,7 +158,7 @@ public class JobApiTokenService {
         token.setStatus(JobApiTokenStatus.ACTIVE);
         token.setIssuedAt(now);
         token.setExpiresAt(request.expiresAt());
-        token.setDelFlag(0);
+        token.setDelFlag(0L);
         return token;
     }
 
@@ -179,7 +179,7 @@ public class JobApiTokenService {
         replacement.setExpiresAt(current.getExpiresAt());
         replacement.setCreateBy(current.getCreateBy());
         replacement.setCreateDept(current.getCreateDept());
-        replacement.setDelFlag(0);
+        replacement.setDelFlag(0L);
         return replacement;
     }
 

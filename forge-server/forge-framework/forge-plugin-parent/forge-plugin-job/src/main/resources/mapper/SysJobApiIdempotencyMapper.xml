@@ -22,7 +22,7 @@
 
     <update id="expireMatching">
         UPDATE sys_job_api_idempotency
-        SET del_flag = 1,
+        SET del_flag = id,
             update_time = NOW()
         WHERE tenant_id = #{tenantId}
           AND token_id = #{tokenId}

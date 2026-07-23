@@ -43,7 +43,7 @@ public class JobApiReservationService {
         reservation.setIdempotencyKeyHash(keyHash);
         reservation.setExecutionId(executionId);
         reservation.setExpiresAt(now.plus(jobProperties.getOpenApi().validatedIdempotencyTtl()));
-        reservation.setDelFlag(0);
+        reservation.setDelFlag(0L);
         if (idempotencyMapper.insertReservation(reservation) <= 0) {
             throw new IllegalStateException("创建开放API幂等记录失败");
         }

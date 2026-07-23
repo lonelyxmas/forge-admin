@@ -38,8 +38,8 @@ public class DataDimension extends TenantEntity {
 
     private Integer status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime lastSyncTime;

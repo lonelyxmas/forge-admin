@@ -72,8 +72,8 @@ public class EmployeeQuery implements Serializable {
     private Long createDept;
 
     /**
-     * 删除标志(0:未删除,1:已删除)
+     * 删除标志（0：未删除，删除后写主键）
      */
-    private Integer delFlag;
+    private Long delFlag;
 
 }

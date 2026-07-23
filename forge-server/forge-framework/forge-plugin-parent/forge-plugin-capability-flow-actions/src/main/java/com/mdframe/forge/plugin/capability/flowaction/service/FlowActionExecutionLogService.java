@@ -222,7 +222,7 @@ public class FlowActionExecutionLogService {
         log.setExecuteStatus("RUNNING");
         log.setResultCode("EXECUTION_PENDING");
         log.setDurationMs(0L);
-        log.setDelFlag(0);
+        log.setDelFlag(0L);
         return log;
     }
 

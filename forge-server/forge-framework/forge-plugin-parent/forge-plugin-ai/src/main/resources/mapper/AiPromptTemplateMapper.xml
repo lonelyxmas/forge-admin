@@ -221,7 +221,7 @@
 
     <update id="deleteByTenantId">
         UPDATE ai_prompt_template
-        SET del_flag = '1',
+        SET del_flag = id,
             update_time = NOW()
         WHERE tenant_id = #{tenantId}
           AND id = #{id}

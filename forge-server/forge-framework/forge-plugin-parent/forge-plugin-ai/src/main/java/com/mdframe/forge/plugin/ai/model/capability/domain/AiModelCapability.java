@@ -16,5 +16,5 @@ public class AiModelCapability extends TenantEntity {
     private String capabilityCode;
     private String configJson;
     private String status;
-    @TableLogic private String delFlag;
+    @TableLogic(value = "0", delval = "id") private Long delFlag;
 }

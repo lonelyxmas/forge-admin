@@ -37,8 +37,8 @@ public class DataDatasetCategory extends TenantEntity {
 
     private Integer status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String description;

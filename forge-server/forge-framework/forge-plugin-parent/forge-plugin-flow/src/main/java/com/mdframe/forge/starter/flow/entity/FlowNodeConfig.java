@@ -242,10 +242,13 @@ public class FlowNodeConfig implements Serializable {
     private Integer status;
 
     /**
-     * 删除标志（0-正常/1-删除）
+     * 逻辑删除标记：0 表示有效，删除后写入当前字符串主键。
+     *
+     * <p>该表必须通过 FlowNodeConfigMapper 的专用删除方法删除，不能调用
+     * MyBatis-Plus 通用 remove/delete 方法。</p>
      */
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0")
+    private String delFlag;
 
     /**
      * 创建时间

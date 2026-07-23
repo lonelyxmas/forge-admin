@@ -93,11 +93,11 @@ public class Employee extends BaseEntity {
     private Long createDept;
 
     /**
-     * 删除标志(0:未删除,1:已删除)
+     * 删除标志（0：未删除，删除后写主键）
      */
-    @TableLogic
+    @TableLogic(value = "0", delval = "id")
     @TransField(dictType = "del_flag")
-    private Integer delFlag;
+    private Long delFlag;
 
     @TableField(exist = false)
     private String delFlagName;

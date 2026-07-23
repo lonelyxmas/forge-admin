@@ -61,6 +61,6 @@ public class AiBusinessApplicationPublishRun extends TenantEntity {
 
     private LocalDateTime finishedTime;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

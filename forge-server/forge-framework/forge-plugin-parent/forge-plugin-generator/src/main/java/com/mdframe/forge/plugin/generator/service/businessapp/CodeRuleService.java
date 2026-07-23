@@ -174,7 +174,7 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
         rule.setBuiltin(0);
         rule.setVersionNo(1);
         rule.setLegacyCompatEnabled(0);
-        rule.setDelFlag("0");
+        rule.setDelFlag(0L);
         syncLegacySummary(rule, source.getSegments());
         if (!save(rule)) {
             throw new BusinessException("新增编码规则失败");
@@ -510,7 +510,7 @@ public class CodeRuleService extends ServiceImpl<CodeRuleMapper, AiCodeRule> {
             entity.setId(IdWorker.getId());
             entity.setTenantId(tenantId);
             entity.setRuleId(ruleId);
-            entity.setDelFlag("0");
+            entity.setDelFlag(0L);
             entity.setCreateBy(userId);
             entity.setCreateDept(deptId);
             entity.setCreateTime(now);

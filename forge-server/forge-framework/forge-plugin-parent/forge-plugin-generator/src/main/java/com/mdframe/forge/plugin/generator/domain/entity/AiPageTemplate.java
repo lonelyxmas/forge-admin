@@ -52,7 +52,7 @@ public class AiPageTemplate extends BaseEntity {
      */
     private String codegenType;
 
-    /** 删除标志（0正常 1删除） */
-    @TableLogic
-    private String delFlag;
+    /** 删除标志（0正常，删除后写主键） */
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

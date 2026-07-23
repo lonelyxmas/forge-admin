@@ -61,6 +61,14 @@
 | 审计字段 | 所有业务表必须包含 `id`, `tenant_id`, `create_by`, `create_time`, `create_dept`, `update_by`, `update_time` |
 | 索引 | 频繁查询的字段必须创建索引，复合索引遵循最左前缀原则 |
 
+### 逻辑删除与唯一键
+
+- `del_flag` 承担逻辑删除状态：`0` 表示有效，非 `0` 表示已删除；实体必须显式添加 `@TableLogic`，Mapper XML 查询必须显式过滤有效数据。
+- 不是所有逻辑删除表都需要把删除字段加入唯一索引。业务键跨删除历史永久唯一时，保持原业务唯一索引；没有业务唯一键时无需增加辅助结构。
+- 业务键只要求未删除记录唯一、删除后允许重建时，数值主键表使用 `BIGINT del_flag` 和普通唯一索引 `(tenant_id, 业务键..., del_flag)`。实体使用 `Long` 与 `@TableLogic(value = "0", delval = "id")`，删除后以当前主键作为唯一墓碑。
+- 自定义删除 SQL 必须 `SET del_flag = id`，不能固定写 `1`。字符串主键使用同类型删除字段和专用 Mapper。
+- 禁止新增可见 `logic_delete_active` 生成列、函数索引或部分索引；数据库唯一约束不能降级为 Service 层先查后插。
+
 ## 金额与时间规范
 
 | 类型 | 规则 |

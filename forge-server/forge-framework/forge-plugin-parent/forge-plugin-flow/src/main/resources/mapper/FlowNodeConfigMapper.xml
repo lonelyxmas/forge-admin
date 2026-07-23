@@ -8,9 +8,25 @@
         INNER JOIN sys_flow_model m ON c.model_id = m.id
         WHERE m.model_key = #{modelKey}
           AND c.node_id = #{nodeId}
-          AND c.del_flag = 0
+          AND c.del_flag = '0'
           AND (m.del_flag IS NULL OR m.del_flag = 0)
         ORDER BY c.update_time DESC, c.create_time DESC
         LIMIT 1
     </select>
+
+    <update id="logicDeleteById">
+        UPDATE sys_flow_node_config
+        SET del_flag = id,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND del_flag = '0'
+    </update>
+
+    <update id="logicDeleteByModelId">
+        UPDATE sys_flow_node_config
+        SET del_flag = id,
+            update_time = CURRENT_TIMESTAMP
+        WHERE model_id = #{modelId}
+          AND del_flag = '0'
+    </update>
 </mapper>

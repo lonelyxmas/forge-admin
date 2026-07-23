@@ -50,7 +50,7 @@
 
     <update id="logicalDeleteByRuleId">
         UPDATE ai_code_rule_segment
-        SET del_flag = '1',
+        SET del_flag = id,
             update_by = #{updateBy},
             update_time = NOW()
         WHERE tenant_id = #{tenantId}

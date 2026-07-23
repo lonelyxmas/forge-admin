@@ -116,7 +116,7 @@ public class CapabilityCatalogService {
             capability.setTenantId(safeTenantId);
             capability.setCapabilityCode(dto.capabilityCode());
             capability.setProtocolToolName(dto.protocolToolName());
-            capability.setDelFlag(0);
+            capability.setDelFlag(0L);
         }
         applyMetadata(capability, dto, checksum);
         if (capability.getId() == null) {
@@ -178,7 +178,7 @@ public class CapabilityCatalogService {
         version.setPolicySnapshot(dto.policySnapshot() == null ? null : writeJson(dto.policySnapshot()));
         version.setSchemaChecksum(checksum);
         version.setStatus("PUBLISHED");
-        version.setDelFlag(0);
+        version.setDelFlag(0L);
         return version;
     }
 

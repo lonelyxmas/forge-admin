@@ -42,6 +42,6 @@ public class AiCapabilityFlowActionLog extends TenantEntity {
     private String errorCode;
     private Long durationMs;
 
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

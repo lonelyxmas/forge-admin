@@ -39,8 +39,8 @@ public class SamplePurchaseOrder extends TenantEntity {
 
     private String status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     private Long applicantId;
 

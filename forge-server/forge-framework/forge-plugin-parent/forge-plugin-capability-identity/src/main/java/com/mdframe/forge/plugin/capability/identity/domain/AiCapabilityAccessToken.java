@@ -36,6 +36,6 @@ public class AiCapabilityAccessToken extends TenantEntity {
     private LocalDateTime expiresAt;
     private LocalDateTime lastUsedAt;
     private LocalDateTime revokedAt;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

@@ -27,6 +27,6 @@ public class AiCapabilityGrant extends TenantEntity {
     private String fieldPolicy;
     private String status;
     private LocalDateTime expiresAt;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

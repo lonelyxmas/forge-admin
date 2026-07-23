@@ -85,8 +85,8 @@ public class AiModel extends TenantEntity {
     private String remark;
 
     /**
-     * 删除标志（0正常 1删除）
+     * 删除标志（0正常，删除后写主键）
      */
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

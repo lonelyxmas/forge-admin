@@ -203,8 +203,8 @@ public class SysJobConfig {
     private LocalDateTime updateTime;
 
     /**
-     * 删除标志：0-正常 1-删除
+     * 删除标志：0-正常，删除后写主键
      */
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

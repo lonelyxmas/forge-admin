@@ -127,7 +127,7 @@
 
     <update id="logicalDeleteByVersion">
         UPDATE sys_job_config
-        SET del_flag = 1,
+        SET del_flag = id,
             version = version + 1,
             update_time = NOW()
         WHERE id = #{id}

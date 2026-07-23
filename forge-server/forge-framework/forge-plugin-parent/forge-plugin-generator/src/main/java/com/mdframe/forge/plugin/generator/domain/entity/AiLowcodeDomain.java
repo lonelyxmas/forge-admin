@@ -54,6 +54,6 @@ public class AiLowcodeDomain extends TenantEntity {
     /** 领域扩展协议 JSON */
     private String domainSchema;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

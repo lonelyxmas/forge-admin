@@ -48,6 +48,6 @@ public class AiBusinessApplication extends TenantEntity {
     /** 扩展配置 JSON，不允许保存敏感密钥。 */
     private String options;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

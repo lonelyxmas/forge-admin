@@ -46,6 +46,6 @@ public class AiBusinessExtensionVersion extends TenantEntity {
 
     private String changeSummary;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

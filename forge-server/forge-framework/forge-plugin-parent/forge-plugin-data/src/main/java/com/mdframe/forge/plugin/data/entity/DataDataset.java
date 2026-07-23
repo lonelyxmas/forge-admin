@@ -57,8 +57,8 @@ public class DataDataset extends TenantEntity {
 
     private Integer publishStatus;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     private String accessMode;
 

@@ -1,6 +1,6 @@
 ---
 name: forge-codegen-crud
-description: Generate or review Forge project code-generation output for CRUD modules. Use when creating single-table CRUD, master-detail CRUD, left-tree-right-table pages, or generated Forge backend/frontend/SQL artifacts covering list/detail/add/update/delete, batch delete, import/export, dictionary translation, API encryption/decryption, Flyway migrations, sys_dict_type/sys_dict_data inserts, sys_excel_export_config/sys_excel_column_config inserts, and sys_resource menu or permission inserts.
+description: Generate or review Forge project code-generation output for CRUD modules. Use when creating single-table CRUD, master-detail CRUD, left-tree-right-table pages, or generated Forge backend/frontend/SQL artifacts covering list/detail/add/update/delete, batch delete, import/export, dictionary translation, API encryption/decryption, Flyway migrations, logical-delete fields and active-only unique indexes, sys_dict_type/sys_dict_data inserts, sys_excel_export_config/sys_excel_column_config inserts, and sys_resource menu or permission inserts.
 ---
 
 # Forge Codegen CRUD
@@ -11,10 +11,10 @@ Generate Forge-compliant CRUD artifacts from business requirements without re-di
 
 ## Workflow
 
-1. Read `AGENTS.md`, `.opencode/memory/pitfalls.md`, `.opencode/memory/decisions.md`, and `.opencode/memory/preferences.md` before generating code.
+1. Read `AGENTS.md`, `code-copilot/memory/pitfalls.md`, `code-copilot/memory/decisions.md`, and `code-copilot/memory/preferences.md` before generating code.
 2. Identify the page pattern: `single-table`, `master-detail`, or `left-tree-right-table`.
-3. For current single-table CRUD generation, read `references/single-table-crud.md`, `references/sql-seeds.md`, and `references/validation-checklist.md`.
-4. If the request involves master-detail or left-tree-right-table, still enforce this skill's global SQL, dictionary, Excel, resource, tenant, encryption, and validation rules, then inspect existing page-template components before implementation.
+3. Before generating or reviewing any table or Flyway migration, read `references/sql-seeds.md` and `references/validation-checklist.md`. For single-table CRUD, also read `references/single-table-crud.md`.
+4. If the request involves master-detail or left-tree-right-table, enforce the same schema, logical-delete, dictionary, Excel, resource, tenant, encryption, and validation rules, then inspect existing page-template components before implementation.
 5. Generate Flyway SQL first, then backend files, frontend files, and menu/resource seed SQL.
 6. Verify generated code against the checklist before reporting completion.
 
@@ -22,6 +22,7 @@ Generate Forge-compliant CRUD artifacts from business requirements without re-di
 
 - Use Flyway scripts under `forge/db/migration/` for all schema and built-in data changes.
 - Use `tenant_id = 1` for all built-in business data, dictionaries, and resources. Do not seed tenant `0`.
+- Add `del_flag` and an explicit `@TableLogic` to logical-delete business/configuration/design tables. For active-only business uniqueness with a numeric primary key, use `BIGINT/Long del_flag`, `UNIQUE (..., del_flag)`, and `@TableLogic(value = "0", delval = "<primary-key-column>")`; custom deletes must write the row primary key. Never generate `logic_delete_active`, generated/function/partial indexes, `(business_key, deleted_at)` with active rows stored as `NULL`, or a fixed delete value of `1` for tombstone-indexed tables. Follow `references/sql-seeds.md` for the decision rules and string-primary-key exception.
 - Put query SQL in Mapper XML. Do not generate Service-layer `LambdaQueryWrapper` query chains except MyBatis-Plus built-in `selectById`, `insert`, `updateById`, and `deleteById` style operations.
 - Use `pageNum` and `pageSize`; never generate backend `page` as the page parameter.
 - Use AiCrudPage URL placeholders with `:id` or `:${rowKey}`. Do not generate `{id}` placeholders.

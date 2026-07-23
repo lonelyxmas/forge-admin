@@ -58,6 +58,6 @@ public class AiLowcodeModel extends TenantEntity {
     /** 模型结构协议 JSON */
     private String modelSchema;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

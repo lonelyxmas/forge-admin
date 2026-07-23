@@ -333,7 +333,15 @@ VITE_FLOW_PROXY_TARGET=http://localhost:8581
 - 主键使用雪花ID（分布式ID）
 - 高频查询字段建立索引，复合索引遵循最左前缀原则
 
-### 8.2 API设计规范
+### 8.2 逻辑删除与唯一键（强制）
+- 用户可见主数据、配置、设计态元数据和业务单据默认增加 `del_flag`，实体必须显式声明 `@TableLogic`；Mapper XML 查询必须显式过滤 `del_flag = 0`。
+- 没有“仅有效记录唯一”业务键的表，使用普通 `TINYINT/Integer del_flag`，取值 `0` 正常、`1` 删除，不要机械增加活跃唯一索引。
+- 数值主键表需要“有效记录唯一、删除后允许同值重建”时，使用 `BIGINT/Long del_flag`、`UNIQUE (tenant_id, 业务键..., del_flag)` 和 `@TableLogic(value = "0", delval = "主键数据库列名")`；有效行写 `0`，删除后写当前行主键。
+- 自定义单条或批量删除 SQL 必须与字段语义一致；主键墓碑表使用 `SET del_flag = 主键列 WHERE del_flag = 0`，禁止固定写 `1`。字符串主键表使用可容纳主键的字符串字段和专用 Mapper。
+- 业务键要求跨删除历史永久唯一时，唯一索引不包含 `del_flag`。
+- 禁止新增 `logic_delete_active` 生成列、函数/部分索引，或使用有效行 `deleted_at = NULL` 的唯一索引；MySQL 唯一索引允许多个 `NULL`，无法保证有效业务键唯一。
+
+### 8.3 API设计规范
 - RESTful风格：
   - `GET /page` - 分页查询
   - `GET /{id}` - 详情查询
@@ -343,12 +351,12 @@ VITE_FLOW_PROXY_TARGET=http://localhost:8581
 - 统一响应：`RespInfo.success(data)` / `RespInfo.error(msg)`
 - 敏感接口加密：使用 `@ApiDecrypt` / `@ApiEncrypt` 注解
 
-### 8.3 代码生成规范
+### 8.4 代码生成规范
 - 使用内置 `forge-plugin-generator` 生成CRUD模块
 - 前端CRUD页面使用 `AiCrudPage` 组件
 - 避免手写重复代码，使用代码生成器
 
-### 8.4 前端开发规范
+### 8.5 前端开发规范
 - API调用使用 `@/utils/request` 工具
 - 加密API调用使用 `@/utils/encrypt-request`
 - 样式使用UnoCSS，避免自定义CSS

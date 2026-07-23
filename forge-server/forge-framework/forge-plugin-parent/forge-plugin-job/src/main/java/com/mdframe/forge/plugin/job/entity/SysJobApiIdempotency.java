@@ -25,6 +25,6 @@ public class SysJobApiIdempotency extends TenantEntity {
     private LocalDateTime expiresAt;
     private String remark;
 
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

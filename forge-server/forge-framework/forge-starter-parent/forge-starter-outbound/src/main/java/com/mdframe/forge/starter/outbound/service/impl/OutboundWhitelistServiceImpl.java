@@ -108,7 +108,7 @@ public class OutboundWhitelistServiceImpl implements OutboundWhitelistService {
         entity.setAllowPrivate(allowPrivate);
         entity.setStatus(status);
         entity.setRemark(request.getRemark() == null ? null : request.getRemark().trim());
-        entity.setDelFlag(0);
+        entity.setDelFlag(0L);
         return entity;
     }
 

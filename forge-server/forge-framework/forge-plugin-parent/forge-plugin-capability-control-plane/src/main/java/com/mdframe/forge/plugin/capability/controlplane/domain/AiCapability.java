@@ -33,6 +33,6 @@ public class AiCapability extends TenantEntity {
     private String visibility;
     private String publishStatus;
     private Integer enabled;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

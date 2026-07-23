@@ -67,6 +67,6 @@ public class AiBusinessObject extends TenantEntity {
     /** 设计器扩展配置 JSON */
     private String designerOptions;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

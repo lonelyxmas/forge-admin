@@ -24,6 +24,6 @@ public class AiCapabilityPolicy extends TenantEntity {
     private String approvalCandidateGroup;
     private Integer expireSeconds;
     private String status;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

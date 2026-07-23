@@ -95,8 +95,8 @@ public class FlowNodeConfigServiceImpl extends ServiceImpl<FlowNodeConfigMapper,
         nodeOperationMapper.delete(new LambdaQueryWrapper<FlowNodeOperation>()
                 .eq(FlowNodeOperation::getNodeConfigId, id));
         
-        // 删除节点配置
-        return removeById(id);
+        // 字符串主键表必须把当前主键写入 del_flag，不能使用 MP 默认固定删除值。
+        return baseMapper.logicDeleteById(id) > 0;
     }
 
     @Override
@@ -116,9 +116,8 @@ public class FlowNodeConfigServiceImpl extends ServiceImpl<FlowNodeConfigMapper,
                     .eq(FlowNodeOperation::getNodeConfigId, config.getId()));
         }
         
-        // 删除节点配置
-        return remove(new LambdaQueryWrapper<FlowNodeConfig>()
-                .eq(FlowNodeConfig::getModelId, modelId));
+        // 每一行写入自身主键作为删除墓碑。
+        return baseMapper.logicDeleteByModelId(modelId) > 0;
     }
 
     @Override

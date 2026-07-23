@@ -32,6 +32,6 @@ public class SysOutboundWhitelist extends TenantEntity {
 
     private String remark;
 
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

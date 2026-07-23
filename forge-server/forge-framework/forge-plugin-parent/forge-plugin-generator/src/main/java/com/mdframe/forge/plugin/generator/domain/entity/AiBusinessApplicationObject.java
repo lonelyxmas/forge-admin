@@ -36,6 +36,6 @@ public class AiBusinessApplicationObject extends TenantEntity {
     /** 应用内对象展示配置 JSON。 */
     private String options;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

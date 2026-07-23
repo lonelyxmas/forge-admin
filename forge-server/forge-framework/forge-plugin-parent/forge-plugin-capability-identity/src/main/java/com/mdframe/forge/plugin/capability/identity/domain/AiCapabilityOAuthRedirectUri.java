@@ -23,6 +23,6 @@ public class AiCapabilityOAuthRedirectUri extends TenantEntity {
     private String redirectUri;
     private String redirectUriHash;
     private String status;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

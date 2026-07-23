@@ -54,7 +54,7 @@ public class CapabilityOAuthClientConfigService {
                 entity.setRedirectUri(redirect);
                 entity.setRedirectUriHash(DatabaseExactRedirectUriRegistry.sha256(redirect));
                 entity.setStatus("ENABLED");
-                entity.setDelFlag(0);
+                entity.setDelFlag(0L);
                 redirectUriMapper.insert(entity);
             }
         }

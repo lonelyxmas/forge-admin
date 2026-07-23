@@ -33,6 +33,6 @@ public class SysJobApiToken extends TenantEntity {
     private LocalDateTime revokedAt;
     private String remark;
 
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

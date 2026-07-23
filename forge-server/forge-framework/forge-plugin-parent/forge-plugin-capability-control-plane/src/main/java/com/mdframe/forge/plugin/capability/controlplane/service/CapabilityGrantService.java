@@ -80,7 +80,7 @@ public class CapabilityGrantService {
         grant.setFieldPolicy(writeFieldPolicy(dto));
         grant.setStatus("ENABLED");
         grant.setExpiresAt(dto.expiresAt());
-        grant.setDelFlag(0);
+        grant.setDelFlag(0L);
         grantMapper.insert(grant);
         return grant.getId();
     }

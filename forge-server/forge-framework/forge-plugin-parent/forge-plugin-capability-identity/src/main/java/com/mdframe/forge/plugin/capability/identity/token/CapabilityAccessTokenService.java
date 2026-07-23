@@ -65,7 +65,7 @@ public class CapabilityAccessTokenService {
         token.setStatus("ACTIVE");
         token.setIssuedAt(issuedAt);
         token.setExpiresAt(issuedAt.plusSeconds(expiresIn));
-        token.setDelFlag(0);
+        token.setDelFlag(0L);
         tokenMapper.insert(token);
 
         return new CapabilityTokenResponse(

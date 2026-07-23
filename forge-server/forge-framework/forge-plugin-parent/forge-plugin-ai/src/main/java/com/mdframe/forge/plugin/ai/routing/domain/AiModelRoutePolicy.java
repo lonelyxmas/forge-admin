@@ -15,5 +15,5 @@ public class AiModelRoutePolicy extends TenantEntity {
     private String requiredCapabilities;
     private String status;
     private String remark;
-    @TableLogic private String delFlag;
+    @TableLogic(value = "0", delval = "id") private Long delFlag;
 }

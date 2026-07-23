@@ -14,5 +14,5 @@ public class AiModelRouteTarget extends TenantEntity {
     private Long modelId;
     private Integer priority;
     private String status;
-    @TableLogic private String delFlag;
+    @TableLogic(value = "0", delval = "id") private Long delFlag;
 }

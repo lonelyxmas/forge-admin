@@ -7,6 +7,7 @@
 - Use `CREATE TABLE IF NOT EXISTS`.
 - Use `INSERT ... SELECT ... WHERE NOT EXISTS` for dictionaries, Excel configs, resources, and built-in data.
 - Include explicit column lists in every `INSERT`.
+- Before dropping a legacy index, query `information_schema.STATISTICS`; do not assume an index from an older migration still exists. When one atomic `ALTER TABLE` must replace optional legacy indexes, dynamically include only the index names that currently exist.
 - Do not commit production secrets, real credentials, tokens, AK/SK, or passwords.
 
 ## Business Table DDL
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `biz_example` (
   `status` varchar(16) NOT NULL DEFAULT '1' COMMENT '状态',
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `del_flag` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0正常，1删除',
   `create_by` bigint DEFAULT NULL COMMENT '创建者',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
@@ -33,6 +35,19 @@ CREATE TABLE IF NOT EXISTS `biz_example` (
 ```
 
 Use `bigint` amounts in cents, `datetime` for time fields mapped to `LocalDateTime`, and `utf8mb4` for tables.
+
+### Logical-delete unique keys
+
+不是所有逻辑删除表都需要删除标记唯一索引。只有业务键要求“未删除记录唯一”、且删除后允许使用相同业务键重建时，才把 `del_flag` 升级为主键墓碑：
+
+```sql
+`del_flag` bigint NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0正常，删除后写主键',
+UNIQUE KEY `uk_biz_example_code_active` (`tenant_id`, `example_code`, `del_flag`)
+```
+
+对应数值主键实体必须使用 `Long delFlag` 和 `@TableLogic(value = "0", delval = "id")`。自定义批量删除 SQL 使用 `SET del_flag = id WHERE del_flag = 0`，不能固定写 `1`。禁止创建可见的 `logic_delete_active` 生成列，也不要用函数索引、部分索引或只在 Service 层先查后插代替数据库唯一约束。不要使用 `UNIQUE (business_key, deleted_at)` 且让有效行的 `deleted_at` 为 `NULL`；MySQL 唯一索引允许多个 `NULL`，不能约束有效业务键唯一。
+
+若业务键要求跨已删除历史永久唯一，唯一索引不要包含 `del_flag`；没有业务唯一键的表继续使用普通 `tinyint` 逻辑删除即可。
 
 ## Dictionary Seeds
 

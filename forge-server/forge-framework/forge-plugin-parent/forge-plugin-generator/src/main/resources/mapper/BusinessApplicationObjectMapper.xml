@@ -116,7 +116,7 @@
 
     <update id="logicDeleteByApplicationId">
         UPDATE ai_business_application_object
-        SET del_flag = '1',
+        SET del_flag = id,
             update_time = NOW()
         WHERE tenant_id = #{tenantId}
           AND application_id = #{applicationId}

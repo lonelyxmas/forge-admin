@@ -66,6 +66,6 @@ public class AiCodeRule extends TenantEntity {
 
     private String options;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

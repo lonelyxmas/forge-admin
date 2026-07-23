@@ -63,7 +63,7 @@ public class CapabilityClientService {
         client.setStatus("ENABLED");
         client.setExpiresAt(dto.expiresAt());
         client.setRemark(dto.remark());
-        client.setDelFlag(0);
+        client.setDelFlag(0L);
         clientMapper.insert(client);
         return secretResponse(client, issued.rawSecret());
     }

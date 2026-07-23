@@ -138,10 +138,10 @@ public class SysResource extends TenantEntity {
     private Integer minUserType;
 
     /**
-     * 删除标志（0正常 1删除）
+     * 删除标志（0正常，删除后写主键）
      */
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     /**
      * 子资源列表（非数据库字段，用于树形结构）

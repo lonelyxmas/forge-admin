@@ -797,6 +797,10 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
             meta.setColumns(refColumns);
             meta.setPkColumn(table.getPkColumn());
             meta.setHasLogicDelete(hasColumn(refColumns, "del_flag"));
+            meta.setUniqueDeleteMarker(meta.getPkColumn() != null
+                    && "Long".equals(meta.getPkColumn().getJavaType())
+                    && refColumns.stream().anyMatch(column -> "del_flag".equals(column.getColumnName())
+                    && "Long".equals(column.getJavaType())));
             result.add(meta);
         }
         return result;
@@ -1357,6 +1361,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         private String mainFieldCap;
         private String mainColumn;
         private boolean hasLogicDelete;
+        private boolean uniqueDeleteMarker;
     }
 
     @Data

@@ -87,7 +87,7 @@
 
     <update id="logicDelete">
         UPDATE sys_outbound_whitelist
-        SET del_flag = 1,
+        SET del_flag = id,
             update_time = CURRENT_TIMESTAMP
         WHERE tenant_id = #{tenantId}
           AND id = #{id}

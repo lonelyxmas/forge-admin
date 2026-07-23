@@ -34,6 +34,6 @@ public class AiCapabilityClient extends TenantEntity {
     private LocalDateTime expiresAt;
     private LocalDateTime lastUsedAt;
     private String remark;
-    @TableLogic
-    private Integer delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }

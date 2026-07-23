@@ -37,8 +37,8 @@ public class DataConnection extends TenantEntity {
 
     private Integer status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     private String description;
 

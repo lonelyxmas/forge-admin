@@ -34,6 +34,6 @@ public class AiAgent extends TenantEntity {
     private String extraConfig;
     private String status;
 
-    @TableLogic
-    private String delFlag;
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 }
