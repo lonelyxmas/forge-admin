@@ -1,41 +1,8 @@
 <template>
   <div class="business-studio">
-    <section class="business-hero">
-      <div class="hero-main">
-        <p class="hero-kicker">
-          业务语义资产
-        </p>
-        <h1 class="hero-title">
-          业务定义管理台
-        </h1>
-        <p class="hero-description">
-          把业务目标、指标口径和可用数据集维护为统一语义，让大屏生成从“描述驱动”升级为“数据资产驱动”。
-        </p>
-      </div>
-
-      <div class="hero-stats">
-        <div v-for="card in statCards" :key="card.key" class="hero-stat-card">
-          <div class="hero-stat-label">
-            {{ card.label }}
-          </div>
-          <div class="hero-stat-value">
-            {{ card.value }}
-          </div>
-          <div class="hero-stat-note">
-            {{ card.note }}
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="business-panel">
       <div class="panel-toolbar">
-        <div>
-          <p class="panel-kicker">
-            业务资产
-          </p>
-          <h3>业务定义清单</h3>
-        </div>
+        <h3>业务定义</h3>
         <div class="toolbar-actions">
           <NInput
             v-model:value="queryForm.businessName"
@@ -87,13 +54,11 @@
         :bordered="false"
         :striped="false"
         :scroll-x="1480"
-        max-height="calc(100vh - 250px)"
         :edit-grid-cols="12"
         edit-label-placement="top"
         edit-form-class="data-business-edit-form"
         modal-width="min(1180px, calc(100vw - 32px))"
         add-button-text="新增业务定义"
-        @load-list-success="handleBusinessLoadSuccess"
       >
         <template #form-businessEditor="{ formData, field }">
           <div class="business-editor">
@@ -253,41 +218,7 @@ const queryForm = reactive({
   status: null,
 })
 
-const businessStats = reactive({
-  total: 0,
-  active: 0,
-  disabled: 0,
-  datasets: 0,
-})
-
 const statusOptions = computed(() => dict.value.sys_enable_disable || [])
-
-const statCards = computed(() => [
-  {
-    key: 'total',
-    label: '筛选结果',
-    value: businessStats.total,
-    note: '匹配当前筛选条件的业务定义总数',
-  },
-  {
-    key: 'active',
-    label: '当前页启用',
-    value: businessStats.active,
-    note: '可在大屏生成时选择使用',
-  },
-  {
-    key: 'disabled',
-    label: '当前页禁用',
-    value: businessStats.disabled,
-    note: '不会作为生成上下文使用',
-  },
-  {
-    key: 'datasets',
-    label: '当前页绑定',
-    value: businessStats.datasets,
-    note: '当前页业务定义绑定的数据集总数',
-  },
-])
 
 const tableColumns = computed(() => [
   {
@@ -485,14 +416,6 @@ function renderReadiness(row) {
 
 function handleEditBusiness(row) {
   crudRef.value?.showEdit({ ...row, __modalTitle: '编辑业务定义' })
-}
-
-function handleBusinessLoadSuccess({ list, total }) {
-  const rows = list || []
-  businessStats.total = total || 0
-  businessStats.active = rows.filter(item => item.status === 1).length
-  businessStats.disabled = rows.filter(item => item.status === 0).length
-  businessStats.datasets = rows.reduce((sum, item) => sum + (item.datasetCount || 0), 0)
 }
 
 function beforeRenderForm(formData) {
@@ -777,99 +700,33 @@ function handleDeleteBusiness(row) {
 
 <style scoped>
 .business-studio {
-  background: #f8fafc;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 10px;
-}
-
-.business-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
+  background: #f8fafc;
+  box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-.hero-kicker,
-.panel-kicker {
-  margin: 0 0 4px;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 720px;
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.hero-stat-note {
-  display: none;
 }
 
 .business-panel {
-  position: relative;
-  margin-top: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 12px;
   background: #fff;
   padding: 10px;
+}
+
+/* AiCrudPage 依赖父级 flex 链提供高度，否则 flex-height 表格体会塌陷为 0 */
+.business-panel :deep(.ai-crud-page) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .panel-toolbar {
@@ -1116,12 +973,6 @@ function handleDeleteBusiness(row) {
 
 :deep(.business-crud .n-data-table-tr:hover td) {
   background: rgb(241 245 249 / 80%);
-}
-
-@media (max-width: 1200px) {
-  .business-hero {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 900px) {

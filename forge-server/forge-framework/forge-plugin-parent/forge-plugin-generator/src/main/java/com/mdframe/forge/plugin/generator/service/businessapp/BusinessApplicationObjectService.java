@@ -77,8 +77,10 @@ public class BusinessApplicationObjectService
             if (!objectIds.add(dto.getObjectId())) {
                 throw new BusinessException("同一业务对象不能重复加入应用");
             }
-            String role = StringUtils.defaultIfBlank(dto.getObjectRole(), BusinessApplicationObjectRole.SHARED)
-                    .toUpperCase(Locale.ROOT);
+            String role = objects.size() == 1
+                    ? BusinessApplicationObjectRole.PRIMARY
+                    : StringUtils.defaultIfBlank(dto.getObjectRole(), BusinessApplicationObjectRole.SHARED)
+                            .toUpperCase(Locale.ROOT);
             if (!BusinessApplicationObjectRole.supportedRoles().contains(role)) {
                 throw new BusinessException("应用对象角色不正确");
             }

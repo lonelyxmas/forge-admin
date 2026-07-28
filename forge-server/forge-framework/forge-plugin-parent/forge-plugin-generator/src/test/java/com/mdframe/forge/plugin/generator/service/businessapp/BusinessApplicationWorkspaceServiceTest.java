@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObje
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationWorkspaceVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessExtensionVO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -28,7 +29,8 @@ class BusinessApplicationWorkspaceServiceTest {
                         object(202L, "SHARED", "PUBLISHED", 1))),
                 new StubBusinessAppService(List.of(entry(301L, 1))),
                 new StubBusinessExtensionService(List.of()),
-                null);
+                null,
+                inspector());
 
         BusinessApplicationWorkspaceVO workspace = service.workspace(101L);
 
@@ -43,21 +45,21 @@ class BusinessApplicationWorkspaceServiceTest {
     }
 
     @Test
-    @DisplayName("missing primary blocks while missing entry is only a warning")
-    void missingPrimaryBlocksAndEntryWarns() {
+    @DisplayName("content application does not require a primary object")
+    void contentApplicationWithoutPrimaryIsAllowed() {
         BusinessApplicationWorkspaceService service = new BusinessApplicationWorkspaceService(
                 new StubApplicationService(application(1L, 0L, 0L, 0L)),
                 new StubApplicationObjectService(List.of(object(201L, "SHARED", "DRAFT", 1))),
                 new StubBusinessAppService(List.of()),
                 new StubBusinessExtensionService(List.of()),
-                null);
+                null,
+                inspector());
 
         BusinessApplicationWorkspaceVO workspace = service.workspace(101L);
 
-        assertFalse(workspace.getReadiness().getReady());
-        assertEquals(1L, workspace.getBlockingCount());
+        assertTrue(workspace.getReadiness().getReady());
+        assertEquals(0L, workspace.getBlockingCount());
         assertEquals(2L, workspace.getWarningCount());
-        assertTrue(workspace.getIssues().stream().anyMatch(item -> "PRIMARY_OBJECT_MISSING".equals(item.getIssueCode())));
         assertTrue(workspace.getIssues().stream().anyMatch(item -> "ACTIVE_ENTRY_MISSING".equals(item.getIssueCode())
                 && "WARN".equals(item.getLevel())));
     }
@@ -70,7 +72,8 @@ class BusinessApplicationWorkspaceServiceTest {
                 new StubApplicationObjectService(List.of(object(201L, "PRIMARY", "DRAFT", 0))),
                 new StubBusinessAppService(List.of(entry(301L, 1))),
                 new StubBusinessExtensionService(List.of()),
-                null);
+                null,
+                inspector());
 
         BusinessApplicationWorkspaceVO workspace = service.workspace(101L);
 
@@ -94,6 +97,10 @@ class BusinessApplicationWorkspaceServiceTest {
         application.setFlowCount(flowCount);
         application.setExtensionCount(extensionCount);
         return application;
+    }
+
+    private static BusinessApplicationPageDependencyInspector inspector() {
+        return new BusinessApplicationPageDependencyInspector(new ObjectMapper());
     }
 
     private static BusinessApplicationObjectVO object(Long id, String role, String designStatus, int status) {
@@ -122,7 +129,7 @@ class BusinessApplicationWorkspaceServiceTest {
         private final BusinessApplicationVO application;
 
         StubApplicationService(BusinessApplicationVO application) {
-            super(null, null, null);
+            super(null, null, null, null);
             this.application = application;
         }
 

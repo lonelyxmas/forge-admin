@@ -40,6 +40,7 @@ public class BusinessObjectTableMappingService {
 
     private static final String DDL_PERMISSION = "ai:lowcode:deploy-ddl";
     private static final String DATABASE_SYNC_OPTION_KEY = "databaseSync";
+    private static final String MANAGED_BY_PAGE_FORM = "PAGE_FORM";
     private static final Set<String> SYSTEM_COLUMNS = Set.of(
             "id", "tenant_id", "del_flag", "create_by", "create_time",
             "create_dept", "update_by", "update_time"
@@ -120,6 +121,36 @@ public class BusinessObjectTableMappingService {
             persistSyncResult(context, "IN_SYNC", "数据库结构同步成功", preview.getDdlStatements().size());
         } catch (RuntimeException e) {
             persistSyncResult(context, "FAILED", safeMessage(e), preview.getDdlStatements().size());
+            throw e;
+        }
+    }
+
+    /**
+     * 为页面表单自动托管的数据存储执行安全追加式同步。
+     *
+     * <p>该入口只供应用表单聚合服务在元数据事务提交后调用。普通对象仍必须走
+     * {@link #syncDatabase(Long, Integer, boolean)} 的权限、版本和二次确认门禁。</p>
+     */
+    public void syncManagedDatabase(Long objectId, Long applicationId, String formAssetId) {
+        BusinessObjectDesignerService.DesignerContext context = contextProvider.loadContext(objectId);
+        assertManagedPageForm(context, applicationId, formAssetId);
+        LowcodeModelSchema modelSchema = requireModelSchema(context);
+        LowcodeDdlPreviewVO preview = ddlService.previewCreateTable(modelSchema);
+        if (!Boolean.TRUE.equals(preview.getExecutable())) {
+            throw new BusinessException("当前数据存储未允许自动建表，请在高级数据设置中开启自动建表");
+        }
+        if (ddlService.containsUnsafeOnlineDdl(preview.getDdlStatements())) {
+            throw new BusinessException("表单包含需要调整已有字段的变化，需要在高级数据设置中确认数据库调整");
+        }
+        if (!hasDdl(preview)) {
+            persistSyncResult(context, "IN_SYNC", "数据表结构已是最新版本", 0);
+            return;
+        }
+        try {
+            ddlService.executeCreateTable(modelSchema);
+            persistSyncResult(context, "IN_SYNC", "页面表单数据表同步成功", preview.getDdlStatements().size());
+        } catch (RuntimeException e) {
+            persistSyncFailure(context, e, preview.getDdlStatements().size());
             throw e;
         }
     }
@@ -276,6 +307,31 @@ public class BusinessObjectTableMappingService {
         }
         if (datasource != null && Boolean.TRUE.equals(datasource.getReadonly())) {
             throw new BusinessException("只读运行数据源不能执行在线 DDL");
+        }
+    }
+
+    private void assertManagedPageForm(
+            BusinessObjectDesignerService.DesignerContext context,
+            Long applicationId,
+            String formAssetId) {
+        AiBusinessObject object = context == null ? null : context.getObject();
+        JSONObject options = object == null ? null : readObject(object.getOptions());
+        if (options == null
+                || !MANAGED_BY_PAGE_FORM.equals(options.getString("managedBy"))
+                || !StringUtils.equals(String.valueOf(applicationId), options.getString("sourceApplicationId"))
+                || !StringUtils.equals(formAssetId, options.getString("sourceFormAssetId"))) {
+            throw new BusinessException("当前对象不是页面表单自动管理的数据存储，不能自动调整数据库");
+        }
+    }
+
+    private void persistSyncFailure(
+            BusinessObjectDesignerService.DesignerContext context,
+            RuntimeException error,
+            int ddlCount) {
+        try {
+            persistSyncResult(context, "FAILED", safeMessage(error), ddlCount);
+        } catch (RuntimeException ignored) {
+            // 保留原始 DDL 异常，避免同步状态写回失败覆盖真正原因。
         }
     }
 

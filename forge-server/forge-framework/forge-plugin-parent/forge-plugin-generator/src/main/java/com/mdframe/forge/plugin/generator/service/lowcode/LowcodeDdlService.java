@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -39,11 +40,33 @@ public class LowcodeDdlService {
             "varchar", "char", "int", "bigint", "decimal", "date", "datetime", "time", "tinyint"
     );
 
+    /** 表结构检查在发布作用域缓存（{@link LowcodePublishScopeCache}）中的键前缀。 */
+    private static final String STRUCTURE_CHECK_CACHE_PREFIX = "ddl|";
+
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlRepository ddlRepository;
     private final DynamicCrudRepository dynamicCrudRepository;
     private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
     private final RuntimeDatabaseDialectFactory dialectFactory;
+
+    /**
+     * 在当前线程开启表结构检查缓存作用域并执行动作；嵌套调用时复用外层作用域。
+     * <p>作用域内表结构检查、业务领域等元数据读取共用 {@link LowcodePublishScopeCache}，
+     * 执行 DDL 后立即失效表结构条目，作用域结束自动移除，不影响其他调用方。</p>
+     */
+    public <T> T withStructureCheckCache(Supplier<T> action) {
+        return LowcodePublishScopeCache.withScope(action);
+    }
+
+    private <T> T structureCheck(LowcodeRuntimeDataSourceContext context, String operation, Supplier<T> loader) {
+        String key = STRUCTURE_CHECK_CACHE_PREFIX + operation + "|" + context.isMaster() + "|" + context.getDatasourceId()
+                + "|" + context.getDatasourceCode() + "|" + context.getTableName();
+        return LowcodePublishScopeCache.get(key, loader);
+    }
+
+    private void invalidateStructureCheckCache() {
+        LowcodePublishScopeCache.invalidatePrefix(STRUCTURE_CHECK_CACHE_PREFIX);
+    }
 
     public LowcodeDdlPreviewVO previewCreateTable(LowcodeModelSchema modelSchema) {
         schemaValidator.validateModel(modelSchema);
@@ -52,7 +75,8 @@ public class LowcodeDdlService {
         LowcodeDdlPreviewVO preview = new LowcodeDdlPreviewVO();
         preview.setTableName(context.getTableName());
 
-        boolean tableExists = ddlRepository.tableExists(context, context.getTableName());
+        boolean tableExists = structureCheck(context, "tableExists",
+                () -> ddlRepository.tableExists(context, context.getTableName()));
         preview.setTableExists(tableExists);
         if (!tableExists) {
             if (!context.isAllowDdl()) {
@@ -63,7 +87,8 @@ public class LowcodeDdlService {
             }
             preview.getDdlStatements().addAll(buildCreateTableSql(context, modelSchema, dialect, preview.getWarnings()));
         } else {
-            if (!ddlRepository.hasSinglePrimaryKey(context, context.getTableName())) {
+            if (!Boolean.TRUE.equals(structureCheck(context, "hasSinglePrimaryKey",
+                    () -> ddlRepository.hasSinglePrimaryKey(context, context.getTableName())))) {
                 preview.setExecutable(false);
                 preview.getWarnings().add("已有表必须包含单字段主键后才能绑定为可写低代码模型");
                 return preview;
@@ -98,6 +123,7 @@ public class LowcodeDdlService {
         for (String ddl : preview.getDdlStatements()) {
             ddlRepository.executeDdl(context, ddl);
         }
+        invalidateStructureCheckCache();
         dynamicCrudRepository.clearTableMetadataCache(context, context.getTableName());
     }
 
@@ -123,7 +149,8 @@ public class LowcodeDdlService {
     public boolean tableExists(LowcodeModelSchema modelSchema) {
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         validateIdentifier(context.getTableName(), "表名");
-        return ddlRepository.tableExists(context, context.getTableName());
+        return Boolean.TRUE.equals(structureCheck(context, "tableExists",
+                () -> ddlRepository.tableExists(context, context.getTableName())));
     }
 
     public boolean hasAutoIncrementPrimaryId(String tableName) {
@@ -134,7 +161,8 @@ public class LowcodeDdlService {
     public boolean hasSinglePrimaryKey(LowcodeModelSchema modelSchema) {
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         validateIdentifier(context.getTableName(), "表名");
-        return ddlRepository.hasSinglePrimaryKey(context, context.getTableName());
+        return Boolean.TRUE.equals(structureCheck(context, "hasSinglePrimaryKey",
+                () -> ddlRepository.hasSinglePrimaryKey(context, context.getTableName())));
     }
 
     public Set<String> listColumns(String tableName) {
@@ -145,7 +173,8 @@ public class LowcodeDdlService {
     public Set<String> listColumns(LowcodeModelSchema modelSchema) {
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         validateIdentifier(context.getTableName(), "表名");
-        return ddlRepository.listColumns(context, context.getTableName());
+        return structureCheck(context, "listColumns",
+                () -> ddlRepository.listColumns(context, context.getTableName()));
     }
 
     /**
@@ -156,7 +185,8 @@ public class LowcodeDdlService {
     public Map<String, LowcodeDdlRepository.ColumnMetadata> listColumnMetadata(LowcodeModelSchema modelSchema) {
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         validateIdentifier(context.getTableName(), "表名");
-        return ddlRepository.listColumnMetadata(context, context.getTableName());
+        return structureCheck(context, "listColumnMetadata",
+                () -> ddlRepository.listColumnMetadata(context, context.getTableName()));
     }
 
     /**
@@ -167,7 +197,8 @@ public class LowcodeDdlService {
     public Set<String> listIndexes(LowcodeModelSchema modelSchema) {
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         validateIdentifier(context.getTableName(), "表名");
-        return ddlRepository.listIndexes(context, context.getTableName());
+        return structureCheck(context, "listIndexes",
+                () -> ddlRepository.listIndexes(context, context.getTableName()));
     }
 
     private List<String> buildCreateTableSql(LowcodeRuntimeDataSourceContext context,
@@ -219,7 +250,8 @@ public class LowcodeDdlService {
                                            RuntimeDatabaseDialect dialect,
                                            List<String> warnings) {
         Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata =
-                ddlRepository.listColumnMetadata(context, context.getTableName());
+                structureCheck(context, "listColumnMetadata",
+                        () -> ddlRepository.listColumnMetadata(context, context.getTableName()));
         Set<String> existingColumns = columnMetadata.keySet();
         List<String> ddlList = new ArrayList<>();
         List<String> addedColumns = new ArrayList<>();
@@ -238,7 +270,9 @@ public class LowcodeDdlService {
         }
         appendExistingColumnChanges(context.getTableName(), modelSchema, columnMetadata, ddlList, warnings, dialect);
         appendMissingIndexes(modelSchema, context.getTableName(),
-                ddlRepository.listIndexes(context, context.getTableName()), ddlList, warnings, dialect);
+                structureCheck(context, "listIndexes",
+                        () -> ddlRepository.listIndexes(context, context.getTableName())),
+                ddlList, warnings, dialect);
         if (indexList(modelSchema).isEmpty()) {
             warnings.add("未配置显式二级索引；数据库现有索引保持不变，系统不会自动新增索引");
         }

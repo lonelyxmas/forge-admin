@@ -28,6 +28,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BusinessApplicationObjectServiceTest {
 
     @Test
+    @DisplayName("a sole association is automatically normalized to primary")
+    void soleAssociationBecomesPrimary() throws Exception {
+        StubApplicationService applicationService = new StubApplicationService(application());
+        StubObjectService objectService = new StubObjectService(Map.of(
+                1L, object(1L, "customer", "crm")
+        ));
+        AtomicReference<List<AiBusinessApplicationObject>> inserted = new AtomicReference<>();
+        BusinessApplicationObjectMapper mapper = proxy((method, args) -> {
+            if ("insertBatch".equals(method)) {
+                inserted.set((List<AiBusinessApplicationObject>) args[0]);
+                return 1;
+            }
+            return defaultValue(method, args);
+        });
+        BusinessApplicationObjectService service = service(applicationService, objectService, mapper);
+
+        service.replace(10L, List.of(association(1L, "SHARED")));
+
+        assertEquals("PRIMARY", inserted.get().get(0).getObjectRole());
+    }
+
+    @Test
     @DisplayName("two primary objects are rejected before replacing associations")
     void twoPrimaryObjectsAreRejected() throws Exception {
         StubApplicationService applicationService = new StubApplicationService(application());
@@ -221,7 +243,7 @@ class BusinessApplicationObjectServiceTest {
         private int changedCalls;
 
         StubApplicationService(AiBusinessApplication application) {
-            super(null, null, null);
+            super(null, null, null, null);
             this.application = application;
         }
 

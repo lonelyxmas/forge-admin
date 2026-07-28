@@ -132,7 +132,7 @@ class BusinessBindingApplicationTargetTest {
     private static class StubApplicationService extends BusinessApplicationService {
 
         StubApplicationService() {
-            super(null, null, null);
+            super(null, null, null, null);
         }
 
         @Override

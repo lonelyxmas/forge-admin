@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
-import com.mdframe.forge.plugin.generator.constant.BusinessApplicationObjectRole;
 import com.mdframe.forge.plugin.generator.constant.BusinessExtensionStatus;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
@@ -21,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +43,7 @@ public class BusinessApplicationReadinessService {
     private final BusinessObjectPublishService objectPublishService;
     private final BusinessPermissionService permissionService;
     private final BusinessBindingMapper bindingMapper;
+    private final BusinessApplicationPageDependencyInspector pageDependencyInspector;
 
     public BusinessApplicationReadinessVO check(Long applicationId) {
         BusinessApplicationVO application = applicationService.publishContext(applicationId);
@@ -70,7 +71,8 @@ public class BusinessApplicationReadinessService {
         result.setIssues(readiness.getIssues());
         result.setSelection(selection);
         return new ResolvedPublishCheck(
-                result, application, resolved, evaluation.permissionSummaries(), evaluation.bindings());
+                result, application, resolved, evaluation.permissionSummaries(), evaluation.bindings(),
+                evaluation.objectContexts());
     }
 
     private EvaluationResult evaluate(
@@ -82,6 +84,8 @@ public class BusinessApplicationReadinessService {
         Set<Long> selectedObjects = new HashSet<>(selection.getObjectIds());
         Set<Long> selectedExtensions = new HashSet<>(selection.getExtensionIds());
         List<BusinessApplicationReadinessIssueVO> issues = new ArrayList<>();
+        List<BusinessApplicationObjectVO> selectedObjectList = allObjects.stream()
+                .filter(object -> selectedObjects.contains(object.getObjectId())).toList();
 
         if (!Integer.valueOf(1).equals(application.getStatus())) {
             issues.add(issue("APPLICATION_DISABLED", BLOCK, "应用已停用",
@@ -93,14 +97,11 @@ public class BusinessApplicationReadinessService {
                     "业务域不存在、已删除或当前租户无权访问。", "overview", "overview", "APPLICATION",
                     application.getId(), application.getApplicationCode()));
         }
-        long primaryCount = allObjects.stream()
-                .filter(item -> BusinessApplicationObjectRole.PRIMARY.equals(item.getObjectRole()))
-                .count();
-        if (primaryCount != 1L) {
-            issues.add(issue("PRIMARY_OBJECT_INVALID", BLOCK, "主对象配置不完整",
-                    "应用发布前必须且只能配置一个主对象。", "objects", "objects", "APPLICATION",
-                    application.getId(), application.getApplicationCode()));
-        }
+        BusinessApplicationPageDependencyInspector.InspectionResult dependencyInspection
+                = pageDependencyInspector.inspect(application, selectedObjectList);
+        dependencyInspection.issues().forEach(item -> issues.add(issue(
+                item.code(), BLOCK, item.title(), item.message(),
+                "objects", "objects", "PAGE", application.getId(), item.pageId())));
         Map<Long, com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp> selectedEntries
                 = resolved.entries().stream()
                 .filter(entry -> selection.getEntryIds().contains(entry.getId()))
@@ -126,14 +127,13 @@ public class BusinessApplicationReadinessService {
             }
         });
 
-        List<BusinessApplicationObjectVO> selectedObjectList = allObjects.stream()
-                .filter(object -> selectedObjects.contains(object.getObjectId())).toList();
         List<BusinessPermissionSummaryVO> permissionSummaries = permissionService
                 .documentActionSummaries(selectedObjectList);
         Map<Long, BusinessPermissionSummaryVO> permissions = permissionSummaries.stream()
                 .collect(Collectors.toMap(BusinessPermissionSummaryVO::getObjectId, Function.identity()));
+        Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts = new HashMap<>();
         for (BusinessApplicationObjectVO object : selectedObjectList) {
-            checkObject(object, permissions.get(object.getObjectId()), issues);
+            checkObject(object, permissions.get(object.getObjectId()), issues, objectContexts);
         }
         for (AiBusinessExtension extension : resolved.extensions()) {
             boolean selected = selectedExtensions.contains(extension.getId());
@@ -163,12 +163,13 @@ public class BusinessApplicationReadinessService {
                         "automation", "automation", "APPLICATION", applicationId, application.getApplicationCode()));
             }
         }
-        return new EvaluationResult(buildReadiness(issues), permissionSummaries, bindings);
+        return new EvaluationResult(buildReadiness(issues), permissionSummaries, bindings, objectContexts);
     }
 
     private void checkObject(BusinessApplicationObjectVO object,
                              BusinessPermissionSummaryVO permissionSummary,
-                             List<BusinessApplicationReadinessIssueVO> issues) {
+                             List<BusinessApplicationReadinessIssueVO> issues,
+                             Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts) {
         String objectName = StringUtils.defaultIfBlank(object.getObjectName(), object.getObjectCode());
         if (!Integer.valueOf(1).equals(object.getObjectStatus())) {
             issues.add(issue("OBJECT_DISABLED", BLOCK, "业务对象已停用",
@@ -191,8 +192,10 @@ public class BusinessApplicationReadinessService {
                     objectName + " 尚无最近同步证据，请在发布前复核。",
                     "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
         }
-        BusinessPublishCheckVO objectCheck = objectPublishService.publishCheck(
-                object.getObjectId(), permissionSummary);
+        BusinessObjectPublishService.ResolvedObjectCheck resolvedObjectCheck = objectPublishService
+                .publishCheckResolved(object.getObjectId(), permissionSummary);
+        objectContexts.put(object.getObjectId(), resolvedObjectCheck.context());
+        BusinessPublishCheckVO objectCheck = resolvedObjectCheck.check();
         if (Boolean.FALSE.equals(objectCheck.getPublishable())) {
             List<BusinessPublishCheckItemVO> blocks = objectCheck.getBlockItems() == null
                     ? List.of() : objectCheck.getBlockItems();
@@ -265,12 +268,14 @@ public class BusinessApplicationReadinessService {
             BusinessApplicationVO application,
             BusinessApplicationAssetSelectionService.ResolvedSelection selection,
             List<BusinessPermissionSummaryVO> permissionSummaries,
-            List<AiBusinessBinding> bindings) {
+            List<AiBusinessBinding> bindings,
+            Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts) {
     }
 
     private record EvaluationResult(
             BusinessApplicationReadinessVO readiness,
             List<BusinessPermissionSummaryVO> permissionSummaries,
-            List<AiBusinessBinding> bindings) {
+            List<AiBusinessBinding> bindings,
+            Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts) {
     }
 }

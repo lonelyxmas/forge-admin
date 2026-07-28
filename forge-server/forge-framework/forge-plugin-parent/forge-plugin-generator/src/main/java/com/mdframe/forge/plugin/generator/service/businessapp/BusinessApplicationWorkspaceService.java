@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
-import com.mdframe.forge.plugin.generator.constant.BusinessApplicationObjectRole;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessAppQueryDTO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessAppVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
@@ -32,6 +31,7 @@ public class BusinessApplicationWorkspaceService {
     private final BusinessAppService businessAppService;
     private final BusinessExtensionService businessExtensionService;
     private final BusinessApplicationReadinessService readinessService;
+    private final BusinessApplicationPageDependencyInspector pageDependencyInspector;
 
     public BusinessApplicationWorkspaceVO workspace(Long applicationId) {
         return assembleWorkspace(applicationService.detail(applicationId));
@@ -121,14 +121,11 @@ public class BusinessApplicationWorkspaceService {
                     "业务域不存在、已删除或当前租户无权访问。", "overview", "APPLICATION",
                     application.getId(), application.getApplicationCode()));
         }
-        long primaryCount = objects.stream()
-                .filter(item -> BusinessApplicationObjectRole.PRIMARY.equals(item.getObjectRole()))
-                .count();
-        if (primaryCount != 1L) {
-            issues.add(issue("PRIMARY_OBJECT_MISSING", LEVEL_BLOCK, "主对象配置不完整",
-                    "应用必须且只能配置一个主对象。", "objects", "APPLICATION",
-                    application.getId(), application.getApplicationCode()));
-        }
+        BusinessApplicationPageDependencyInspector.InspectionResult dependencyInspection
+                = pageDependencyInspector.inspect(application, objects);
+        dependencyInspection.issues().forEach(item -> issues.add(issue(
+                item.code(), LEVEL_BLOCK, item.title(), item.message(), "objects", "PAGE",
+                application.getId(), item.pageId())));
         if (entries.stream().noneMatch(item -> Integer.valueOf(1).equals(item.getStatus()))) {
             issues.add(issue("ACTIVE_ENTRY_MISSING", LEVEL_WARN, "尚未配置页面入口",
                     "页面入口可按需配置；当前仍可预览草稿、发布对象或生成代码。", "entries", "APPLICATION",

@@ -1,5 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationObjectMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
@@ -91,6 +93,69 @@ class BusinessObjectDatabaseSyncServiceTest {
         service.syncDatabase(201L, 7, true);
 
         assertTrue(ddlService.executed);
+    }
+
+    @Test
+    @DisplayName("managed page forms use live DDL capability instead of a stale saved snapshot")
+    void managedPageFormExecutesSafeDdl() {
+        StubDdlService ddlService = new StubDdlService("CREATE TABLE crm_customer (...) ", true);
+        BusinessObjectDesignerService.DesignerContext context = managedContext();
+        context.getModelSchema().getRuntimeDatasource().setAllowDdl(false);
+        TestableTableMappingService service = service(ddlService, false, context);
+
+        service.syncManagedDatabase(201L, 10L, "form_customer");
+
+        assertTrue(ddlService.executed);
+    }
+
+    @Test
+    @DisplayName("automatic database sync rejects objects that are not managed page forms")
+    void automaticSyncRejectsNonManagedObject() {
+        StubDdlService ddlService = new StubDdlService("CREATE TABLE crm_customer (...) ", true);
+        TestableTableMappingService service = service(ddlService, true);
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.syncManagedDatabase(201L, 10L, "form_customer"));
+
+        assertTrue(error.getMessage().contains("不是页面表单自动管理的数据存储"));
+        assertFalse(ddlService.executed);
+    }
+
+    @Test
+    @DisplayName("managed page forms respect the datasource automatic DDL switch")
+    void managedPageFormRejectsDatasourceWithoutDdlCapability() {
+        StubDdlService ddlService = new StubDdlService("CREATE TABLE crm_customer (...) ", false);
+        BusinessObjectDesignerService.DesignerContext context = managedContext();
+        TestableTableMappingService service = service(ddlService, false, context);
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.syncManagedDatabase(201L, 10L, "form_customer"));
+
+        assertTrue(error.getMessage().contains("当前数据存储未允许自动建表"));
+        assertFalse(ddlService.executed);
+    }
+
+    @Test
+    @DisplayName("managed page forms do not automatically execute destructive or type-changing DDL")
+    void managedPageFormRejectsUnsafeDdl() {
+        StubDdlService ddlService = new StubDdlService(
+                "ALTER TABLE crm_customer MODIFY COLUMN customer_name varchar(32)", true);
+        TestableTableMappingService service = service(ddlService, false, managedContext());
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.syncManagedDatabase(201L, 10L, "form_customer"));
+
+        assertTrue(error.getMessage().contains("需要在高级数据设置中确认"));
+        assertFalse(ddlService.executed);
+    }
+
+    private static BusinessObjectDesignerService.DesignerContext managedContext() {
+        BusinessObjectDesignerService.DesignerContext context = BusinessObjectTableMappingServiceTest.context();
+        context.getObject().setOptions(JSON.toJSONString(new JSONObject()
+                .fluentPut("managedBy", "PAGE_FORM")
+                .fluentPut("sourceApplicationId", 10L)
+                .fluentPut("sourceFormAssetId", "form_customer")));
+        return context;
     }
 
     private static TestableTableMappingService service(StubDdlService ddlService, boolean permission) {

@@ -147,6 +147,7 @@ const CHINESE_TERMS = [
 ]
 
 const SORTED_CHINESE_TERMS = [...CHINESE_TERMS].sort((a, b) => b[0].length - a[0].length)
+const MODEL_CODE_MAX_LENGTH = 48
 
 export function generateFieldCode(label = '') {
   const text = String(label || '').trim()
@@ -189,8 +190,8 @@ export function buildModelCode(suiteCode = '', objectCode = '') {
   const suite = normalizeSnakeCode(suiteCode, '', 24)
   const object = normalizeSnakeCode(objectCode, 'business_object', 48)
   if (!suite || object.startsWith(`${suite}_`))
-    return object.slice(0, 64)
-  return `${suite}_${object}`.slice(0, 64)
+    return object.slice(0, MODEL_CODE_MAX_LENGTH)
+  return `${suite}_${object}`.slice(0, MODEL_CODE_MAX_LENGTH)
 }
 
 export function camelToSnake(value = '') {

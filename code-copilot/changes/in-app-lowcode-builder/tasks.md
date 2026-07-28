@@ -242,9 +242,15 @@
 
 ## Task 14: 已发布运行配置、入口与发布校验
 
-> status: pending
+> status: completed
 
 - **目标**：运行页只读取已发布快照并根据当前权限过滤页面；发布检查覆盖首页、对象引用、菜单权限、变量动作目标。
+- **本轮细化**：
+  - 新增页面数据依赖检查器，替换无条件“必须且只能一个主对象”的发布门禁。
+  - 单对象关联自动规范为 `PRIMARY`；多对象显式绑定允许无主对象。
+  - 新增已发布运行配置服务和 `/by-code/:applicationCode/runtime` 接口；`edit=1`/`draft=1` 继续读取草稿。
+  - 补齐 `PAGE_MENUS` 发布步骤名称及部分失败副作用语义。
+  - 正式运行过滤保留隐藏但有权直达的页面，无权/失效 `pageId` 真正回退到可访问首页；同应用系统菜单切换 `pageId` 会即时响应，超级管理员不受页面角色筛选限制。
 
 ## Task 15: 页面设置、版本差异与回滚呈现
 
@@ -266,6 +272,158 @@
 
 ## Task 18: 第二阶段增量测试与回填
 
-> status: pending
+> status: in_progress
 
 - **目标**：补后端单测、前端定向用例、静态检查、构建和发布链路验收记录。
+- **当前结果**：生成器 reactor 测试编译、26 个定向 JUnit、前端 ESLint、9 个 Schema Vitest、生产构建和 `git diff --check` 已通过；真实角色、发布菜单和数据库 E2E 按用户分工保留人工验收。
+
+## Task 19: 统一新建应用与设计器内对象起步
+
+> status: completed
+
+- **目标**：应用中心只保留一个普通新建入口，创建后直达页面设计；数据模板缺少对象时在设计器内创建、绑定或导入对象，不再把用户送回工作台自行理解主对象。
+- **结果**：设计器复用对象面板抽屉；打开对象配置前先保存脏草稿，对象变化只刷新元数据、不重载画布，并在页面模板起步场景自动回到对象已就绪状态。
+
+## Task 20: 设计器内发布抽屉
+
+> status: completed
+
+- **目标**：复用 `ApplicationPublishPanel` 在页面设计器内完成检查、阻断项定位、发布和历史查看；工作台发布页保留为高级配置兼容入口。
+- **结果**：发布前自动保存草稿，抽屉打开后自动检查；页面阻断定位到页面，对象阻断打开数据对象抽屉，其余高级问题才进入工作台。
+
+## Task 21: 页面表单升级为 CRUD 数据对象
+
+> status: completed
+
+- **目标**：修复页面表单字段在列表字段抽屉中无法选中的问题，并让“先设计表单、再创建数据页”的用户在当前 `AiCrudPage` 内完成业务对象创建与绑定。
+- **涉及文件**：
+  - `forge-admin-ui/src/components/lowcode-builder/page/page-schema.js` — 提供页面字段覆盖稳定模型字段的同步模型构造器。
+  - `forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue` — 布局回写使用当前 `fields` 清洗字段引用。
+  - `forge-admin-ui/src/views/app-center/in-app-builder/page-form-object-promotion.js` — 将页面表单转换为业务对象字段/表单设计保存载荷。
+  - `forge-admin-ui/src/views/app-center/application-runtime.[applicationCode].vue` — `AiCrudPage` 无对象引导、已有对象直绑、新对象自动回绑及设计草稿字段兜底。
+  - `forge-admin-ui/src/views/app-center/application-workspace/ApplicationObjectsPanel.vue` — 页面表单升级入口和创建后关联事件。
+  - `forge-admin-ui/src/views/app-center/components/BusinessObjectWizardDrawer.vue` — 支持由页面表单预填对象名称与说明。
+  - 对应 Vitest、Spec、测试记录与长期决策/踩坑记录。
+- **实施顺序**：
+  1. 先新增纯函数回归测试，复现空 `modelSchema.fields` 清空当前字段目录以及页面表单转换载荷。
+  2. 修复列表设计器字段同步契约。
+  3. 实现页面表单升级、对象自动关联和当前 CRUD 自动绑定。
+  4. 增加未绑定对象的就地说明与操作入口，并验证新建对象设计草稿字段回显。
+  5. 执行增量 ESLint、Vitest、生产构建和 `git diff --check`，回填结果。
+- **验收标准**：页面表单字段可选择、隐藏、排序且不会回写后消失；未绑定 CRUD 不再把页面表单描述为真实数据源；从页面表单创建对象后当前区块获得显式 `objectRef`；不自动执行 DDL 或发布。
+- **结果**：列表设计器使用当前 `fields` 构造字段清洗模型，页面表单字段回写不再被空稳定模型删除；未绑定 CRUD 显示业务数据源引导和字段草稿说明；可选择已有对象，或将当前页面表单转换为业务对象字段/表单设计草稿，创建后自动加入应用并回绑当前区块；对象未发布时编辑态可读取设计草稿字段。未执行数据库同步和对象发布。
+
+## Task 22: 保存表单时自动准备数据存储
+
+> status: completed
+
+- **目标**：用“保存表单”替代手工“从当前表单创建对象”，隐藏普通用户不需要理解的业务对象、数据源和对象角色，并消除连续两个抽屉。
+- **涉及文件**：
+  - `forge-server/.../dto/businessapp/BusinessApplicationFormDataProvisionDTO.java`、`vo/businessapp/BusinessApplicationFormDataVO.java` — 自动准备请求与稳定对象引用响应。
+  - `forge-server/.../service/businessapp/BusinessApplicationFormDataService.java` — 原子选择默认可写 `LOWCODE_RUNTIME` 数据源、创建/复用托管对象、同步设计并关联应用。
+  - `forge-server/.../controller/BusinessApplicationController.java` — 提供应用编辑权限下的表单数据准备接口。
+  - `forge-admin-ui/src/api/business-application.js` — 封装表单数据准备请求。
+  - `forge-admin-ui/src/views/app-center/in-app-builder/page-form-data-provisioning.js` — 识别需要准备数据的表单、构造请求并为所有未绑定 CRUD 写回对象引用。
+  - `forge-admin-ui/src/views/app-center/application-runtime.[applicationCode].vue` — 保存后自动准备、合并反馈、就地失败重试和高级设置入口。
+  - `ApplicationObjectsPanel.vue` 与 `BusinessObjectWizardDrawer.vue` — 移除页面表单手工升级的主路径预填协议，保留高级对象管理。
+  - 对应 JUnit、Vitest、Spec、测试记录与长期决策/踩坑记录。
+- **实施顺序**：
+  1. 新增失败用例，覆盖默认可写数据源、重复保存复用、空字段拒绝、单表单多 CRUD 只创建一次以及嵌套区块绑定。
+  2. 实现后端原子聚合接口，不执行 DDL 或发布。
+  3. 接入应用草稿保存链路，并将技术术语和手工升级入口移入高级设置。
+  4. 执行增量 JUnit、ESLint、Vitest、生产构建和 `git diff --check`，回填测试记录。
+- **验收标准**：用户只需保存表单即可让关联数据列表获得可持久化数据模型；重复保存不产生重复对象；没有可写运行数据源时表单草稿仍保存并提供单层重试提示；主路径不再打开对象向导；不自动执行 DDL 或发布。
+- **结果**：数据页面模板现直接创建页面并进入表单设计；表单保存后由应用聚合接口选择默认可写运行数据源，创建或复用按应用和表单稳定标识管理的内部对象，同步字段/表单 Schema、关联应用并回绑所有对应未绑定 CRUD。页面级或区块级手工数据绑定不会被覆盖；失败时保留已保存表单并原位重试。普通界面使用“表单数据 / 数据存储”，对象、数据源和角色只在高级设置出现；未执行 DDL、对象发布或应用发布。
+
+## Task 23: 修复自动回绑后的未发布提示
+
+> status: completed
+
+- **目标**：保存表单自动准备数据存储后，应用设计器继续使用对象草稿配置，不再因 `AiCrudPage` 自动加载正式运行接口而提示“低代码应用尚未发布”。
+- **实施范围**：应用设计/草稿模式调用 CRUD 渲染接口时启用 `designPreview`，并为回绑对象的所有 CRUD 端点统一追加设计预览参数；正式运行模式保持发布门禁不变。
+- **验收标准**：设计态渲染配置和列表请求均带设计预览标记；详情、新增、修改、删除等标准端点不丢标记且不重复追加；正式运行参数不变；补充定向 Vitest、ESLint、构建与差异检查记录。
+- **结果**：应用编辑/草稿模式复用既有 `designPreview` 协议读取对象草稿渲染配置，所有 CRUD 端点统一追加 `designPreview=1`，正式运行端点保持不变。设计画布默认使用静态结构预览并阻止提交，不再在托管对象尚未发布或数据库尚未同步时自动加载列表；显式开启真实数据预览后才请求带设计授权标记的草稿接口。ESLint、9 个定向 Vitest、生产构建和 `git diff --check` 均通过。
+
+## Task 24: 修复模型编码溢出并自动生成应用编码
+
+> status: completed
+
+- **目标**：修复保存表单时 `model_code` 超过 48 位导致的数据存储创建失败，并让普通用户新建应用时不再手工维护技术编码。
+- **涉及文件**：
+  - `BusinessNamingService.java` 与对应 JUnit — 统一模型编码最大长度为 48，覆盖长业务域/对象组合和前缀去重。
+  - `BusinessApplicationFormDataServiceTest.java` — 覆盖长应用编码自动创建托管对象时的模型编码边界。
+  - `BusinessApplicationService.java`、创建响应 VO、Controller 与 Service 测试 — 后端生成租户内唯一应用编码并返回最终 ID/编码。
+  - `ApplicationEditorDrawer.vue` — 普通路径隐藏应用编码，高级设置可选填写，创建后使用服务端最终编码跳转。
+  - `namingUtils.js` 与 Vitest — 前端手工对象创建同样限制模型编码为 48 位。
+  - 当前变更 Spec、测试记录与长期决策/踩坑记录。
+- **实施顺序**：
+  1. 先补模型编码 48 位、长表单托管对象和应用编码自动生成/重名避让测试。
+  2. 修复后端模型命名和应用创建响应契约。
+  3. 收起前端应用编码字段并接入最终创建结果，同时对齐前端模型编码边界。
+  4. 执行后端 `test-compile`、定向 JUnit、前端 ESLint/Vitest/生产构建和差异检查，回填结果。
+- **验收标准**：长应用/表单名称可成功准备数据存储且 `modelCode.length <= 48`；应用编码留空可创建并在租户内自动避重；显式非法或重复编码仍失败；创建后路由使用后端最终编码；不修改数据库结构、不启动真实服务或执行 DDL。
+- **结果**：后端模型编码归一化和组合统一限制为 48 位，长表单托管对象回归通过；应用编码为空时按业务域/名称生成，未知中文使用稳定摘要，租户重名自动追加序号。创建接口返回 ID 与最终编码，前端普通路径收起编码字段、创建后按服务端结果跳转；手工对象创建的前端命名工具同步 48 位边界。未修改数据库结构或执行 DDL。
+
+## Task 25: 自动托管表单创建并同步数据表
+
+> status: completed
+
+- **目标**：让页面表单保存后的“数据存储已准备完成”具备真实物理表，消除自动回绑后访问 `AiCrudPage` 报“数据表不存在”的半完成状态。
+- **涉及文件**：
+  - `BusinessApplicationFormDataService.java` — 使用显式事务模板先提交托管对象/字段/表单元数据，再触发数据库同步；筛选允许自动建表的数据源并转换用户友好错误。
+  - `BusinessObjectTableMappingService.java` — 增加仅接受 `PAGE_FORM` 托管对象的内部自动同步入口，复用差异预览、安全 DDL 白名单和同步结果记录，不放宽手工同步门禁。
+  - `BusinessApplicationFormDataServiceTest.java` — 覆盖首次建表、重复保存同步新增字段、元数据提交先于 DDL、DDL 失败后可复用重试、无自动建表数据源失败关闭。
+  - `BusinessObjectDatabaseSyncServiceTest.java` — 覆盖托管对象自动同步无需手工确认、非托管对象拒绝、禁用 DDL/非追加变更拒绝以及安全 CREATE/ADD 执行。
+  - 当前 Spec、测试计划、执行日志和长期记忆。
+- **实施顺序**：
+  1. 先补失败测试，断言当前 `provision()` 没有同步数据表，并覆盖事务提交发生在 DDL 调用之前。
+  2. 为表映射服务补托管对象专用同步入口；入口内部再次校验 `managedBy=PAGE_FORM`，只执行现有安全追加式 DDL。
+  3. 将表单元数据准备放入显式事务模板，事务返回后再同步数据库；同步失败转换为“表单草稿已保存，但数据表创建失败”的可重试错误。
+  4. 数据源选择增加 `allowRuntimeDdl=1`，普通业务对象和手工数据库同步协议保持不变。
+  5. 先执行生成器 `test-compile`，再执行定向 Surefire；最后执行 `git diff --check` 并回填结果。
+- **验收标准**：首次保存自动托管表单会执行一次安全建表；再次保存新增字段会同步缺失列；同一表单不重复创建对象；DDL 失败时元数据事务已经提交且下次保存可重试；非托管对象不能调用自动同步；未启用自动建表的数据源得到普通用户可理解的提示；不启动真实数据库或实际执行 DDL。
+- **结果**：表单元数据在显式事务中先提交，随后仅对来源一致的 `PAGE_FORM` 托管对象执行安全建表/追加字段；DDL 失败保留表单设计并允许原位重试。新对象只选择允许自动建表的数据源，历史对象则以数据源当前真实能力和 DDL 预检为准，开启开关后可直接重新保存补建表。生成器 29 模块 `test-compile` 成功，定向 21 个 JUnit 用例全部通过；未启动真实数据库或执行 DDL。
+
+## Task 26: 收敛真实预览、查询条件与发布数据库状态
+
+> status: completed
+
+- **目标**：自动托管表单绑定后可以直接使用真实草稿 CRUD；查询条件刷新后稳定保留；发布检查自动消化安全数据库差异，不再用陈旧 `OUT_OF_SYNC` 误阻断。
+- **涉及文件**：
+  - `page-form-data-provisioning.js` 及 Vitest — 自动绑定时一次性启用真实预览，复用既有托管对象时补齐旧区块且不覆盖手工对象/用户后续选择。
+  - `application-runtime.[applicationCode].vue` — 合并表单字段与异步运行字段，避免只返回 ID 的瞬态目录清理查询配置。
+  - `GridBlockRenderer.vue` 与可测试纯函数 — 查询 Schema 使用 `searchFieldRefs`，静态预览提示区分“未绑定接口”和“主动关闭真实预览”。
+  - `BusinessApplicationFormDataService.java` — 提供应用级托管表单安全数据库重同步入口。
+  - `BusinessApplicationPublishService.java`、Controller 与 JUnit — 发布检查和最终发布前调用托管数据表重同步，手工对象门禁保持不变。
+- **实施顺序**：先补字段合并、查询引用、旧托管绑定和发布前同步红灯用例；再实现最小修复；最后按 JDK 17、Node `v20.19.0` 执行定向测试、后端测试编译、前端 ESLint/构建和差异检查。
+- **验收标准**：已选查询字段不因异步目录切换丢失；查询区不再错误跟随列表列；自动托管绑定后无需再理解接口开关即可查询/新增；用户主动关闭预览后保持关闭；发布前安全差异自动同步，高风险差异继续清晰阻断；不启动真实数据库或实际执行 DDL。
+- **结果**：页面字段目录现在稳定合并表单字段和运行字段，查询条件独立使用 `searchFieldRefs`，并覆盖显式空配置、旧页面回退及遗留初始化标记修复。发布检查与最终发布都会先同步当前应用自己的 `PAGE_FORM` 托管表，手工对象、其它应用对象和非追加式 DDL 仍受原门禁约束。前端 15 个 Vitest、后端 32 个 JUnit、目标 ESLint、生产构建和 `git diff --check` 均通过；未启动真实数据库或执行 DDL。
+
+## Task 27: 修复真实预览循环并压缩发布重复操作
+
+> status: completed
+
+- **目标**：真实预览的列表接口只在请求条件实际变化时调用；打开发布抽屉不再隐式执行全量预检；相同设计版本已经 `IN_SYNC` 的自动托管表不重复扫描数据库结构。
+- **涉及文件**：
+  - `runtime-crud-props.js` 与 Vitest — 生成稳定预览请求签名，证明状态文案变化不改变请求身份。
+  - `GridBlockRenderer.vue` — 以稳定签名监听真实预览，其他运行数据监听改为叶子 source，消除区块对象替换造成的误触发。
+  - `application-runtime.[applicationCode].vue` — 发布抽屉只负责打开，不再自动调用完整发布检查。
+  - `BusinessApplicationFormDataService.java` 与 JUnit — 复用相同设计版本的 `IN_SYNC` 证据，只同步真正需要检查的托管表。
+- **实施顺序**：先补预览请求签名和已同步托管表跳过测试，再实现前后端最小修复；随后执行目标 ESLint/Vitest、生成器 `test-compile`、定向 JUnit、生产构建和差异检查。
+- **验收标准**：一次真实列表预览只产生一次列表请求；成功/失败状态写回不触发下一次请求；直接发布不再先自动预检；已同步表的发布准备额外自动同步执行 0 次，失同步表仍执行 1 次；高风险同步门禁、对象最终表校验和发布运行步骤证据保持不变。
+- **结果**：真实预览改为监听稳定请求签名，结果状态和文案写回不再触发 `loadList()`；其余运行数据监听也改为逐项叶子 source。打开发布抽屉只加载历史，显式检查与直接发布分离；相同设计版本 `IN_SYNC` 的自动托管表跳过额外同步，失同步表仍进入安全同步。Node `v20.19.0` 下 17 个 Vitest、目标 ESLint、8792 模块生产构建通过；JDK 17 下 29 模块测试编译和 23 个 JUnit 通过；`git diff --check` 无输出。
+
+## Task 28: 修复动态页面查询条件运行协议
+
+> status: completed
+
+- **目标**：页面配置的查询字段、查询方式、查询组件和映射字段真正进入动态 CRUD 请求与 SQL，解决输入条件后列表不筛选的问题。
+- **涉及文件**：
+  - `runtime-crud-props.js` 与 Vitest — 合并 `searchFieldRefs` 和 `searchFieldSettings`，生成稳定、安全的页面查询 Schema 及查询方式请求元数据。
+  - `GridBlockRenderer.vue` — 将页面查询 Schema 用于 `AiCrudPage`，并把查询方式元数据合入动态列表和导出公共请求参数。
+  - `DynamicCrudQuery.java`、`DynamicCrudController.java` — 解析并隔离查询方式控制参数，保留现有平铺查询字段协议。
+  - `DynamicCrudService.java` — 查询白名单覆盖动态配置已公开的查询/列表/编辑字段，并校验页面请求的查询方式覆盖。
+  - 前后端定向测试、当前 Spec、测试计划、执行日志和长期记忆。
+- **实施顺序**：先补页面查询设置和后端参数解析/白名单红灯用例；再实现最小协议修复；最后执行目标 Vitest/ESLint、生成器 `test-compile`、定向 JUnit、生产构建和差异检查。
+- **验收标准**：表单字段即使不在对象原始查询 Schema 中，页面选为查询条件后也能生成 WHERE；“包含/等于/区间/多值”和映射字段按页面配置生效；控制参数不进入 SQL 字段；传统对象查询页面保持兼容；不启动数据库、后端、Vite 或浏览器。
+- **结果**：页面运行 Schema 已合并 `searchFieldRefs` 与 `searchFieldSettings`，查询方式、查询组件及映射字段会进入当前 `AiCrudPage`；列表和导出通过独立 `_searchTypes` 控制参数传输查询方式。后端将控制参数与业务字段隔离，只允许动态配置已公开的查询/列表/编辑字段及固定操作符，传统对象查询配置继续作为默认协议。Node `v20.19.0` 下目标 ESLint 0 error/0 warning、3 个 Vitest 文件 19 tests、8792 模块生产构建通过；JDK 17 下生成器 reactor 29 模块测试编译和 2 类 6 个 JUnit 通过；`git diff --check` 无输出。未启动数据库、后端、Vite 或浏览器，真实 Network 与数据库筛选结果留人工验收。

@@ -159,9 +159,12 @@
         </div>
       </div>
 
+      <!-- 加载占位：首次加载无数据时撑开高度，保证 loading 可见 -->
+      <div v-else-if="loading" class="model-list-loading" />
+
       <!-- 空状态 -->
       <n-empty
-        v-else-if="!loading"
+        v-else
         description="暂无流程模型，点击「新增模型」开始设计"
         class="empty-state"
       >
@@ -1520,6 +1523,14 @@ onMounted(() => {
 .model-card-more:hover {
   background: #f1f5f9;
   color: #0f172a;
+}
+
+.model-list-loading {
+  min-height: 280px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  width: 100%;
 }
 
 .empty-state {

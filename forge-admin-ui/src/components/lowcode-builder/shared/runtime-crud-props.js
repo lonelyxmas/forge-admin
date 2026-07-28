@@ -4,11 +4,11 @@
  * 列表设计器预览和应用页面都使用这份轻量桥接：接口、表单和列表字段始终
  * 来自同一个 configKey，应用设计器只允许覆盖外观与局部行为，不另存一套接口。
  */
-export function buildRuntimeCrudProps(config = {}) {
+export function buildRuntimeCrudProps(config = {}, { designPreview = false } = {}) {
   const options = config.options || {}
   const formOpenMode = resolveFormOpenMode(options, config)
   const configKey = String(config.configKey || '').trim()
-  const apiConfig = normalizeApiConfig(config.apiConfig, configKey)
+  const apiConfig = normalizeApiConfig(config.apiConfig, configKey, designPreview)
   return {
     searchSchema: normalizeFields(config.searchSchema),
     columns: normalizeColumns(config.columnsSchema, config.transConfig),
@@ -19,6 +19,7 @@ export function buildRuntimeCrudProps(config = {}) {
     detailPanels: options.detailPanels || config.detailPanels || [],
     apiConfig,
     configKey,
+    designPreview,
     options,
     rowKey: config.rowKey || 'id',
     formOpenMode,
@@ -54,8 +55,22 @@ export function buildRuntimeCrudProps(config = {}) {
   }
 }
 
-function normalizeApiConfig(apiConfig, configKey) {
-  return Object.fromEntries(Object.entries(apiConfig || {}).map(([key, value]) => [key, resolveCurrentConfigPlaceholder(value, configKey)]))
+function normalizeApiConfig(apiConfig, configKey, designPreview) {
+  return Object.fromEntries(Object.entries(apiConfig || {}).map(([key, value]) => {
+    const resolved = resolveCurrentConfigPlaceholder(value, configKey)
+    return [key, designPreview ? appendDesignPreviewToApiValue(resolved) : resolved]
+  }))
+}
+
+export function appendDesignPreviewToApiValue(value) {
+  const text = String(value || '').trim()
+  if (!text || text.includes('designPreview='))
+    return text
+  return `${text}${text.includes('?') ? '&' : '?'}designPreview=1`
+}
+
+export function isDesignPreviewCrudProps(runtimeCrudProps = {}) {
+  return runtimeCrudProps.designPreview === true || runtimeCrudProps.draftOnly === true
 }
 
 export function resolveCurrentConfigPlaceholder(value, configKey) {
@@ -68,6 +83,97 @@ export function resolveCurrentConfigPlaceholder(value, configKey) {
   if (!configKey)
     return ''
   return text.replaceAll('/ai/crud/当前配置', `/ai/crud/${configKey}`)
+}
+
+/**
+ * 解析 CRUD 区块自己的查询字段目录。
+ *
+ * 新协议以 props.searchFieldRefs 为准；只有旧区块没有该属性时，才兼容使用
+ * 列表 fieldRefs，避免列表列调整后把查询条件错误地一起改掉。
+ */
+export function resolveCrudSearchFieldCatalog(fields = [], block = {}) {
+  const fieldMap = new Map((Array.isArray(fields) ? fields : []).flatMap((field) => {
+    const fieldCode = field?.field || field?.fieldCode || field?.prop || field?.key
+    return fieldCode ? [[fieldCode, { ...field, field: fieldCode, fieldCode }]] : []
+  }))
+  const hasSearchFieldRefs = Object.prototype.hasOwnProperty.call(block.props || {}, 'searchFieldRefs')
+  const refs = hasSearchFieldRefs ? block.props?.searchFieldRefs : block.fieldRefs
+  return (Array.isArray(refs) ? refs : [])
+    .map((fieldCode) => {
+      const sourceField = fieldMap.get(fieldCode)
+      if (!sourceField)
+        return null
+      const setting = block.props?.searchFieldSettings?.[fieldCode] || {}
+      const requestedQueryField = String(setting.queryField || '').trim()
+      const queryField = fieldMap.get(requestedQueryField) || sourceField
+      const queryFieldCode = queryField.field
+      return {
+        ...sourceField,
+        ...queryField,
+        ...setting,
+        field: queryFieldCode,
+        fieldCode: queryFieldCode,
+        sourceField: fieldCode,
+        label: setting.label || sourceField.label || sourceField.fieldName || fieldCode,
+        componentType: setting.componentType || queryField.componentType || sourceField.componentType || '',
+        queryType: setting.queryType || queryField.queryType || sourceField.queryType || 'eq',
+      }
+    })
+    .filter(Boolean)
+}
+
+const SUPPORTED_SEARCH_TYPES = new Set([
+  'eq',
+  'ne',
+  'like',
+  'left_like',
+  'right_like',
+  'gt',
+  'ge',
+  'gte',
+  'lt',
+  'le',
+  'lte',
+  'in',
+  'between',
+  'is_null',
+  'is_not_null',
+])
+
+/**
+ * 页面查询方式属于动态 CRUD 控制信息，和用户输入值分开传输。
+ */
+export function buildCrudSearchTypeRequestParams(searchSchema = []) {
+  const searchTypes = {}
+  ;(Array.isArray(searchSchema) ? searchSchema : []).forEach((field) => {
+    const fieldCode = String(field?.field || '').trim()
+    const queryType = String(field?.queryType || field?.searchType || '').trim().toLowerCase()
+    if (fieldCode && SUPPORTED_SEARCH_TYPES.has(queryType))
+      searchTypes[fieldCode] = queryType
+  })
+  return Object.keys(searchTypes).length
+    ? { _searchTypes: JSON.stringify(searchTypes) }
+    : {}
+}
+
+/**
+ * 构造真实 CRUD 预览的稳定请求身份。
+ *
+ * 预览结果状态会写回 block.props，但它不属于请求条件，不能因此再次加载列表。
+ */
+export function resolveCrudPreviewReloadKey(block = {}, runtimeCrudProps = {}) {
+  const blockProps = block.props || {}
+  const previewLiveData = blockProps.previewLiveData === true
+  return JSON.stringify({
+    enabled: previewLiveData,
+    mode: blockProps.previewMode || (previewLiveData ? 'realList' : 'mock'),
+    recordId: String(blockProps.previewRecordId ?? ''),
+    listApi: blockProps.listApi
+      || blockProps.api
+      || runtimeCrudProps.apiConfig?.list
+      || runtimeCrudProps.api
+      || '',
+  })
 }
 
 function normalizeFields(fields) {

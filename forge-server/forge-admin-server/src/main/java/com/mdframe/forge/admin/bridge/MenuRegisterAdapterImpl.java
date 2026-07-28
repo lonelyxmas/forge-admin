@@ -31,6 +31,7 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
     private static final String DEFAULT_CLIENT_CODE = "pc";
     private static final String DOMAIN_MENU_PERMS_PREFIX = "ai:lowcode:domain-menu:";
     private static final String BUSINESS_SUITE_MENU_PERMS_PREFIX = "ai:business:suite-menu:";
+    private static final int ROLE_BINDING_BATCH_SIZE = 500;
 
     private final ISysResourceService resourceService;
     private final SysResourceMapper resourceMapper;
@@ -263,6 +264,10 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         pending.sort(Comparator.comparing(item -> item.getSort() == null ? 0 : item.getSort()));
         Map<String, Long> resolvedIds = new LinkedHashMap<>();
         Set<String> activePerms = new HashSet<>();
+        Map<Long, Set<Long>> pendingRoleBindings = new LinkedHashMap<>();
+        Set<Long> runtimeRoleIds = pending.stream().anyMatch(BusinessApplicationPageMenuDTO::isInheritRuntimeRoles)
+                ? resolveRuntimeRoleIds(tenantId)
+                : Set.of();
         while (!pending.isEmpty()) {
             boolean progressed = false;
             for (java.util.Iterator<BusinessApplicationPageMenuDTO> iterator = pending.iterator(); iterator.hasNext();) {
@@ -275,7 +280,9 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
                 Long resourceId = upsertApplicationPageMenu(tenantId, item, parentId);
                 resolvedIds.put(item.getNodeId(), resourceId);
                 activePerms.add(item.getPerms());
-                syncApplicationPageRoles(tenantId, resourceId, item);
+                if (resourceId != null) {
+                    pendingRoleBindings.put(resourceId, resolveTargetRoleIds(item, runtimeRoleIds));
+                }
                 iterator.remove();
                 progressed = true;
             }
@@ -283,6 +290,7 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
                 throw new IllegalStateException("应用页面菜单父级引用无效或存在循环");
             }
         }
+        syncApplicationPageRoles(tenantId, pendingRoleBindings);
         for (SysResource stale : resourceMapper.selectList(new LambdaQueryWrapper<SysResource>()
                 .eq(SysResource::getTenantId, tenantId)
                 .likeRight(SysResource::getPerms, prefix))) {
@@ -327,32 +335,50 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         return resource.getId();
     }
 
-    private void syncApplicationPageRoles(Long tenantId, Long resourceId, BusinessApplicationPageMenuDTO item) {
-        if (resourceId == null) {
-            return;
+    /** 解析 runtime 入口菜单已授权的角色，仅在存在继承角色的页面时查询一次。 */
+    private Set<Long> resolveRuntimeRoleIds(Long tenantId) {
+        SysResource runtime = resourceMapper.selectOneByPerms(tenantId, 2, "ai:businessApplication:runtime");
+        if (runtime == null || runtime.getId() == null) {
+            return Set.of();
         }
         Set<Long> roleIds = new HashSet<>();
+        roleResourceMapper.selectList(new LambdaQueryWrapper<SysRoleResource>()
+                        .eq(SysRoleResource::getTenantId, tenantId)
+                        .eq(SysRoleResource::getResourceId, runtime.getId()))
+                .forEach(binding -> roleIds.add(binding.getRoleId()));
+        return roleIds;
+    }
+
+    private Set<Long> resolveTargetRoleIds(BusinessApplicationPageMenuDTO item, Set<Long> runtimeRoleIds) {
+        Set<Long> roleIds = new HashSet<>();
         if (item.isInheritRuntimeRoles()) {
-            SysResource runtime = resourceMapper.selectOneByPerms(tenantId, 2, "ai:businessApplication:runtime");
-            if (runtime != null && runtime.getId() != null) {
-                roleResourceMapper.selectList(new LambdaQueryWrapper<SysRoleResource>()
-                                .eq(SysRoleResource::getTenantId, tenantId)
-                                .eq(SysRoleResource::getResourceId, runtime.getId()))
-                        .forEach(binding -> roleIds.add(binding.getRoleId()));
-            }
+            roleIds.addAll(runtimeRoleIds);
         }
         if (item.getRoleIds() != null) {
             item.getRoleIds().stream().filter(java.util.Objects::nonNull).forEach(roleIds::add);
         }
+        return roleIds;
+    }
+
+    /** 批量重建菜单角色绑定：一次范围 delete + 分批 insertBatch，避免每菜单每角色逐条执行。 */
+    private void syncApplicationPageRoles(Long tenantId, Map<Long, Set<Long>> roleBindings) {
+        if (roleBindings.isEmpty()) {
+            return;
+        }
         roleResourceMapper.delete(new LambdaQueryWrapper<SysRoleResource>()
                 .eq(SysRoleResource::getTenantId, tenantId)
-                .eq(SysRoleResource::getResourceId, resourceId));
-        for (Long roleId : roleIds) {
+                .in(SysRoleResource::getResourceId, roleBindings.keySet()));
+        List<SysRoleResource> bindings = new ArrayList<>();
+        roleBindings.forEach((resourceId, roleIds) -> roleIds.forEach(roleId -> {
             SysRoleResource binding = new SysRoleResource();
             binding.setTenantId(tenantId);
             binding.setRoleId(roleId);
             binding.setResourceId(resourceId);
-            roleResourceMapper.insert(binding);
+            bindings.add(binding);
+        }));
+        for (int start = 0; start < bindings.size(); start += ROLE_BINDING_BATCH_SIZE) {
+            roleResourceMapper.insertBatch(
+                    bindings.subList(start, Math.min(start + ROLE_BINDING_BATCH_SIZE, bindings.size())));
         }
     }
 
