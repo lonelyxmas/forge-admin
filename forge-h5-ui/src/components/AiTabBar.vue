@@ -30,11 +30,19 @@ const props = defineProps({
 const tabs = [
   {
     key: 'home',
+    label: '首页',
     path: '/pages/index/index',
     icon: '/static/icons/ai-icon/home.svg',
   },
   {
+    key: 'todo',
+    label: '待办',
+    path: '/pages/todo',
+    icon: '/static/icons/ai-icon/check-square.svg',
+  },
+  {
     key: 'mine',
+    label: '我的',
     path: '/pages/mine/index',
     icon: '/static/icons/ai-icon/user.svg',
   },
@@ -160,7 +168,7 @@ function handleTabClick(tab) {
 }
 
 .ai-tabbar__item.is-active .ai-tabbar__icon {
-  transform: translateY(-1rpx);
+  transform: none;
 }
 
 @keyframes tabbarEnter {
@@ -186,4 +194,5 @@ function handleTabClick(tab) {
     transform: scale(1);
   }
 }
+
 </style>

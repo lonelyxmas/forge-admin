@@ -14,7 +14,6 @@
     :hover-class="disabled || loading ? 'none' : 'ai-button--hover'"
     @click="handleClick"
   >
-    <view v-if="variant === 'primary' && !disabled && !loading" class="ai-button__shine" />
     <view class="ai-button__content">
       <view v-if="loading" class="ai-button__spinner" />
       <view v-else-if="$slots.leftIcon" class="ai-button__icon ai-button__icon--left">
@@ -71,7 +70,7 @@ const handleClick = (event) => {
   box-sizing: border-box;
   min-width: 0;
   margin: 0;
-  padding: 0 48rpx;
+  padding: 0 36rpx;
   border: 1px solid transparent;
   overflow: hidden;
   font-weight: 700;
@@ -99,42 +98,40 @@ const handleClick = (event) => {
   &--sm {
     height: 72rpx;
     padding: 0 32rpx;
-    border-radius: 24rpx;
+    border-radius: var(--radius-control);
     font-size: 26rpx;
   }
 
   &--md {
     height: 96rpx;
-    border-radius: 32rpx;
+    border-radius: var(--radius-control);
     font-size: 30rpx;
   }
 
   &--lg {
     height: 112rpx;
     padding: 0 64rpx;
-    border-radius: 40rpx;
+    border-radius: 16rpx;
     font-size: 32rpx;
   }
 
   &--primary {
     color: #ffffff;
-    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-    box-shadow: 0 16rpx 40rpx rgba(59, 130, 246, 0.25);
+    background: var(--primary-color);
+    box-shadow: none;
   }
 
   &--secondary {
     color: #334155;
-    background: rgba(255, 255, 255, 0.8);
-    border-color: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 8rpx 30rpx rgba(15, 23, 42, 0.04);
-    backdrop-filter: blur(20rpx);
+    background: #fff;
+    border-color: var(--border-color);
+    box-shadow: none;
   }
 
   &--outline {
     color: #334155;
-    background: rgba(255, 255, 255, 0.18);
-    border-color: rgba(203, 213, 225, 0.86);
-    backdrop-filter: blur(12rpx);
+    background: #fff;
+    border-color: var(--border-color);
   }
 
   &--ghost {
@@ -144,10 +141,8 @@ const handleClick = (event) => {
 
   &--danger {
     color: #ef4444;
-    background: rgba(255, 255, 255, 0.82);
-    border-color: rgba(254, 202, 202, 0.9);
-    box-shadow: 0 8rpx 30rpx rgba(239, 68, 68, 0.06);
-    backdrop-filter: blur(20rpx);
+    background: #fff;
+    border-color: #ffccc7;
   }
 }
 
@@ -185,16 +180,6 @@ const handleClick = (event) => {
   animation: ai-button-spin 0.8s linear infinite;
 }
 
-.ai-button__shine {
-  position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: -45%;
-  width: 38%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.26), transparent);
-  transform: skewX(-18deg);
-  animation: ai-button-shine 3.2s ease-in-out infinite;
-}
 
 @keyframes ai-button-spin {
   to {
@@ -202,13 +187,4 @@ const handleClick = (event) => {
   }
 }
 
-@keyframes ai-button-shine {
-  0%,
-  52% {
-    transform: translateX(0) skewX(-18deg);
-  }
-  100% {
-    transform: translateX(420%) skewX(-18deg);
-  }
-}
 </style>

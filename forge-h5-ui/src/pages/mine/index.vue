@@ -38,35 +38,6 @@
           </view>
         </view>
 
-        <view class="stats-grid">
-          <view class="stat-item">
-            <text class="stat-value">{{ userInfo.username || '-' }}</text>
-            <text class="stat-label">账号</text>
-          </view>
-          <view class="stat-item stat-middle">
-            <text class="stat-value">{{ maskedPhone }}</text>
-            <text class="stat-label">手机</text>
-          </view>
-          <view class="stat-item">
-            <text class="stat-value">{{ permissionCount }}</text>
-            <text class="stat-label">权限</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="quick-panel animate-in delay-1">
-        <view class="quick-item" @click="openProfileSheet">
-          <AiIcon icon="/static/icons/ai-icon/user.svg" color="#2563eb" size="md" />
-          <text>资料</text>
-        </view>
-        <view class="quick-item" @click="openPasswordSheet">
-          <AiIcon icon="/static/icons/ai-icon/key.svg" color="#7c3aed" size="md" />
-          <text>密码</text>
-        </view>
-        <view class="quick-item" @click="goMessages">
-          <AiIcon icon="/static/icons/ai-icon/bell.svg" color="#0891b2" size="md" />
-          <text>消息</text>
-        </view>
       </view>
 
       <view class="menu-groups">
@@ -203,10 +174,7 @@
           </view>
         </view>
 
-        <view v-if="tenantLoading" class="tenant-loading-card">
-          <view class="tenant-loading-spinner" />
-          <text>正在加载租户</text>
-        </view>
+        <AiListSkeleton v-if="tenantLoading" :rows="3" compact />
 
         <view v-else class="tenant-list">
           <view
@@ -303,6 +271,7 @@ import AiAuthImage from '@/components/AiAuthImage.vue'
 import AiButton from '@/components/AiButton.vue'
 import AiField from '@/components/AiField.vue'
 import AiIcon from '@/components/AiIcon.vue'
+import AiListSkeleton from '@/components/AiListSkeleton.vue'
 import AiImageUpload from '@/components/AiImageUpload.vue'
 import AiPopupSheet from '@/components/AiPopupSheet.vue'
 import AiTabBar from '@/components/AiTabBar.vue'
@@ -346,7 +315,6 @@ const passwordForm = reactive({
   confirmPassword: '',
 })
 
-const permissionCount = computed(() => authStore.permissions?.length || 0)
 const maskedPhone = computed(() => maskPhone(userInfo.value.phone || userInfo.value.mobile))
 const maskedEmail = computed(() => maskEmail(userInfo.value.email))
 const currentTenantId = computed(() => userInfo.value.tenantId)
@@ -371,32 +339,42 @@ const switchableTenantCount = computed(() => {
   return Math.max(displayTenantOptions.value.length, ids.length)
 })
 const showTenantSwitch = computed(() => switchableTenantCount.value > 1)
-const securityItems = computed(() => [
-  {
-    label: '登录账号',
-    value: userInfo.value.username || '-',
-    icon: '/static/icons/ai-icon/user.svg',
-    color: '#2563eb',
-  },
-  {
-    label: '绑定手机',
-    value: maskedPhone.value,
-    icon: '/static/icons/ai-icon/phone.svg',
-    color: '#0891b2',
-  },
-  {
-    label: '绑定邮箱',
-    value: maskedEmail.value,
-    icon: '/static/icons/ai-icon/mail.svg',
-    color: '#7c3aed',
-  },
-  {
-    label: '角色',
-    value: authStore.roleText,
-    icon: '/static/icons/ai-icon/shield.svg',
-    color: '#16a34a',
-  },
-])
+const securityItems = computed(() => {
+  const items = []
+  if (userInfo.value.username) {
+    items.push({
+      label: '登录账号',
+      value: userInfo.value.username,
+      icon: '/static/icons/ai-icon/user.svg',
+      color: '#2563eb',
+    })
+  }
+  if (maskedPhone.value) {
+    items.push({
+      label: '绑定手机',
+      value: maskedPhone.value,
+      icon: '/static/icons/ai-icon/phone.svg',
+      color: '#0891b2',
+    })
+  }
+  if (maskedEmail.value) {
+    items.push({
+      label: '绑定邮箱',
+      value: maskedEmail.value,
+      icon: '/static/icons/ai-icon/mail.svg',
+      color: '#7c3aed',
+    })
+  }
+  if (authStore.roleText) {
+    items.push({
+      label: '角色',
+      value: authStore.roleText,
+      icon: '/static/icons/ai-icon/shield.svg',
+      color: '#16a34a',
+    })
+  }
+  return items
+})
 
 const menuGroups = computed(() => [
   {
@@ -738,7 +716,7 @@ async function handleLogout() {
 function maskPhone(value) {
   const phone = String(value || '').trim()
   if (!phone) {
-    return '-'
+    return ''
   }
   if (phone.length < 7) {
     return phone
@@ -749,7 +727,7 @@ function maskPhone(value) {
 function maskEmail(value) {
   const email = String(value || '').trim()
   if (!email) {
-    return '-'
+    return ''
   }
   const [name, domain] = email.split('@')
   if (!domain) {
@@ -995,69 +973,6 @@ function maskEmail(value) {
   font-weight: 950;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.stats-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 38rpx;
-  padding-top: 36rpx;
-  border-top: 1rpx solid rgba(203, 213, 225, 0.52);
-}
-
-.stat-item {
-  min-width: 0;
-  padding: 0 10rpx;
-  text-align: center;
-}
-
-.stat-middle {
-  border-right: 1rpx solid rgba(203, 213, 225, 0.52);
-  border-left: 1rpx solid rgba(203, 213, 225, 0.52);
-}
-
-.stat-value {
-  overflow: hidden;
-  color: #1e293b;
-  font-size: 29rpx;
-  font-weight: 950;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stat-label {
-  margin-top: 8rpx;
-  color: #64748b;
-  font-size: 22rpx;
-  font-weight: 800;
-}
-
-.quick-panel {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18rpx;
-}
-
-.quick-item {
-  display: flex;
-  min-height: 112rpx;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.82);
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.04);
-}
-
-.quick-item text {
-  color: #334155;
-  font-size: 26rpx;
-  font-weight: 850;
 }
 
 .menu-groups {
@@ -1483,6 +1398,39 @@ function maskEmail(value) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.page-glow,
+.grid-layer,
+.profile-shape {
+  display: none;
+}
+
+.mine-page,
+.mine-page::before {
+  background: var(--page-bg);
+}
+
+.profile-card,
+.menu-group {
+  border-color: var(--border-color);
+  background: #fff;
+  box-shadow: none;
+}
+
+.profile-card::before,
+.profile-card::after {
+  display: none;
+}
+
+.member-badge,
+.menu-icon {
+  background: #e8f3ff !important;
+  box-shadow: none;
+}
+
+.animate-in {
+  animation: none;
 }
 
 @keyframes floatGlow {

@@ -67,6 +67,19 @@ export default defineConfig(({ mode }) => {
             })
           },
         },
+        // 业务待办表单/动作由 flow-server 内的 BusinessFlowController 提供。
+        // 该规则必须在通用 app-server 代理之前，否则会被转发到 8583 并返回 404。
+        [`${requestPrefix}/ai/business/flow`]: {
+          target: flowProxyTarget,
+          changeOrigin: true,
+          secure: false,
+          rewrite: path => path.replace(new RegExp(`^${requestPrefix}`), ''),
+          configure: (proxy, options) => {
+            proxy.on('proxyRes', (proxyRes, req) => {
+              proxyRes.headers['x-real-url'] = new URL(req.url || '', options.target)?.href || ''
+            })
+          },
+        },
         // Forge App 服务代理：H5 登录、用户信息、验证码等基础接口默认走 app-server。
         [requestPrefix]: {
           target: proxyTarget,
