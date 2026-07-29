@@ -21,16 +21,12 @@
       </view>
 
       <view class="login-panel">
-        <view class="sweep-light" />
-        <view class="inner-glow inner-glow-a" />
-        <view class="inner-glow inner-glow-b" />
-
         <view class="panel-head">
           <view class="panel-seal">
             <image class="panel-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
           </view>
           <text class="panel-title">{{ title }}</text>
-          <text class="panel-subtitle">安全登录入口</text>
+          <text class="panel-subtitle">使用您的企业账号登录</text>
         </view>
 
         <view class="form-stack">
@@ -93,10 +89,6 @@
           <text class="button-arrow">→</text>
         </button>
 
-        <view class="panel-links">
-          <text>忘记密码？</text>
-          <text class="link-primary">注册账号</text>
-        </view>
       </view>
 
       <view class="login-foot">
@@ -863,6 +855,69 @@ export default {
   50% {
     transform: translateX(7rpx);
   }
+}
+
+/* 登录页保持静态、清晰和轻量，专业感来自品牌与表单层级而非装饰动画。 */
+.noise-layer,
+.grid-layer,
+.mesh-layer,
+.sweep-light,
+.inner-glow,
+.captcha-lines,
+.captcha-hover {
+  display: none;
+}
+
+.login-page {
+  background: #f5f6f8;
+}
+
+.page-shell {
+  justify-content: center;
+}
+
+.brand-bar,
+.login-panel,
+.panel-seal,
+.field,
+.login-button,
+.login-foot {
+  animation: none;
+}
+
+.login-panel {
+  max-width: 680rpx;
+  padding: 52rpx 40rpx 44rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 35, 41, 0.05);
+}
+
+.panel-seal,
+.brand-mark {
+  border-radius: 12rpx;
+  box-shadow: none;
+  background: #fff;
+}
+
+.field,
+.captcha-image {
+  border-color: var(--border-color);
+  border-radius: 10rpx;
+  background: #fff;
+  box-shadow: none;
+}
+
+.login-button {
+  border-radius: 10rpx;
+  background: var(--primary-color);
+  box-shadow: none;
+}
+
+.login-button::before,
+.button-arrow {
+  display: none;
 }
 
 @keyframes spin {

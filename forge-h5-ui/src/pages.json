@@ -37,6 +37,13 @@
 			}
 		},
 		{
+			"path": "pages/todo-detail",
+			"style": {
+				"navigationBarTitleText": "审批详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/mine/index",
 			"style": {
 				"navigationBarTitleText": "我的",
@@ -47,6 +54,13 @@
 			"path": "pages/demo/loading/index",
 			"style": {
 				"navigationBarTitleText": "组件演示",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/app-entry",
+			"style": {
+				"navigationBarTitleText": "应用功能",
 				"navigationStyle": "custom"
 			}
 		}
@@ -62,6 +76,12 @@
 				"text": "首页",
 				"iconPath": "static/icons/ai-icon/home.svg",
 				"selectedIconPath": "static/icons/ai-icon/home.svg"
+			},
+			{
+				"pagePath": "pages/todo",
+				"text": "待办",
+				"iconPath": "static/icons/ai-icon/check-square.svg",
+				"selectedIconPath": "static/icons/ai-icon/check-square.svg"
 			},
 			{
 				"pagePath": "pages/mine/index",

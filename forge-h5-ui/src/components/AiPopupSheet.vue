@@ -126,8 +126,7 @@ function handleMaskClick() {
 .ai-popup-sheet__mask {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.22);
-  backdrop-filter: blur(8rpx);
+  background: rgba(0, 0, 0, 0.42);
   animation: ai-popup-sheet-fade 0.18s ease-out both;
 }
 
@@ -136,24 +135,23 @@ function handleMaskClick() {
   z-index: 1;
   width: 100%;
   padding: 16rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
-  border: 1rpx solid rgba(255, 255, 255, 0.88);
-  background: rgba(248, 250, 252, 0.94);
-  box-shadow: 0 -20rpx 70rpx rgba(15, 23, 42, 0.12);
+  border: 0;
+  background: #fff;
+  box-shadow: 0 -8rpx 24rpx rgba(31, 35, 41, 0.12);
   box-sizing: border-box;
-  backdrop-filter: blur(30rpx);
   animation: ai-popup-sheet-up 0.22s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
 .ai-popup-sheet__panel--bottom.ai-popup-sheet__panel--round {
-  border-radius: 40rpx 40rpx 0 0;
+  border-radius: 24rpx 24rpx 0 0;
 }
 
 .ai-popup-sheet__handle {
   width: 74rpx;
   height: 8rpx;
   margin: 0 auto 22rpx;
-  border-radius: 999rpx;
-  background: rgba(148, 163, 184, 0.52);
+  border-radius: 8rpx;
+  background: #c9cdd4;
 }
 
 .ai-popup-sheet__head {

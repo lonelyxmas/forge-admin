@@ -6,8 +6,8 @@ body {
 }
 
 page {
-  background-color: var(--page-bg, #ecfeff);
-  color: var(--text-color, #164e63);
+  background-color: var(--page-bg, #f5f6f8);
+  color: var(--text-color, #1f2329);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -62,12 +62,11 @@ input {
   justify-content: center;
   gap: 10px;
   padding: 18px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  border-radius: 20px;
-  color: #2563eb;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.12);
-  backdrop-filter: blur(18px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--primary-color);
+  background: #fff;
+  box-shadow: var(--shadow-soft);
 }
 
 .v-loading-dots {
@@ -94,7 +93,7 @@ input {
 }
 
 .v-loading-text {
-  color: #2563eb;
+  color: var(--primary-color);
   font-size: 13px;
   font-weight: 700;
 }

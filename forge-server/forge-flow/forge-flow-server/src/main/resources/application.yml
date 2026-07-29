@@ -54,7 +54,7 @@ mybatis-plus:
 
 sa-token:
   alone-redis:
-    database: 1
+    database: 0
     host: ${spring.data.redis.host}
     port: ${spring.data.redis.port}
     password: ${spring.data.redis.password}

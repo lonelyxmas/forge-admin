@@ -124,7 +124,7 @@ const handleClear = () => {
 .ai-field {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 10rpx;
 
   &--horizontal {
     flex-direction: row;
@@ -163,29 +163,29 @@ const handleClear = () => {
 .ai-field__control {
   display: flex;
   align-items: center;
-  min-height: 104rpx;
-  padding: 0 28rpx;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: 32rpx;
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: 0 8rpx 30rpx rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(16rpx);
+  min-height: 80rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 12rpx;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 
   &--focused {
-    border-color: rgba(59, 130, 246, 0.65);
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 0 0 8rpx rgba(59, 130, 246, 0.08), 0 8rpx 30rpx rgba(15, 23, 42, 0.03);
+    border-color: var(--primary-color);
+    background: #fff;
+    box-shadow: 0 0 0 3rpx rgba(37, 99, 235, 0.12);
   }
 
   &--error {
-    border-color: rgba(244, 63, 94, 0.58);
-    box-shadow: 0 0 0 8rpx rgba(244, 63, 94, 0.08);
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3rpx rgba(239, 68, 68, 0.1);
   }
 
   &--disabled {
     opacity: 0.62;
-    background: rgba(248, 250, 252, 0.8);
+    background: #f7f8fa;
   }
 }
 
@@ -197,7 +197,7 @@ const handleClear = () => {
   color: #94a3b8;
 
   &--left {
-    margin-right: 20rpx;
+    margin-right: 14rpx;
   }
 
   &--right {
@@ -208,10 +208,10 @@ const handleClear = () => {
 .ai-field__input {
   flex: 1;
   min-width: 0;
-  height: 96rpx;
+  height: 78rpx;
   color: #334155;
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: 27rpx;
+  font-weight: 500;
 }
 
 :deep(.ai-field__placeholder) {
@@ -223,8 +223,8 @@ const handleClear = () => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 12rpx;
-  margin-left: 16rpx;
+  gap: 8rpx;
+  margin-left: 12rpx;
 }
 
 .ai-field__action {

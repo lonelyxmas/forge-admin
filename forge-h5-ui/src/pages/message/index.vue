@@ -1,37 +1,20 @@
 <template>
   <view class="message-page">
-    <view class="page-glow page-glow-blue" />
-    <view class="page-glow page-glow-green" />
-    <view class="grid-layer" />
-
     <view class="message-content">
-      <view class="page-head animate-in">
+      <view class="page-head">
         <button class="back-button" @click="goBack">
           <AiIcon name="chevron-left" color="#475569" size="md" />
         </button>
         <view class="title-block">
           <text class="page-title">消息中心</text>
-          <text class="page-subtitle">同步站内信、审批提醒和系统通知</text>
+          <text class="page-subtitle">通知、审批提醒和系统消息集中处理</text>
         </view>
         <button class="refresh-button" @click="refresh">
           <AiIcon name="refresh-cw" color="#2563eb" size="sm" />
         </button>
       </view>
 
-      <view class="summary-panel animate-in delay-1">
-        <view class="summary-main">
-          <text class="summary-label">未读消息</text>
-          <text class="summary-value">{{ unreadCount }}</text>
-          <text class="summary-desc">同步站内信未读统计</text>
-        </view>
-        <view class="summary-actions">
-          <button class="summary-action" :disabled="unreadCount <= 0" @click="markAllRead">
-            全部已读
-          </button>
-        </view>
-      </view>
-
-      <view class="filter-panel animate-in delay-2">
+      <view class="filter-panel">
         <AiSearchBar
           v-model="keyword"
           placeholder="搜索标题或内容"
@@ -48,26 +31,24 @@
               @click="switchTab(tab.key)"
             >
               <text>{{ tab.label }}</text>
-              <text v-if="tab.count > 0" class="filter-count">{{ tab.count > 99 ? '99+' : tab.count }}</text>
             </button>
           </view>
         </scroll-view>
+        <button v-if="unreadCount > 0" class="mark-read-button" @click="markAllRead">
+          <AiIcon name="check" color="#2563eb" size="sm" />
+          <text>全部标为已读</text>
+        </button>
       </view>
 
-      <view class="message-list animate-in delay-3">
-        <view v-if="loading" class="loading-card">
-          <view class="loading-spinner" />
-          <text>消息加载中</text>
-        </view>
+      <view class="message-list">
+        <AiListSkeleton v-if="loading" :rows="6" />
 
         <AiEmpty
           v-else-if="filteredMessages.length === 0"
           title="暂无消息"
           description="当前筛选条件下没有站内消息。"
           icon="inbox"
-        >
-          <AiButton size="sm" variant="secondary" @click="refresh">刷新</AiButton>
-        </AiEmpty>
+        />
 
         <template v-else>
           <view
@@ -117,10 +98,6 @@
         <rich-text v-if="detailHtml" class="detail-html" :nodes="detailHtml" />
         <text v-else class="detail-empty">暂无正文内容</text>
 
-        <view v-if="currentMessage?.bizType || currentMessage?.bizKey" class="biz-panel">
-          <text class="biz-label">关联业务</text>
-          <text class="biz-value">{{ getBizTypeName(currentMessage?.bizType) }} / {{ currentMessage?.bizKey || '-' }}</text>
-        </view>
       </view>
 
       <template #footer>
@@ -149,9 +126,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import AiButton from '@/components/AiButton.vue'
 import AiEmpty from '@/components/AiEmpty.vue'
 import AiIcon from '@/components/AiIcon.vue'
+import AiListSkeleton from '@/components/AiListSkeleton.vue'
 import AiPopupSheet from '@/components/AiPopupSheet.vue'
 import AiSearchBar from '@/components/AiSearchBar.vue'
 import AiTag from '@/components/AiTag.vue'
@@ -171,10 +148,10 @@ const currentMessage = ref(null)
 const pendingOpenId = ref('')
 
 const tabs = computed(() => [
-  { key: 'all', label: '全部', count: messages.value.length },
-  { key: 'unread', label: '未读', count: unreadCount.value },
-  { key: 'approval', label: '审批', count: messages.value.filter(isApprovalMessage).length },
-  { key: 'read', label: '已读', count: messages.value.filter(item => item.readFlag === 1).length },
+  { key: 'all', label: '全部' },
+  { key: 'unread', label: '未读' },
+  { key: 'approval', label: '审批提醒' },
+  { key: 'read', label: '已读' },
 ])
 
 const filteredMessages = computed(() => {
@@ -352,6 +329,16 @@ async function markAllRead() {
 function openBiz(message) {
   const route = resolveBizRoute(message)
   showDetail.value = false
+  if (route && route.startsWith('/pages/todo')) {
+    const taskId = getRouteTaskId(route) || message.taskId || message.task_id
+    if (taskId) {
+      uni.navigateTo({ url: `/pages/todo-detail?taskId=${encodeURIComponent(String(taskId))}` })
+    }
+    else {
+      uni.switchTab({ url: '/pages/todo' })
+    }
+    return
+  }
   if (route && route.startsWith('/pages/')) {
     uni.navigateTo({
       url: route,
@@ -360,13 +347,17 @@ function openBiz(message) {
     return
   }
   if (isApprovalMessage(message)) {
-    uni.navigateTo({
-      url: `/pages/todo?taskId=${message.bizKey || ''}`,
-      fail: () => toast('移动端待办页暂未接入', { type: 'info' }),
-    })
+    const taskId = message.taskId || message.task_id
+    if (taskId) uni.navigateTo({ url: `/pages/todo-detail?taskId=${encodeURIComponent(String(taskId))}` })
+    else uni.switchTab({ url: '/pages/todo' })
     return
   }
   toast('该消息暂无移动端业务入口', { type: 'info' })
+}
+
+function getRouteTaskId(route) {
+  const match = String(route || '').match(/[?&]taskId=([^&#]+)/)
+  return match ? decodeURIComponent(match[1]) : ''
 }
 
 function resolveBizRoute(message) {
@@ -384,11 +375,6 @@ function replaceRouteParams(route, message) {
   return String(route || '')
     .replace(/\$\{bizKey\}/g, message?.bizKey || '')
     .replace(/\$\{messageId\}/g, message?.id || '')
-}
-
-function getBizTypeName(bizType) {
-  const item = bizTypes.value.find(opt => opt.bizType === bizType)
-  return item?.bizName || bizType || '业务消息'
 }
 
 function isApprovalMessage(item) {
@@ -609,65 +595,6 @@ function goBack() {
   font-weight: 700;
 }
 
-.summary-panel {
-  display: flex;
-  align-items: flex-end;
-  gap: 24rpx;
-  overflow: hidden;
-  padding: 34rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.88);
-  border-radius: 42rpx;
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(16, 185, 129, 0.8)),
-    #2563eb;
-  box-shadow: 0 18rpx 46rpx rgba(37, 99, 235, 0.18);
-}
-
-.summary-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.summary-label {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 24rpx;
-  font-weight: 800;
-}
-
-.summary-value {
-  margin-top: 10rpx;
-  color: #ffffff;
-  font-size: 78rpx;
-  font-weight: 950;
-  line-height: 0.95;
-}
-
-.summary-desc {
-  margin-top: 14rpx;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.summary-actions {
-  flex-shrink: 0;
-}
-
-.summary-action {
-  height: 68rpx;
-  margin: 0;
-  padding: 0 24rpx;
-  border-radius: 22rpx;
-  color: #2563eb;
-  font-size: 24rpx;
-  font-weight: 900;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.summary-action[disabled] {
-  opacity: 0.58;
-}
-
 .filter-panel {
   display: flex;
   flex-direction: column;
@@ -706,15 +633,6 @@ function goBack() {
   border-color: rgba(37, 99, 235, 0.2);
   background: #2563eb;
   box-shadow: 0 10rpx 24rpx rgba(37, 99, 235, 0.18);
-}
-
-.filter-count {
-  min-width: 30rpx;
-  padding: 2rpx 8rpx;
-  border-radius: 999rpx;
-  color: inherit;
-  font-size: 20rpx;
-  background: rgba(255, 255, 255, 0.22);
 }
 
 .message-list {
@@ -868,31 +786,6 @@ function goBack() {
   font-weight: 700;
 }
 
-.biz-panel {
-  padding: 24rpx;
-  border: 1rpx solid rgba(191, 219, 254, 0.8);
-  border-radius: 28rpx;
-  background: rgba(239, 246, 255, 0.72);
-}
-
-.biz-label,
-.biz-value {
-  display: block;
-}
-
-.biz-label {
-  color: #2563eb;
-  font-size: 23rpx;
-  font-weight: 900;
-}
-
-.biz-value {
-  margin-top: 8rpx;
-  color: #334155;
-  font-size: 27rpx;
-  font-weight: 800;
-}
-
 .detail-actions {
   justify-content: flex-end;
   gap: 18rpx;
@@ -929,6 +822,137 @@ function goBack() {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.message-page,
+.message-page::before {
+  background: var(--page-bg);
+}
+
+.message-content {
+  gap: 22rpx;
+  padding: calc(24rpx + env(safe-area-inset-top)) 24rpx 56rpx;
+}
+
+.back-button,
+.refresh-button {
+  width: 68rpx;
+  height: 68rpx;
+  flex-basis: 68rpx;
+  border-color: var(--border-color);
+  border-radius: 16rpx;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.page-title {
+  color: var(--text-strong);
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.page-subtitle {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  font-weight: 500;
+}
+
+.filter-panel {
+  gap: 16rpx;
+}
+
+.tab-row {
+  gap: 12rpx;
+  min-width: auto;
+  padding-right: 24rpx;
+}
+
+.filter-tab {
+  min-width: 116rpx;
+  height: 70rpx;
+  justify-content: center;
+  padding: 0 22rpx;
+  border-color: var(--border-color);
+  border-radius: 16rpx;
+  background: #fff;
+  backdrop-filter: none;
+  box-sizing: border-box;
+}
+
+.filter-tab.active {
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: none;
+}
+
+.mark-read-button {
+  display: inline-flex;
+  width: fit-content;
+  height: 56rpx;
+  align-items: center;
+  gap: 8rpx;
+  margin: 0;
+  padding: 0 4rpx;
+  color: #2563eb;
+  font-size: 24rpx;
+  font-weight: 700;
+  background: transparent;
+}
+
+.mark-read-button::after {
+  border: 0;
+}
+
+.message-list {
+  gap: 10rpx;
+}
+
+.message-card {
+  gap: 14rpx;
+  padding: 18rpx;
+  border-color: var(--border-color);
+  border-radius: 16rpx;
+  background: #fff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.message-card.unread {
+  border-color: #b9d5ff;
+  box-shadow: none;
+}
+
+.message-icon {
+  width: 58rpx;
+  height: 58rpx;
+  flex-basis: 58rpx;
+  border-radius: 15rpx;
+}
+
+.message-title-row {
+  margin-top: 8rpx;
+}
+
+.message-title {
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.message-desc {
+  margin-top: 5rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  -webkit-line-clamp: 1;
+}
+
+.loading-card {
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
+.animate-in {
+  animation: none;
 }
 
 @keyframes floatGlow {

@@ -1,7 +1,7 @@
 <template>
   <view class="ai-tabs">
     <view class="ai-tabs-header">
-      <view 
+      <view
         v-for="(tab, index) in tabs" 
         :key="index"
         class="ai-tabs-tab"
@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref, provide } from 'vue'
+import { computed, provide } from 'vue'
 
 const props = defineProps({
   tabs: {
@@ -33,10 +33,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'change'])
 
-const activeIndex = ref(props.modelValue)
+const activeIndex = computed(() => props.modelValue)
 
 const handleTabClick = (index) => {
-  activeIndex.value = index
   emit('update:modelValue', index)
   emit('change', index)
 }
@@ -47,40 +46,36 @@ provide('activeIndex', activeIndex)
 <style lang="scss" scoped>
 .ai-tabs {
   &-header {
+    gap: 6rpx;
+    padding: 6rpx;
     display: flex;
-    background: #fff;
-    border-bottom: 1px solid #eee;
+    border: 1rpx solid #e5e7eb;
+    border-radius: 16rpx;
+    background: #f5f7fa;
   }
   
   &-tab {
     flex: 1;
-    text-align: center;
-    padding: 12px 0;
-    position: relative;
+    display: flex;
+    height: 62rpx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11rpx;
     
     &--active {
-      color: var(--primary-color, #0891b2);
-      
-      &::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 40rpx;
-        height: 4rpx;
-        background: var(--primary-color, #0891b2);
-      }
+      color: var(--primary-color, #2563eb);
+      background: #fff;
+      box-shadow: 0 1rpx 4rpx rgb(15 23 42 / 8%);
     }
   }
   
   &-tab-text {
-    font-size: 14px;
-    color: #666;
+    color: #64748b;
+    font-size: 25rpx;
     
     .ai-tabs-tab--active & {
-      color: var(--primary-color, #0891b2);
-      font-weight: 500;
+      color: var(--primary-color, #2563eb);
+      font-weight: 650;
     }
   }
 }

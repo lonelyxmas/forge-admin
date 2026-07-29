@@ -104,39 +104,38 @@ function handleBlur(event) {
 .ai-search-bar {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
 .ai-search-bar__box {
   display: flex;
   min-width: 0;
-  height: 82rpx;
+  height: 68rpx;
   flex: 1;
   align-items: center;
-  gap: 14rpx;
-  padding: 0 24rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.9);
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: 0 8rpx 28rpx rgba(15, 23, 42, 0.04);
+  gap: 12rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 12rpx;
+  background: #fdfefe;
+  box-shadow: none;
   box-sizing: border-box;
-  backdrop-filter: blur(18rpx);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .ai-search-bar--focused .ai-search-bar__box {
-  border-color: rgba(59, 130, 246, 0.52);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 8rpx rgba(59, 130, 246, 0.08), 0 8rpx 28rpx rgba(15, 23, 42, 0.04);
+  border-color: var(--primary-color);
+  background: #fff;
+  box-shadow: 0 0 0 3rpx rgba(22, 119, 255, 0.12);
 }
 
 .ai-search-bar__input {
   min-width: 0;
-  height: 78rpx;
+  height: 66rpx;
   flex: 1;
   color: #334155;
-  font-size: 28rpx;
-  font-weight: 650;
+  font-size: 26rpx;
+  font-weight: 500;
 }
 
 :deep(.ai-search-bar__placeholder) {
@@ -170,10 +169,10 @@ function handleBlur(event) {
 
 .ai-search-bar__cancel {
   flex-shrink: 0;
-  height: 72rpx;
+  height: 64rpx;
   color: #2563eb;
-  font-size: 27rpx;
-  font-weight: 800;
+  font-size: 25rpx;
+  font-weight: 650;
   background: transparent;
 }
 </style>
