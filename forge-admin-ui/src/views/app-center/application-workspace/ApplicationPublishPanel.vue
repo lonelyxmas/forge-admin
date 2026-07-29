@@ -9,6 +9,9 @@
         <n-button size="small" :loading="loading" @click="refreshHistory">
           刷新记录
         </n-button>
+        <n-button v-if="showPublishAction" size="small" type="primary" :loading="publishing || checking" @click="preparePublish">
+          发布应用
+        </n-button>
       </div>
     </header>
 
@@ -43,7 +46,7 @@
             :key="`${issue.issueCode}-${issue.assetId || ''}`"
             type="button"
             class="issue-row"
-            @click="emit('navigate', issue.actionPanel || issue.sectionKey || 'overview')"
+            @click="emit('navigate', issue.actionPanel || issue.sectionKey || 'overview', issue)"
           >
             <span class="issue-level" :class="`is-${String(issue.level).toLowerCase()}`">
               {{ issue.level === 'BLOCK' ? '阻断' : '提醒' }}
@@ -153,6 +156,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  showPublishAction: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['changed', 'navigate', 'publishRequestConsumed'])
@@ -166,6 +173,8 @@ const versionDrawerVisible = ref(false)
 const selectedVersionNo = ref(null)
 const stepModalVisible = ref(false)
 const selectedRun = ref(null)
+
+defineExpose({ runPublishCheck, preparePublish })
 
 const issues = computed(() => checkResult.value?.issues || [])
 const readinessLabel = computed(() => {
@@ -372,6 +381,7 @@ function stepLabel(step) {
     SNAPSHOT: '准备快照',
     OBJECTS: '发布业务对象',
     ENTRIES: '切换页面入口',
+    PAGE_MENUS: '同步应用页面菜单',
     EXTENSIONS: '启用业务扩展',
     COMMIT: '提交应用版本',
   }[step] || step || '-'

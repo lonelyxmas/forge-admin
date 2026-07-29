@@ -1110,6 +1110,18 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
   }
 }
 
+/**
+ * 列表设计器的页面模型需要保持稳定，当前区块字段目录则可能来自页面表单、
+ * 业务对象草稿或已发布运行配置。字段清洗必须以本次实际展示的字段为准，
+ * 不能因为稳定模型没有携带 fields 就清空用户刚选择的字段引用。
+ */
+export function buildGridSyncModelSchema(modelSchema = {}, fields = []) {
+  return {
+    ...(modelSchema || {}),
+    fields: Array.isArray(fields) ? fields : [],
+  }
+}
+
 function normalizeGridItemsForLayout(items, modelSchema, layoutType, modeChanged, preserveEmpty = false, hasExplicitItems = false, designWidth = LIST_PAGE_DESIGN_WIDTH) {
   const next = [...items]
   const isTree = layoutType === 'tree-crud'

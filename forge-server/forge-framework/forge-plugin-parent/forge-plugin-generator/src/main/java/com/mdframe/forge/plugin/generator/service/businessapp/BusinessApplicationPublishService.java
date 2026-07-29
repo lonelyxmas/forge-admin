@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPub
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectPublishDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionMapper;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationSnapshotService.SnapshotBundle;
+import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPublishCheckVO;
@@ -37,6 +38,7 @@ import java.util.stream.Collectors;
 public class BusinessApplicationPublishService {
 
     private final BusinessApplicationReadinessService readinessService;
+    private final BusinessApplicationFormDataService formDataService;
     private final BusinessApplicationSnapshotService snapshotService;
     private final BusinessApplicationPublishRunService runService;
     private final BusinessApplicationVersionService versionService;
@@ -48,19 +50,28 @@ public class BusinessApplicationPublishService {
     private final BusinessApplicationPageMenuPublishService pageMenuPublishService;
     private final BusinessExtensionMapper extensionMapper;
     private final BusinessExtensionExecutionService extensionExecutionService;
+    private final LowcodeDdlService ddlService;
 
     public BusinessApplicationPublishCheckVO check(Long applicationId, BusinessApplicationPublishDTO dto) {
-        return readinessService.publishCheck(applicationId, dto);
+        formDataService.synchronizeManagedDatabases(applicationId);
+        return ddlService.withStructureCheckCache(() -> readinessService.publishCheck(applicationId, dto));
     }
 
     public BusinessApplicationPublishResultVO publish(Long applicationId,
                                                       BusinessApplicationPublishDTO dto,
                                                       String idempotencyKey) {
+        return ddlService.withStructureCheckCache(() -> doPublish(applicationId, dto, idempotencyKey));
+    }
+
+    private BusinessApplicationPublishResultVO doPublish(Long applicationId,
+                                                         BusinessApplicationPublishDTO dto,
+                                                         String idempotencyKey) {
         AiBusinessApplicationPublishRun existing = runService.findByIdempotencyKey(applicationId, idempotencyKey);
         if (existing != null) {
             return toResult(existing, existingRunMessage(existing));
         }
         preparePrimaryObjectDraft(applicationId);
+        formDataService.synchronizeManagedDatabases(applicationId);
         BusinessApplicationReadinessService.ResolvedPublishCheck resolvedCheck
                 = readinessService.resolvePublishCheck(applicationId, dto);
         BusinessApplicationPublishCheckVO check = resolvedCheck.check();
@@ -92,7 +103,7 @@ public class BusinessApplicationPublishService {
 
     public BusinessApplicationPublishResultVO resume(AiBusinessApplicationPublishRun run,
                                                      BusinessApplicationPublishDTO dto) {
-        return resume(run, dto, null, true);
+        return ddlService.withStructureCheckCache(() -> resume(run, dto, null, true));
     }
 
     private BusinessApplicationPublishResultVO resume(AiBusinessApplicationPublishRun run,
@@ -104,6 +115,7 @@ public class BusinessApplicationPublishService {
             BusinessApplicationAssetSelectionVO selection = runService.readSelection(run);
             BusinessApplicationPublishDTO effectiveDto = dtoFromSelection(selection, dto);
             Map<Long, BusinessPermissionSummaryVO> permissionSummaries = Map.of();
+            Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts = Map.of();
             if (forcePrecheck || !runService.isStepComplete(run, BusinessApplicationPublishStep.PRECHECK)) {
                 step = BusinessApplicationPublishStep.PRECHECK;
                 run = runService.markStepRunning(run, step);
@@ -116,6 +128,7 @@ public class BusinessApplicationPublishService {
                 }
                 permissionSummaries = resolvedCheck.permissionSummaries().stream()
                         .collect(Collectors.toMap(BusinessPermissionSummaryVO::getObjectId, Function.identity()));
+                objectContexts = resolvedCheck.objectContexts();
                 run = runService.markStepSuccess(run, step,
                         check.getWarningCount() + " 项提醒，不阻断发布");
             }
@@ -130,7 +143,7 @@ public class BusinessApplicationPublishService {
                 step = BusinessApplicationPublishStep.OBJECTS;
                 run = runService.markStepRunning(run, step);
                 PublishObjectsResult publishResult = publishObjects(
-                        run, selection, effectiveDto, objectVersions, permissionSummaries);
+                        run, selection, effectiveDto, objectVersions, permissionSummaries, objectContexts);
                 run = publishResult.run();
                 objectVersions = publishResult.objectVersions();
                 SnapshotBundle objectSnapshot = snapshotService.finalizePublished(
@@ -183,7 +196,8 @@ public class BusinessApplicationPublishService {
                                                 BusinessApplicationAssetSelectionVO selection,
                                                 BusinessApplicationPublishDTO dto,
                                                 Map<Long, Long> completedVersions,
-                                                Map<Long, BusinessPermissionSummaryVO> permissionSummaries) {
+                                                Map<Long, BusinessPermissionSummaryVO> permissionSummaries,
+                                                Map<Long, BusinessObjectDesignerService.DesignerContext> objectContexts) {
         Map<Long, BusinessApplicationObjectVO> objects = applicationObjectService.list(run.getApplicationId()).stream()
                 .collect(Collectors.toMap(BusinessApplicationObjectVO::getObjectId, Function.identity()));
         Map<Long, Long> latestPublishedVersions
@@ -206,11 +220,11 @@ public class BusinessApplicationPublishService {
             objectDto.setSyncTable(false);
             objectDto.setForce(false);
             objectDto.setRemark("由应用协调发布: " + StringUtils.defaultString(dto.getRemark()));
+            // 复用预检阶段加载的设计上下文；恢复链路等缺失时回退到重新加载。
+            // 已发布对象由上方 designStatus + 最新版本判定跳过，失败恢复无需依赖逐对象快照 checkpoint，
+            // 完整快照在 OBJECTS 步骤成功后统一写入一次。
             result.put(objectId, objectPublishService.publish(
-                    objectId, objectDto, permissionSummaries.get(objectId)));
-            SnapshotBundle checkpoint = snapshotService.finalizePublished(
-                    run.getSnapshotJson(), result, selection, run.getTargetVersionNo(), "PUBLISH");
-            run = runService.updateSnapshot(run, checkpoint);
+                    objectId, objectDto, permissionSummaries.get(objectId), objectContexts.get(objectId)));
         }
         return new PublishObjectsResult(run, result);
     }

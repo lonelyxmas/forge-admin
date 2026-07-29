@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
 @Service
 public class BusinessNamingService {
 
+    private static final int MODEL_CODE_MAX_LENGTH = 48;
+    private static final int APPLICATION_CODE_MAX_LENGTH = 64;
     private static final Pattern SEGMENT_PATTERN = Pattern.compile("[A-Za-z0-9]+|[\\u4E00-\\u9FFF]+");
     private static final Pattern SAFE_WORD_PATTERN = Pattern.compile("[A-Za-z0-9]+");
 
@@ -124,16 +126,28 @@ public class BusinessNamingService {
 
     public String normalizeModelCode(String value, String fallbackName) {
         String source = StringUtils.defaultIfBlank(value, generateObjectCode(fallbackName));
-        return normalizeSnakeCode(source, "business_object", 64);
+        return normalizeSnakeCode(source, "business_object", MODEL_CODE_MAX_LENGTH);
     }
 
     public String buildModelCode(String suiteCode, String objectCode) {
         String suite = normalizeSnakeCode(suiteCode, "", 24);
         String object = normalizeSnakeCode(objectCode, "business_object", 48);
         if (StringUtils.isBlank(suite) || object.startsWith(suite + "_")) {
-            return StringUtils.left(object, 64);
+            return StringUtils.left(object, MODEL_CODE_MAX_LENGTH);
         }
-        return StringUtils.left(suite + "_" + object, 64);
+        return StringUtils.left(suite + "_" + object, MODEL_CODE_MAX_LENGTH);
+    }
+
+    public String buildApplicationCode(String suiteCode, String applicationName) {
+        String suite = normalizeSnakeCode(suiteCode, "app", 32);
+        String name = normalizeSnakeCode(applicationName, "", 40);
+        if (StringUtils.isBlank(name)) {
+            name = "app_" + Integer.toUnsignedString(hash(applicationName), 36);
+        }
+        String code = name.equals(suite) || name.startsWith(suite + "_")
+                ? name
+                : suite + "_" + name;
+        return StringUtils.left(code, APPLICATION_CODE_MAX_LENGTH).replaceAll("_+$", "");
     }
 
     public String camelToSnake(String value) {

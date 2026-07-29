@@ -4622,6 +4622,7 @@ import CrudDefaultParamsEditor from './CrudDefaultParamsEditor.vue'
 import CrudHookRulesEditor from './CrudHookRulesEditor.vue'
 import GridBlockRenderer from './GridBlockRenderer.vue'
 import {
+  buildGridSyncModelSchema,
   createDefaultBlockStyle,
   createDefaultListGridLayout,
   createGridBlock,
@@ -5392,7 +5393,7 @@ let canvasResizeObserver = null
 
 const localLayout = ref(normalizeDesignerLayout(syncGridLayoutWithModel(
   props.modelValue || createDefaultListGridLayout(props.modelSchema, { layoutType: props.layoutType }),
-  props.modelSchema,
+  buildGridSyncModelSchema(props.modelSchema, props.fields),
   { layoutType: props.layoutType },
 )))
 
@@ -5887,7 +5888,7 @@ watch(
 watch(
   () => props.modelValue,
   (value) => {
-    const next = normalizeDesignerLayout(syncGridLayoutWithModel(value, props.modelSchema, { layoutType: props.layoutType }))
+    const next = normalizeDesignerLayout(syncGridLayoutWithModel(value, buildGridSyncModelSchema(props.modelSchema, props.fields), { layoutType: props.layoutType }))
     if (JSON.stringify(next) !== JSON.stringify(localLayout.value))
       localLayout.value = next
   },
@@ -5897,7 +5898,7 @@ watch(
 watch(
   () => props.modelSchema,
   () => {
-    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(localLayout.value, props.modelSchema, { layoutType: props.layoutType }))
+    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(localLayout.value, buildGridSyncModelSchema(props.modelSchema, props.fields), { layoutType: props.layoutType }))
   },
   { deep: true },
 )
@@ -5905,7 +5906,7 @@ watch(
 watch(
   () => props.layoutType,
   () => {
-    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(localLayout.value, props.modelSchema, { layoutType: props.layoutType }))
+    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(localLayout.value, buildGridSyncModelSchema(props.modelSchema, props.fields), { layoutType: props.layoutType }))
   },
 )
 
@@ -5966,7 +5967,7 @@ function applyLayoutSourceCode() {
     const parsed = JSON.parse(layoutSourceDraft.value || '{}')
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
       throw new Error('画布布局 JSON 必须是对象')
-    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(parsed, props.modelSchema, { layoutType: props.layoutType }))
+    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(parsed, buildGridSyncModelSchema(props.modelSchema, props.fields), { layoutType: props.layoutType }))
     sourceError.value = ''
     return true
   }

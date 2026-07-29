@@ -12,6 +12,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationQue
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationObjectMapper;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationCreateVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
@@ -34,6 +35,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class BusinessApplicationService extends ServiceImpl<BusinessApplicationMapper, AiBusinessApplication> {
 
+    private static final int APPLICATION_CODE_MAX_LENGTH = 64;
+    private static final int GENERATED_CODE_ATTEMPTS = 1000;
     private static final Pattern CODE_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{1,63}$");
     private static final Set<String> SENSITIVE_OPTION_KEYS = Set.of(
             "token", "access_token", "password", "secret", "clientsecret", "client_secret",
@@ -43,6 +46,7 @@ public class BusinessApplicationService extends ServiceImpl<BusinessApplicationM
     private final BusinessSuiteService suiteService;
     private final BusinessApplicationObjectMapper applicationObjectMapper;
     private final BusinessAppMapper businessAppMapper;
+    private final BusinessNamingService namingService;
 
     public Page<BusinessApplicationVO> page(Integer pageNum, Integer pageSize, BusinessApplicationQueryDTO query) {
         Page<BusinessApplicationVO> page = new Page<>(normalizePageNum(pageNum), normalizePageSize(pageSize));
@@ -79,7 +83,7 @@ public class BusinessApplicationService extends ServiceImpl<BusinessApplicationM
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public Long create(BusinessApplicationDTO dto) {
+    public BusinessApplicationCreateVO create(BusinessApplicationDTO dto) {
         if (dto == null) {
             throw new BusinessException("业务应用不能为空");
         }
@@ -87,7 +91,7 @@ public class BusinessApplicationService extends ServiceImpl<BusinessApplicationM
         copyDtoToEntity(dto, application, true);
         application.setDesignStatus(BusinessApplicationDesignStatus.DRAFT);
         save(application);
-        return application.getId();
+        return new BusinessApplicationCreateVO(application.getId(), application.getApplicationCode());
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -214,25 +218,16 @@ public class BusinessApplicationService extends ServiceImpl<BusinessApplicationM
 
     private void copyDtoToEntity(BusinessApplicationDTO dto, AiBusinessApplication application, boolean create) {
         String requestedCode = StringUtils.trimToNull(dto.getApplicationCode());
-        String applicationCode = create ? requestedCode : application.getApplicationCode();
-        if (StringUtils.isBlank(applicationCode) || !CODE_PATTERN.matcher(applicationCode).matches()) {
-            throw new BusinessException("应用编码格式不正确（字母开头，仅含字母、数字和下划线，2-64字符）");
-        }
-        if (!create && requestedCode != null && !StringUtils.equals(requestedCode, application.getApplicationCode())) {
-            throw new BusinessException("应用编码创建后不能修改");
-        }
         String applicationName = StringUtils.trimToNull(dto.getApplicationName());
         if (applicationName == null) {
             throw new BusinessException("应用名称不能为空");
         }
         String suiteCode = StringUtils.trimToNull(dto.getSuiteCode());
         suiteService.requireByCode(suiteCode);
+        String applicationCode = resolveApplicationCode(
+                requestedCode, application, create, suiteCode, applicationName);
         if (!create && !StringUtils.equals(application.getSuiteCode(), suiteCode)) {
             assertSuiteMoveAllowed(application.getId());
-        }
-        Long excludeId = create ? null : application.getId();
-        if (baseMapper.countByApplicationCode(resolveTenantId(), applicationCode, excludeId) > 0) {
-            throw new BusinessException("应用编码已存在: " + applicationCode);
         }
         String options = normalizeOptions(dto.getOptions());
         application.setTenantId(resolveTenantId());
@@ -243,6 +238,56 @@ public class BusinessApplicationService extends ServiceImpl<BusinessApplicationM
         application.setDescription(StringUtils.trimToNull(dto.getDescription()));
         application.setStatus(normalizeStatus(dto.getStatus()));
         application.setOptions(options);
+    }
+
+    private String resolveApplicationCode(
+            String requestedCode,
+            AiBusinessApplication application,
+            boolean create,
+            String suiteCode,
+            String applicationName) {
+        if (!create) {
+            String currentCode = application.getApplicationCode();
+            if (requestedCode != null && !StringUtils.equals(requestedCode, currentCode)) {
+                throw new BusinessException("应用编码创建后不能修改");
+            }
+            validateApplicationCode(currentCode);
+            assertApplicationCodeAvailable(currentCode, application.getId());
+            return currentCode;
+        }
+        if (requestedCode != null) {
+            validateApplicationCode(requestedCode);
+            assertApplicationCodeAvailable(requestedCode, null);
+            return requestedCode;
+        }
+        String baseCode = namingService.buildApplicationCode(suiteCode, applicationName);
+        validateApplicationCode(baseCode);
+        for (int sequence = 1; sequence <= GENERATED_CODE_ATTEMPTS; sequence++) {
+            String candidate = sequence == 1 ? baseCode : appendSequence(baseCode, sequence);
+            if (baseMapper.countByApplicationCode(resolveTenantId(), candidate, null) == 0) {
+                return candidate;
+            }
+        }
+        throw new BusinessException("无法生成唯一应用编码，请在高级设置中填写应用编码");
+    }
+
+    private void validateApplicationCode(String applicationCode) {
+        if (StringUtils.isBlank(applicationCode) || !CODE_PATTERN.matcher(applicationCode).matches()) {
+            throw new BusinessException("应用编码格式不正确（字母开头，仅含字母、数字和下划线，2-64字符）");
+        }
+    }
+
+    private void assertApplicationCodeAvailable(String applicationCode, Long excludeId) {
+        if (baseMapper.countByApplicationCode(resolveTenantId(), applicationCode, excludeId) > 0) {
+            throw new BusinessException("应用编码已存在: " + applicationCode);
+        }
+    }
+
+    private String appendSequence(String baseCode, int sequence) {
+        String suffix = "_" + sequence;
+        String prefix = StringUtils.left(baseCode, APPLICATION_CODE_MAX_LENGTH - suffix.length())
+                .replaceAll("_+$", "");
+        return prefix + suffix;
     }
 
     private void assertSuiteMoveAllowed(Long applicationId) {

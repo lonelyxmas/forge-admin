@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.generator.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
+import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
 import com.mdframe.forge.plugin.generator.service.businessapp.CodeRuleService;
 import com.mdframe.forge.plugin.generator.service.crypto.LowcodeEncryptConfigParser;
 import org.junit.jupiter.api.DisplayName;
@@ -82,6 +83,55 @@ class DynamicCrudServiceAutoGenerationTest {
 
         assertEquals("CUSTOM-001", data.get("materialCode"));
         assertEquals(0, codeRuleService.getGenerateCalls());
+    }
+
+    @Test
+    @DisplayName("allows page-level search fields already exposed by list or edit schemas")
+    void allowsPageLevelSearchFieldsFromRuntimeSchemas() throws Exception {
+        AiCrudConfig config = materialConfig();
+        config.setSearchSchema("""
+                [{"field":"id","type":"number","queryType":"eq"}]
+                """);
+        config.setColumnsSchema("""
+                [{"prop":"customerName","title":"客户名称"}]
+                """);
+        config.setEditSchema("""
+                [{"field":"amount","label":"金额","type":"number"}]
+                """);
+
+        Method method = DynamicCrudService.class.getDeclaredMethod("buildAllowedSearchFields", AiCrudConfig.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<String> allowedFields = (Set<String>) method.invoke(service, config);
+
+        assertTrue(allowedFields.contains("id"));
+        assertTrue(allowedFields.contains("customerName"));
+        assertTrue(allowedFields.contains("amount"));
+    }
+
+    @Test
+    @DisplayName("accepts only supported page-level query operator overrides")
+    void acceptsOnlySupportedPageSearchTypeOverrides() throws Exception {
+        AiCrudConfig config = materialConfig();
+        config.setSearchSchema("""
+                [{"field":"id","type":"number","queryType":"eq"}]
+                """);
+        DynamicCrudQuery query = new DynamicCrudQuery();
+        query.setSearchTypeMap(Map.of(
+                "customerName", "like",
+                "amount", "drop table"
+        ));
+
+        Method method = DynamicCrudService.class.getDeclaredMethod(
+                "buildEffectiveSearchTypeMap", AiCrudConfig.class, DynamicCrudQuery.class, Set.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, String> searchTypes = (Map<String, String>) method.invoke(
+                service, config, query, Set.of("id", "customerName", "amount"));
+
+        assertEquals("eq", searchTypes.get("id"));
+        assertEquals("like", searchTypes.get("customerName"));
+        assertNull(searchTypes.get("amount"));
     }
 
     @Test

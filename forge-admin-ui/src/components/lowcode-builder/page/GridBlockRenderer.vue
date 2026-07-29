@@ -360,7 +360,7 @@
           :list-data-field="block.props?.listDataField || 'records'"
           :list-total-field="block.props?.listTotalField || 'total'"
           :is-encrypt="block.props?.isEncrypt === true"
-          :public-params="block.props?.publicParams || {}"
+          :public-params="designerCrudPublicParams"
           :public-query="block.props?.publicQuery || {}"
           :form-default-values="block.props?.formDefaultValues || {}"
           :submit-default-params="block.props?.submitDefaultParams || {}"
@@ -369,7 +369,7 @@
           @load-list-error="handleCrudPreviewError"
         />
         <div v-if="isStaticCrudPreview" class="ai-crud-preview-static-tip">
-          静态结构预览 · 可填写新增表单；配置真实数据接口后才会提交、查询数据
+          {{ staticCrudPreviewMessage }}
         </div>
       </div>
     </template>
@@ -1070,7 +1070,7 @@ import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRe
 import InlineRichText from '@/components/lowcode-builder/shared/InlineRichText.vue'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
-import { resolveCurrentConfigPlaceholder } from '@/components/lowcode-builder/shared/runtime-crud-props'
+import { appendDesignPreviewToApiValue, buildCrudSearchTypeRequestParams, isDesignPreviewCrudProps, resolveCrudPreviewReloadKey, resolveCrudSearchFieldCatalog, resolveCurrentConfigPlaceholder } from '@/components/lowcode-builder/shared/runtime-crud-props'
 import { matchSimpleExpression, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
@@ -1275,6 +1275,7 @@ const nestedBlockMenuOptions = [
   { label: '删除', key: 'delete' },
 ]
 const crudPreviewMode = computed(() => props.block.props?.previewMode || (props.block.props?.previewLiveData === true ? 'realList' : 'mock'))
+const crudPreviewReloadKey = computed(() => resolveCrudPreviewReloadKey(props.block, props.runtimeCrudProps))
 const gridLayoutCells = computed(() => {
   const rawCells = Array.isArray(props.block.props?.cells) ? props.block.props.cells : []
   const sourceCells = rawCells.length ? rawCells : [{ key: 'cell_1', title: '栅格 1', span: 24, children: [] }]
@@ -1466,7 +1467,17 @@ const aiTableColumns = computed(() => visibleResolvedFields.value.slice(0, 8).ma
   ellipsis: { tooltip: true },
   render: row => renderTableCell(field, row),
 })).concat(aiActionColumn.value ? [aiActionColumn.value] : []))
-const aiSearchSchema = computed(() => resolvedFields.value.slice(0, 4).map(field => toAiFormField(field, 'search')))
+const hasExplicitSearchFieldRefs = computed(() => Object.prototype.hasOwnProperty.call(
+  props.block.props || {},
+  'searchFieldRefs',
+))
+const aiSearchSchema = computed(() => resolveCrudSearchFieldCatalog(props.fields, props.block)
+  .map(field => toAiFormField(field, 'search')))
+const crudSearchTypeRequestParams = computed(() => buildCrudSearchTypeRequestParams(aiSearchSchema.value))
+const designerCrudPublicParams = computed(() => ({
+  ...(props.block.props?.publicParams || {}),
+  ...(hasExplicitSearchFieldRefs.value ? crudSearchTypeRequestParams.value : {}),
+}))
 const aiFormSchema = computed(() => {
   const formFields = props.fields.length ? props.fields : resolvedFields.value
   return formFields.map(field => toAiFormField(field, 'form'))
@@ -1484,6 +1495,8 @@ const effectiveRuntimeCrudProps = computed(() => {
   if (!props.runtimeCrudProps)
     return null
   const blockProps = props.block.props || {}
+  const designPreview = isDesignPreviewCrudProps(props.runtimeCrudProps)
+  const staticDesignPreview = designPreview && blockProps.previewLiveData !== true
   const rules = normalizeCrudHookRules(blockProps.crudHookRules || {}, blockProps.beforeSubmitRules || [])
   const hookHandlers = CRUD_HOOK_RULE_TARGETS.reduce((handlers, target) => {
     const list = (rules[target.value] || []).filter(rule => rule.field)
@@ -1494,16 +1507,23 @@ const effectiveRuntimeCrudProps = computed(() => {
   const runtimeConfigKey = props.runtimeCrudProps.configKey || ''
   const runtimeBlockApi = resolveCurrentConfigPlaceholder(blockProps.api, runtimeConfigKey)
   const runtimeBlockApiConfig = Object.fromEntries(Object.entries(blockApiConfig.value)
-    .map(([key, value]) => [key, resolveCurrentConfigPlaceholder(value, runtimeConfigKey)])
+    .map(([key, value]) => {
+      const resolved = resolveCurrentConfigPlaceholder(value, runtimeConfigKey)
+      return [key, designPreview ? appendDesignPreviewToApiValue(resolved) : resolved]
+    })
     .filter(([, value]) => value))
   return {
     ...props.runtimeCrudProps,
     ...hookHandlers,
+    ...(staticDesignPreview ? { beforeSubmit: preventStaticCrudSubmit } : {}),
+    lazy: staticDesignPreview,
     api: runtimeBlockApi || props.runtimeCrudProps.api || '',
     rowKey: blockProps.rowKey || props.runtimeCrudProps.rowKey || 'id',
     title: blockProps.title || props.runtimeCrudProps.title,
     columns: props.runtimeCrudProps.columns?.length ? props.runtimeCrudProps.columns : aiTableColumns.value,
-    searchSchema: props.runtimeCrudProps.searchSchema?.length ? props.runtimeCrudProps.searchSchema : aiSearchSchema.value,
+    searchSchema: hasExplicitSearchFieldRefs.value
+      ? aiSearchSchema.value
+      : (props.runtimeCrudProps.searchSchema?.length ? props.runtimeCrudProps.searchSchema : aiSearchSchema.value),
     editSchema: props.runtimeCrudProps.editSchema?.length ? props.runtimeCrudProps.editSchema : aiFormSchema.value,
     apiConfig: {
       ...(props.runtimeCrudProps.apiConfig || {}),
@@ -1535,10 +1555,10 @@ const effectiveRuntimeCrudProps = computed(() => {
     hideToolbar: blockProps.hideToolbar ?? props.runtimeCrudProps.hideToolbar,
     hideAdd: blockProps.hideAdd ?? props.runtimeCrudProps.hideAdd,
     hideBatchDelete: blockProps.hideBatchDelete ?? props.runtimeCrudProps.hideBatchDelete,
-    showImport: blockProps.showImport ?? props.runtimeCrudProps.showImport ?? true,
-    showExport: blockProps.showExport ?? props.runtimeCrudProps.showExport ?? true,
-    showExportTasks: blockProps.showExportTasks ?? props.runtimeCrudProps.showExportTasks,
-    enableCustomQuery: blockProps.enableCustomQuery ?? props.runtimeCrudProps.enableCustomQuery ?? true,
+    showImport: staticDesignPreview ? false : (blockProps.showImport ?? props.runtimeCrudProps.showImport ?? true),
+    showExport: staticDesignPreview ? false : (blockProps.showExport ?? props.runtimeCrudProps.showExport ?? true),
+    showExportTasks: staticDesignPreview ? false : (blockProps.showExportTasks ?? props.runtimeCrudProps.showExportTasks),
+    enableCustomQuery: staticDesignPreview ? false : (blockProps.enableCustomQuery ?? props.runtimeCrudProps.enableCustomQuery ?? true),
     addButtonText: blockProps.addButtonText || props.runtimeCrudProps.addButtonText,
     exportButtonText: blockProps.exportButtonText || props.runtimeCrudProps.exportButtonText,
     exportFileName: blockProps.exportFileName || props.runtimeCrudProps.exportFileName,
@@ -1560,7 +1580,7 @@ const effectiveRuntimeCrudProps = computed(() => {
     isEncrypt: blockProps.isEncrypt ?? props.runtimeCrudProps.isEncrypt,
     publicParams: {
       ...(props.runtimeCrudProps.publicParams || {}),
-      ...(blockProps.publicParams || {}),
+      ...designerCrudPublicParams.value,
     },
     publicQuery: {
       ...(props.runtimeCrudProps.publicQuery || {}),
@@ -1607,11 +1627,6 @@ function normalizeModalType(value) {
   return ['modal', 'drawer'].includes(normalized) ? normalized : ''
 }
 
-function preventStaticCrudSubmit() {
-  window.$message?.info('当前是静态结构预览，绑定真实数据接口后即可提交新增数据')
-  return false
-}
-
 const designerCrudHookHandlers = computed(() => {
   const rules = normalizeCrudHookRules(props.block.props?.crudHookRules || {}, props.block.props?.beforeSubmitRules || [])
   return CRUD_HOOK_RULE_TARGETS.reduce((handlers, target) => {
@@ -1643,10 +1658,24 @@ const resolvedApiConfig = computed(() => ({
 }))
 const hasConfiguredCrudRequest = computed(() => {
   const blockProps = props.block.props || {}
-  return Boolean(blockProps.api || Object.values(resolvedApiConfig.value).some(Boolean))
+  const runtimeApiConfig = props.runtimeCrudProps?.apiConfig || {}
+  return Boolean(blockProps.api
+    || props.runtimeCrudProps?.api
+    || Object.values(resolvedApiConfig.value).some(Boolean)
+    || Object.values(runtimeApiConfig).some(Boolean))
 })
 const shouldRequestCrudPreviewApi = computed(() => props.block.props?.previewLiveData === true && hasConfiguredCrudRequest.value)
 const isStaticCrudPreview = computed(() => props.block.blockType === 'AiCrudPage' && !shouldRequestCrudPreviewApi.value)
+const staticCrudPreviewMessage = computed(() => hasConfiguredCrudRequest.value
+  ? '静态结构预览 · 已连接数据存储，可在右侧开启真实数据预览'
+  : '静态结构预览 · 连接数据存储后即可提交、查询数据')
+
+function preventStaticCrudSubmit() {
+  window.$message?.info(hasConfiguredCrudRequest.value
+    ? '当前是静态结构预览，可在右侧开启真实数据预览后提交数据'
+    : '当前是静态结构预览，连接数据存储后即可提交新增数据')
+  return false
+}
 const resolvedDesignerCrudHookHandlers = computed(() => ({
   ...designerCrudHookHandlers.value,
   ...(isStaticCrudPreview.value ? { beforeSubmit: preventStaticCrudSubmit } : {}),
@@ -1868,28 +1897,62 @@ function renderTableCell(field, row = {}) {
 }
 
 function toAiFormField(field, mode = 'form') {
+  const queryType = field.queryType || field.searchType || 'eq'
   return {
     field: field.field,
     label: field.label || field.field,
     type: resolveAiFieldType(field),
-    placeholder: mode === 'search' ? `请输入${field.label || field.field}` : field.placeholder || `请输入${field.label || field.field}`,
+    queryType,
+    placeholder: field.placeholder || (mode === 'search' ? `请输入${field.label || field.field}` : `请输入${field.label || field.field}`),
     span: field.span || 1,
     clearable: true,
+    multiple: field.multiple ?? queryType === 'in',
     options: field.options || [],
     dictType: field.dictType || '',
+    props: field.props || {},
   }
 }
 
 function resolveAiFieldType(field) {
-  if (field.dictType)
-    return 'dictSelect'
-  const type = field.componentType || field.dataType || 'input'
+  const type = field.componentType || field.type || field.dataType || 'input'
+  const queryType = String(field.queryType || field.searchType || '').toLowerCase()
+  if (queryType === 'between') {
+    if (['date', 'daterange'].includes(type))
+      return 'daterange'
+    if (['datetime', 'datetimerange'].includes(type))
+      return 'datetimerange'
+    if (['time', 'timerange'].includes(type))
+      return 'timerange'
+  }
   if (['int', 'bigint', 'decimal', 'number'].includes(type))
     return 'number'
-  if (['datetime', 'date', 'time'].includes(type))
+  if ([
+    'input',
+    'textarea',
+    'select',
+    'dictSelect',
+    'radio',
+    'checkbox',
+    'switch',
+    'date',
+    'datetime',
+    'daterange',
+    'datetimerange',
+    'time',
+    'timerange',
+    'cascader',
+    'regionTreeSelect',
+    'orgTreeSelect',
+    'userSelect',
+    'treeSelect',
+    'objectReference',
+    'recordSelector',
+  ].includes(type)) {
     return type
-  if (['textarea', 'select', 'checkbox', 'radio', 'switch'].includes(type))
-    return type
+  }
+  if (field.dictType) {
+    return 'dictSelect'
+  }
   return 'input'
 }
 
@@ -2569,53 +2632,40 @@ onMounted(() => {
   loadBlockBindingData()
 })
 
-watch(
-  () => [
-    props.block.blockType,
-    props.block.props?.sourceModelCode,
-    props.block.props?.keyField,
-    props.block.props?.parentField,
-    props.block.props?.labelField,
-    props.block.props?.loadMode,
-    props.runtimeCrudProps?.apiConfig?.tree,
-  ],
-  () => loadRuntimeTree(),
-)
+watch([
+  () => props.block.blockType,
+  () => props.block.props?.sourceModelCode,
+  () => props.block.props?.keyField,
+  () => props.block.props?.parentField,
+  () => props.block.props?.labelField,
+  () => props.block.props?.loadMode,
+  () => props.runtimeCrudProps?.apiConfig?.tree,
+], () => loadRuntimeTree())
+
+watch([
+  () => props.block.blockType,
+  () => props.block.props?.dataSourceType,
+  () => props.block.props?.detailApi,
+  () => props.block.props?.detailMethod,
+  () => props.block.props?.paramsText,
+  () => props.block.props?.dataPath,
+  () => props.runtimeRecord,
+], () => loadDetailInfoRecord())
+
+watch([
+  () => props.block.blockType,
+  () => props.block.props?.dataBinding?.enabled,
+  () => props.block.props?.dataBinding?.sourceType,
+  () => props.block.props?.dataBinding?.api,
+  () => props.block.props?.dataBinding?.method,
+  () => props.block.props?.dataBinding?.paramsText,
+  () => props.block.props?.dataBinding?.dataPath,
+  () => props.block.props?.dataBinding?.contextPath,
+  () => props.runtimeRecord,
+], () => loadBlockBindingData())
 
 watch(
-  () => [
-    props.block.blockType,
-    props.block.props?.dataSourceType,
-    props.block.props?.detailApi,
-    props.block.props?.detailMethod,
-    props.block.props?.paramsText,
-    props.block.props?.dataPath,
-    props.runtimeRecord,
-  ],
-  () => loadDetailInfoRecord(),
-)
-
-watch(
-  () => [
-    props.block.blockType,
-    props.block.props?.dataBinding?.enabled,
-    props.block.props?.dataBinding?.sourceType,
-    props.block.props?.dataBinding?.api,
-    props.block.props?.dataBinding?.method,
-    props.block.props?.dataBinding?.paramsText,
-    props.block.props?.dataBinding?.dataPath,
-    props.block.props?.dataBinding?.contextPath,
-    props.runtimeRecord,
-  ],
-  () => loadBlockBindingData(),
-)
-
-watch(
-  () => [
-    props.block.props?.previewLiveData,
-    crudPreviewMode.value,
-    props.block.props?.previewRecordId,
-  ],
+  crudPreviewReloadKey,
   () => {
     if (props.block.blockType !== 'AiCrudPage' || props.block.props?.previewLiveData !== true)
       return

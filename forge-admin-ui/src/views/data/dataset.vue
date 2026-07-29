@@ -1,42 +1,9 @@
 <template>
   <div class="dataset-studio">
-    <section class="studio-hero">
-      <div class="hero-main">
-        <p class="hero-kicker">
-          Data Asset Workspace
-        </p>
-        <h1 class="hero-title">
-          数据集资产管理台
-        </h1>
-        <p class="hero-description">
-          用分类树组织业务域，用发布流转控制可用性。已发布数据集只读，先下架再修改，保证下游报表与分析消费稳定。
-        </p>
-      </div>
-
-      <div class="hero-stats">
-        <div v-for="card in statCards" :key="card.key" class="hero-stat-card">
-          <div class="hero-stat-label">
-            {{ card.label }}
-          </div>
-          <div class="hero-stat-value">
-            {{ card.value }}
-          </div>
-          <div class="hero-stat-note">
-            {{ card.note }}
-          </div>
-        </div>
-      </div>
-    </section>
-
     <div class="dataset-workspace">
       <aside class="workspace-sidebar">
         <div class="sidebar-head">
-          <div>
-            <p class="panel-kicker">
-              Taxonomy
-            </p>
-            <h3>数据集分类</h3>
-          </div>
+          <h3>数据集分类</h3>
           <n-button type="primary" secondary @click="goToCategoryManage">
             分类管理
           </n-button>
@@ -111,12 +78,7 @@
       <section class="workspace-main">
         <div class="main-toolbar">
           <div class="toolbar-title-row">
-            <div>
-              <p class="panel-kicker">
-                Asset Inventory
-              </p>
-              <h3>数据集列表</h3>
-            </div>
+            <h3>数据集列表</h3>
             <div class="toolbar-title-meta">
               <span class="toolbar-scope">{{ activeCategoryScopeLabel }}</span>
               <n-button @click="handleResetFilters">
@@ -191,14 +153,12 @@
           :striped="false"
           :bordered="false"
           :scroll-x="1700"
-          max-height="calc(100vh - 310px)"
           :edit-grid-cols="12"
           edit-label-placement="top"
           edit-form-class="data-dataset-edit-form"
           modal-type="modal"
           modal-width="min(1480px, calc(100vw - 32px))"
           add-button-text="新增数据集"
-          @load-list-success="handleDatasetLoadSuccess"
           @modal-close="handleDatasetModalClose"
         >
           <template #form-datasetEditor="{ formData, updateValue }">
@@ -1659,12 +1619,6 @@ const queryForm = reactive({
   publishStatus: null,
 })
 
-const datasetStats = reactive({
-  total: 0,
-  published: 0,
-  editable: 0,
-})
-
 const datasetTypeOptions = computed(() => dict.value.data_dataset_type || [])
 
 const statusOptions = computed(() => toNumberDictOptions(dict.value.sys_enable_disable))
@@ -1796,33 +1750,6 @@ const activeCategoryScopeLabel = computed(() => {
   }
   return '当前范围：全部数据集'
 })
-
-const statCards = computed(() => [
-  {
-    key: 'total',
-    label: '筛选结果',
-    value: datasetStats.total,
-    note: '匹配当前分类与搜索条件的数据集总数',
-  },
-  {
-    key: 'published',
-    label: '当前页已发布',
-    value: datasetStats.published,
-    note: '可被报表和运行时直接消费的数据集',
-  },
-  {
-    key: 'editable',
-    label: '当前页可编辑',
-    value: datasetStats.editable,
-    note: '未发布或已下架，允许继续调整结构',
-  },
-  {
-    key: 'category',
-    label: '分类总数',
-    value: countTreeNodes(categoryTree.value),
-    note: '用于业务划分的数据集分类节点数量',
-  },
-])
 
 const categoryTreeNodes = computed(() => buildCategoryTreeNodes(filterCategoryTree(categoryTree.value, categoryKeyword.value)))
 const categoryTreeSelectOptions = computed(() => buildCategorySelectOptions(categoryTree.value))
@@ -2370,10 +2297,6 @@ function findCategoryById(tree, id) {
   return null
 }
 
-function countTreeNodes(tree) {
-  return (tree || []).reduce((total, item) => total + 1 + countTreeNodes(item.children), 0)
-}
-
 function handleCategoryTreeSelect(keys) {
   const nextId = Array.isArray(keys) && keys.length > 0 ? keys[0] : null
   if (!nextId) {
@@ -2419,12 +2342,6 @@ function handleResetFilters() {
   activeCategoryScope.value = 'all'
   selectedCategoryId.value = null
   crudRef.value?.search({})
-}
-
-function handleDatasetLoadSuccess({ list, total }) {
-  datasetStats.total = total || 0
-  datasetStats.published = (list || []).filter(item => item.publishStatus === 1).length
-  datasetStats.editable = (list || []).filter(item => item.publishStatus !== 1).length
 }
 
 function handleAddDataset() {
@@ -3841,117 +3758,15 @@ function goToPrevStep() {
 
 <style scoped>
 .dataset-studio {
-  background: #f8fafc;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 10px;
-}
-
-.studio-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
+  background: #f8fafc;
+  box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-.workspace-sidebar,
-.workspace-main {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 12px;
-  background: #fff;
-}
-
-.hero-main {
-  min-width: 0;
-}
-
-.hero-kicker,
-.panel-kicker {
-  margin: 0 0 4px;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 720px;
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.studio-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 10px 14px;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--panel-radius);
-  background:
-    radial-gradient(circle at top left, rgb(59 130 246 / 14%), transparent 36%),
-    radial-gradient(circle at 90% 25%, rgb(14 165 233 / 12%), transparent 24%),
-    linear-gradient(135deg, rgb(255 255 255 / 96%), rgb(248 251 255 / 94%));
-  box-shadow: var(--panel-shadow);
-  backdrop-filter: blur(14px);
 }
 
 .workspace-sidebar,
@@ -3965,85 +3780,29 @@ function goToPrevStep() {
   backdrop-filter: blur(14px);
 }
 
-.hero-main {
-  min-width: 0;
-}
-
-.hero-kicker,
-.panel-kicker {
-  margin: 0 0 3px;
-  color: #0f766e;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.18;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 720px;
-  margin: 4px 0 0;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgb(148 163 184 / 14%);
-  border-radius: 10px;
-  background: rgb(255 255 255 / 78%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
-}
-
-.hero-stat-card::after {
-  display: none;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.hero-stat-note {
-  display: none;
-}
-
 .dataset-workspace {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.workspace-sidebar {
+  overflow-y: auto;
+}
+
+.workspace-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* AiCrudPage 依赖父级 flex 链提供高度，否则 flex-height 表格体会塌陷为 0 */
+.workspace-main :deep(.ai-crud-page) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .workspace-sidebar,
@@ -6479,14 +6238,6 @@ function goToPrevStep() {
 }
 
 @media (max-width: 1400px) {
-  .studio-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .dataset-workspace {
     grid-template-columns: 1fr;
   }
@@ -6499,14 +6250,6 @@ function goToPrevStep() {
 @media (max-width: 960px) {
   .dataset-studio {
     padding: 12px;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .hero-description {
-    white-space: normal;
   }
 
   .toolbar-filters {

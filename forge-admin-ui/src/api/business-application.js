@@ -52,6 +52,10 @@ export function saveBusinessApplicationObjects(id, data) {
   return request.put(`/ai/business/application/${id}/objects`, data || [], ENCRYPTED_REQUEST)
 }
 
+export function provisionBusinessApplicationFormData(id, data) {
+  return request.post(`/ai/business/application/${id}/form-data/provision`, data, ENCRYPTED_REQUEST)
+}
+
 export function initializeBusinessApplicationTemplate(id, data) {
   return request.post(`/ai/business/application/${id}/initialize-template`, data, ENCRYPTED_REQUEST)
 }
@@ -63,6 +67,13 @@ export function businessApplicationWorkspace(id) {
 export function businessApplicationWorkspaceByCode(applicationCode) {
   return request.get(
     `/ai/business/application/by-code/${encodeURIComponent(applicationCode)}/workspace`,
+    ENCRYPTED_REQUEST,
+  )
+}
+
+export function businessApplicationRuntimeByCode(applicationCode) {
+  return request.get(
+    `/ai/business/application/by-code/${encodeURIComponent(applicationCode)}/runtime`,
     ENCRYPTED_REQUEST,
   )
 }

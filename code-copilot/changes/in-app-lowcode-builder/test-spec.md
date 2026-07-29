@@ -6,7 +6,7 @@
 
 - 遵循 `code-copilot/rules/automated-testing-standard.md`：先记录基线，再按任务增量执行。
 - 编排 Schema 使用 Vitest 单测先行；组件交互使用 `@vue/test-utils` 定向验证。
-- 本变更不新增后端接口或数据库，后端真实 API/Flyway 不在本轮验证范围。
+- Task 22 新增应用级表单数据准备接口与后端事务编排；本轮验证 Java 编译、定向 JUnit 和前端契约，不启动真实服务、数据库或 Flyway。
 
 ## 1. 测试框架
 
@@ -14,6 +14,7 @@
 |---|---|
 | 前端测试 | Vitest（`pnpm test`） |
 | Vue 组件测试 | `@vue/test-utils` |
+| 后端测试 | JUnit 5（Maven Surefire） |
 | 构建 | Vite（`pnpm build`） |
 | Lint | ESLint（`pnpm exec eslint`） |
 
@@ -32,8 +33,16 @@
 ### P0.1 — 空应用与页面模板
 
 - 新建应用没有导航节点时展示应用介绍空态，不持久化虚拟首页。
-- 新建页面先选择模板；CRUD、左树右表、主子表必须绑定已有业务对象。
-- 数据模板只保存 `objectRef`、模板类型等轻量引用；不得复制业务对象字段、表单或列表 Schema。
+- CRUD、左树右表、主子表模板直接创建页面和页面表单，不要求先绑定已有业务对象。
+- 保存表单后自动准备内部数据存储并显式回绑 CRUD；使用已有数据保留为高级设置。
+
+### P0.2 — 自动托管表单数据表
+
+- 首次保存 `PAGE_FORM` 托管表单时，元数据事务先提交，随后执行一次安全 `CREATE TABLE` 同步。
+- 重复保存同一表单复用对象，并根据最新设计再次同步；新增字段走安全 `ADD COLUMN`。
+- 数据源必须同时满足启用、可写、非只读、`LOWCODE_RUNTIME` 和 `allowRuntimeDdl=1`；不满足时不创建新托管对象。
+- 自动同步入口拒绝非 `PAGE_FORM` 对象，手工同步继续要求权限、设计版本和二次确认。
+- DDL 禁用、非追加式变更或执行异常时不回滚已经提交的表单元数据，返回可重试用户提示。
 
 ### P1 — 前端状态与组件
 
@@ -65,6 +74,14 @@
 | 2026-07-21 | 实施前基线 | 待执行 | pending | 新变更尚无前端测试 |
 
 ## 5. 本轮增量验证
+
+### Task 25 增量计划
+
+1. 先运行 `BusinessApplicationFormDataServiceTest` 与 `BusinessObjectDatabaseSyncServiceTest` 新用例，确认在缺少自动同步实现时失败。
+2. 使用 JDK 17 执行生成器 reactor `test-compile`，避免 Surefire 复用旧测试 class。
+3. 定向执行 `BusinessApplicationFormDataServiceTest,BusinessObjectDatabaseSyncServiceTest,BusinessObjectTableMappingServiceTest`，要求 `Tests run` 非 0 且无失败。
+4. 执行相关 Java 文件 `git diff --check`；本轮无前端协议变化时不重复运行前端构建。
+5. 不启动 MySQL、Flyway、后端或 Vite，不实际执行 DDL；真实数据库建表和保存表单链路由用户重启环境后验收。
 
 | 时间 | 变更范围 | 必跑项 | 实际命令 | 结果 | 跳过/警告 |
 |---|---|---|---|---|---|
@@ -153,3 +170,175 @@
 - 新建应用默认使用 `BLANK` 起点，只显示基础信息并直接创建。
 - 创建成功后新开应用运行壳编辑态，地址携带 `edit=1&fresh=1`；不得默认初始化旧式 CRUD 模板。
 - “从已有对象整理应用”仍保留为迁移/高级入口。
+
+## 11. 2026-07-27 发布与统一体验增量测试
+
+### 11.1 后端必跑
+
+- 页面依赖检查器：纯内容零对象通过；零对象 CRUD 阻断；单对象回退通过；多对象显式绑定通过；嵌套区块失效引用阻断；多个主对象阻断。
+- 应用对象编排：单个 `SHARED` / `DETAIL` 关联保存后自动规范为 `PRIMARY`，两个 `PRIMARY` 仍拒绝。
+- 工作台轻量就绪度：纯内容应用不再显示主对象阻断；有数据依赖且无法解析对象时显示结构化阻断。
+- 已发布运行配置：读取 `lastPublishVersion` 不可变快照；未发布应用拒绝；页面权限过滤、父目录保留和首页回退正确。
+- 发布运行单：`PAGE_MENUS` 有可读步骤名，步骤执行后失败状态为 `PARTIAL`。
+
+### 11.2 前端必跑
+
+- 普通运行态请求 published runtime API；`edit=1` / `draft=1` 请求 workspace 草稿；查询模式变化时重新加载，且不存在重复 mounted 请求。
+- 应用中心仅保留一个“新建应用”按钮并以 `BLANK` 创建，空态不再暴露“页面应用 / 传统业务对象应用”分类。
+- 页面设计器内发布抽屉能触发检查、显示问题、执行发布并刷新当前应用。
+- 缺少业务对象的数据模板在当前设计器提供新建、关联已有对象和数据库导入入口。
+
+### 11.3 验证命令
+
+- 后端：生成器模块相关 JUnit 定向测试（确认 `Tests run` 非 0）及模块编译；如聚合构建被仓库既有注解处理器问题阻断，记录完整证据。
+- 前端：相关 Vue/JS ESLint、编排 Schema Vitest、`NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`。
+- 本轮不启动真实数据库、Flyway、后端服务或 Vite；浏览器角色权限与发布 E2E 作为人工验收项明确记录。
+
+### 11.4 执行结果
+
+- 后端 reactor `test-compile`：29 个模块 `BUILD SUCCESS`，生成器编译 91 个测试源文件。
+- 后端定向测试：6 个测试类共 26 个用例，`Failures: 0, Errors: 0, Skipped: 0`。
+- 前端 ESLint：0 error；`index.vue` 保留 3 条既有 `vue/attributes-order` warning。
+- 编排 Schema Vitest：1 个文件、9 个用例全部通过。
+- 前端生产构建：Node `v24.14.0`，最终重跑 Vite 转换 8789 个模块，`built in 2m 50s`；仅保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
+- `git diff --check`：通过，无空白错误。
+- 未执行：真实 MySQL/Flyway、后端/Vite 服务、浏览器角色权限和发布菜单 E2E；本轮未启动任何需清理的服务。
+
+## 12. 2026-07-28 页面表单升级与字段配置增量测试
+
+### 12.1 自动化范围
+
+- 当稳定页面模型的 `fields` 为空、当前组件字段目录非空时，列表布局同步必须保留已选 `fieldRefs` 与 `searchFieldRefs`。
+- 页面表单升级载荷必须包含归一化 `formDesignerSchema` 和可持久化业务字段，保留字段编码、数据库列名、必填、组件类型与列表/表单可见性。
+- `AiCrudPage` 未绑定对象时可直接选择应用已有对象；从当前页面表单创建对象后，新增对象加入应用并自动绑定当前区块。
+- 对象尚未发布 CRUD 配置时，页面编辑态可从对象设计草稿读取字段目录；正式运行态不得读取设计草稿兜底。
+
+### 12.2 边界与人工项
+
+- 本轮不启动 MySQL、Flyway、后端服务或 Vite，不执行真实 DDL；页面表单升级后的数据库同步和对象发布保留人工确认。
+- 浏览器人工验收：字段选择/隐藏/排序、已有对象直绑、从表单新建对象、关闭抽屉后当前 CRUD 回显对象和字段、发布阻断从“未绑定对象”推进到对象自身真实就绪项。
+
+### 12.3 执行结果
+
+- 新增 2 个纯函数测试文件：字段同步 1 例、页面表单升级与对象草稿字段归一化 3 例；连同原编排 Schema 共 3 个文件、13 个用例全部通过。
+- 相关 Vue/JS ESLint：0 error、0 warning。
+- 生产构建：Node `v24.14.0`，Vite 转换 8790 个模块，`built in 1m 54s`；保留仓库既有 `UserSelectModal` 重名、动态/静态导入和 CSS `//` 注释警告。
+- `git diff --check`：通过，无空白错误。
+- 未启动 MySQL、Flyway、后端服务或 Vite；未执行真实 DDL、对象发布或浏览器 E2E，无服务需要清理。
+
+## 13. 2026-07-28 表单保存自动准备数据存储增量测试
+
+### 13.1 自动化范围
+
+- 后端：默认可写 `LOWCODE_RUNTIME` 数据源选择、首次创建、重复保存复用、关联丢失恢复、空字段拒绝和无可写数据源失败关闭。
+- 前端：单表单多 CRUD 只准备一次、空持久化字段跳过、托管对象继续同步、手工绑定不改写、根/嵌套区块回绑、19 位 ID 字符串保持和页面级手工绑定保护。
+- 交互：数据页面模板直接创建页面并进入表单设计；表单草稿、自动准备、对象引用二次保存和失败重试使用单层反馈。
+
+### 13.2 执行结果
+
+- 生成器 reactor `test-compile`：29 个模块 `BUILD SUCCESS`，生成器编译 92 个测试源。
+- 后端定向 JUnit：7 个测试类共 32 个用例，0 failure、0 error、0 skipped；新服务测试使用项目 Stub/Proxy 风格，不依赖本机不可用的 Mockito inline attach。
+- 前端定向 ESLint：0 error、0 warning。
+- 前端 Vitest：4 个文件共 18 个用例全部通过。
+- 前端生产构建：Node `v20.19.0`，Vite 转换 8791 个模块，`built in 2m 10s`；仅保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
+- 未启动 MySQL、Flyway、后端服务、Vite 或浏览器；未执行 DDL、对象发布或应用发布，无服务需要清理。真实接口和浏览器点击链路保留人工验收。
+
+## 14. 2026-07-28 自动回绑后的草稿 CRUD 预览增量测试
+
+### 14.1 自动化范围
+
+- `buildRuntimeCrudProps` 在设计态为列表、详情、新增、修改、删除等端点追加 `designPreview=1`，替换 `当前配置` 占位符，并避免重复追加；正式运行端点保持不变。
+- 应用编辑/草稿模式调用 `crudConfigRender` 时显式启用设计预览；对象设计器字段兜底同样标记为草稿运行参数。
+- 设计画布默认静态预览，不自动加载尚未同步数据库的数据；显式开启真实数据预览时仍通过带授权标记的草稿 CRUD 接口请求。
+- 执行相关 JS/Vue ESLint、定向 Vitest、前端生产构建和 `git diff --check`。
+
+### 14.2 边界与人工项
+
+- 不启动后端、Vite、MySQL 或 Flyway，不执行 DDL、对象发布或应用发布。
+- 真实浏览器保存表单后的 Network 验收由用户重启现有环境后执行，重点确认默认画布没有自动 `/ai/crud/.../page` 请求，开启真实数据预览后的请求携带 `designPreview=1`。
+
+### 14.3 执行结果
+
+- Node `v20.19.0`；相关 JS/Vue ESLint 0 error、0 warning。
+- Vitest：3 个文件、9 个用例全部通过，覆盖设计态全端点标记、正式运行不改写、标记去重、草稿参数识别以及既有表单回绑/字段同步回归。
+- Vite 生产构建：8791 个模块，`built in 2m 13s`；保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
+- `git diff --check` 通过。未启动后端、Vite、MySQL、Flyway 或浏览器，未执行 DDL、对象发布或应用发布，无服务需要清理。
+
+## 15. 2026-07-28 模型编码边界与应用编码自动生成增量测试
+
+### 15.1 自动化范围
+
+- 后端命名：`normalizeModelCode` 和 `buildModelCode` 对长输入始终返回不超过 48 位的合法编码；对象编码已包含业务域前缀时不重复拼接。
+- 表单数据准备：超长应用编码与表单名称组合创建托管对象时，请求中的 `modelCode` 不超过 48 位，且对象关联/设计同步语义保持不变。
+- 应用创建：编码为空时根据业务域和名称自动生成；中文未知词使用稳定摘要；租户内重名按后缀避让；显式重复/非法编码继续拒绝；创建结果同时返回 ID 和最终编码。
+- 前端命名：数据库表导入和对象向导使用的 `buildModelCode` 与后端一致限制为 48 位。
+- 前端交互：普通新建不把应用编码作为必填项，编码仅在高级设置中可选填写；创建完成、初始化失败保留草稿和成功跳转都使用服务端最终编码。
+
+### 15.2 验证命令与边界
+
+- 后端先执行生成器 reactor `test-compile`，再执行 `BusinessNamingServiceTest`、`BusinessApplicationFormDataServiceTest`、`BusinessApplicationServiceTest` 和 `BusinessApplicationControllerTest` 定向 JUnit，确认测试数非 0。
+- 前端使用 Node `v20.19.0` 执行相关 JS/Vue ESLint、命名工具 Vitest 和生产构建；最后执行目标文件及全局 `git diff --check`。
+- 不启动 MySQL、Flyway、后端、Vite 或浏览器，不执行真实 DDL、对象发布或应用发布。真实接口重试和页面跳转由用户重启当前环境后人工验收。
+
+### 15.3 执行结果
+
+- 生成器 reactor `test-compile`：29 个模块 `BUILD SUCCESS`，生成器编译 93 个测试源。
+- 后端定向 JUnit：4 个测试类共 27 个用例，0 failure、0 error、0 skipped。
+- 前端定向 ESLint：修正 1 条 import 顺序错误后最终 0 error、0 warning。
+- 前端 Vitest：3 个文件共 10 个用例全部通过，包含模型编码、创建响应和既有表单数据准备回归。
+- 前端生产构建：Node `v20.19.0`，Vite 转换 8792 个模块，`built in 1m 50s`；仅保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
+- 未启动 MySQL、Flyway、后端、Vite 或浏览器，未执行 DDL、对象发布或应用发布；真实接口重试和页面跳转保留人工验收。
+
+## 16. Task 25 自动托管数据表增量结果
+
+- 生成器 reactor `test-compile`：29 个模块 `BUILD SUCCESS`，生成器编译 93 个测试源。
+- 后端定向 JUnit：`BusinessApplicationFormDataServiceTest`、`BusinessObjectDatabaseSyncServiceTest`、`BusinessObjectTableMappingServiceTest` 共 21 个用例，0 failure、0 error、0 skipped。
+- 已覆盖元数据事务提交后才执行建表、首次/重复保存同步、DDL 失败保留设计并重试、非托管对象拒绝、非追加式 DDL 拒绝、自动建表开关和历史快照兼容。
+- 目标差异 `git diff --check` 通过；本轮没有前端协议变化，因此未重复执行前端构建。
+- 未启动 MySQL、Flyway、后端、Vite 或浏览器，未实际执行 DDL；真实建表由用户重启后重新保存原表单验收。
+
+## 17. Task 26 查询与发布状态增量计划
+
+1. 前端先补红灯用例：运行字段只含 ID 时仍合并保留表单字段；`searchFieldRefs` 独立于列表 `fieldRefs` 生成查询 Schema；自动托管绑定首次启用真实预览并能升级旧绑定，手工对象不被覆盖。
+2. 后端先补红灯用例：应用级重同步只处理来源应用、表单标识一致的 `PAGE_FORM` 对象；发布检查和最终发布源码契约均在 readiness 前调用重同步。
+3. 实现后执行相关 Vitest 和 JUnit；测试源码变化后先执行生成器 reactor `test-compile`，再执行 Surefire 并核对测试数非 0。
+4. 使用 Node `v20.19.0` 执行目标 JS/Vue ESLint和生产构建，最后执行 `git diff --check`。
+5. 不启动 MySQL、Flyway、后端、Vite 或浏览器，不实际执行 DDL；真实查询、新增与发布由用户重启后验收。
+
+### 17.1 执行结果
+
+- Node `v20.19.0`：目标 ESLint 0 error、0 warning；3 个 Vitest 文件共 15 个用例全部通过，覆盖表单字段合并、查询字段独立配置、显式空查询、旧区块兼容、托管预览初始化与遗留绑定修复。
+- JDK 17：生成器 reactor 29 个模块 `test-compile` 成功并编译 93 个测试源；`BusinessApplicationDraftPreviewContractTest`、`BusinessApplicationFormDataServiceTest`、`BusinessObjectDatabaseSyncServiceTest`、`BusinessApplicationPhaseFiveControllerTest`、`BusinessApplicationControllerTest` 共 32 个 JUnit，0 failure、0 error、0 skipped。
+- Vite 生产构建成功：8792 个模块，`built in 4m 39s`；仅保留仓库既有的 `UserSelectModal` 重名、动态/静态导入和 CSS `//` 注释警告。
+- `git diff --check` 无输出。未启动 MySQL、Flyway、后端、Vite 或浏览器，未实际执行 DDL 或发布；真实安全差异自动同步和高风险差异提示由用户重启环境后验收。
+
+## 18. Task 27 预览循环与发布性能增量计划
+
+1. 前端纯函数测试覆盖：预览成功/失败状态和文案变化不改变请求签名；真实预览开关、模式、记录或列表 API 变化会改变签名。
+2. 静态审查 `GridBlockRenderer` 的监听源，确认不再用返回新数组的单 getter 监听区块对象；检查发布抽屉入口不再自动调用 `runPublishCheck()`。
+3. 后端 JUnit 在一个应用中同时放入 `IN_SYNC`、待同步、手工和其它应用托管对象，断言只有待同步的当前应用托管对象调用额外表映射同步。
+4. 测试源码变化后先执行生成器 reactor `test-compile`，再跑定向 Surefire 并核对测试数；前端使用 Node `v20.19.0` 执行目标 ESLint、Vitest 和生产构建，最后执行 `git diff --check`。
+5. 不启动 MySQL、Flyway、后端、Vite 或浏览器，不执行真实 DDL/发布；真实 Network 请求次数和生产数据库耗时由用户重启环境后验收。
+
+### 18.1 执行结果
+
+- 前端稳定请求身份测试通过：预览结果状态/文案变化不改变 reload key，真实预览开关、记录和列表 API 变化会改变 key；3 个定向 Vitest 文件共 17 个用例全部通过。
+- `GridBlockRenderer.vue`、共享请求参数和应用运行页目标 ESLint 0 error、0 warning；静态审查确认发布抽屉入口不再隐式调用 `runPublishCheck()`。
+- 后端生成器 reactor 29 个模块 `test-compile` 成功并编译 93 个测试源；`BusinessApplicationDraftPreviewContractTest`、`BusinessApplicationFormDataServiceTest`、`BusinessObjectDatabaseSyncServiceTest` 共 23 个 JUnit，0 failure、0 error、0 skipped。
+- Vite 生产构建成功：8792 个模块，`built in 3m 29s`；只有仓库既有组件重名、动态/静态导入和 CSS `//` 注释警告。`git diff --check` 无输出。
+- 未启动 MySQL、Flyway、后端、Vite 或浏览器，未执行真实 DDL/发布；一次真实预览的 Network 次数和真实发布耗时由用户重启环境后验收。
+
+## 19. Task 28 动态页面查询条件增量计划
+
+1. 前端纯函数测试覆盖：`searchFieldSettings` 的查询方式、查询组件和映射字段进入运行 Schema；映射目标不存在时安全回退；查询方式元数据只包含受支持操作符。
+2. 后端 Controller 测试覆盖：GET 平铺业务字段继续装入 `searchParams`；查询方式控制参数单独解析且不混入业务字段；损坏元数据安全忽略。Service 测试覆盖原查询 Schema 之外、但已在列表或编辑 Schema 公开的字段进入查询白名单，以及非法查询方式不能覆盖默认协议。
+3. 实现后使用 Node `v20.19.0` 执行目标 Vitest 和 ESLint；测试源码变化后使用 JDK 17 执行生成器 reactor `test-compile` 和定向 Surefire，核对测试数非 0。
+4. 执行前端生产构建和 `git diff --check`，将实际命令、测试数、构建结果和警告追加到 `execution-log.md`。
+5. 不启动 MySQL、Flyway、后端、Vite 或浏览器，不执行真实查询或 DDL；真实 Network 参数和数据库结果由用户重启当前环境后验收。
+
+### 19.1 执行结果
+
+- 前端红灯用例先证明页面查询设置未进入运行 Schema、查询方式请求构造器缺失；实现后目标 ESLint 0 error、0 warning，`runtime-crud-props`、页面 Schema 与表单数据准备 3 个 Vitest 文件共 19 个用例全部通过。
+- 后端生成器 reactor 29 个模块 `test-compile` 成功并编译 94 个测试源；`DynamicCrudControllerTest`、`DynamicCrudServiceAutoGenerationTest` 共 6 个 JUnit，0 failure、0 error、0 skipped。Controller 覆盖控制参数隔离和损坏 JSON 回退，Service 覆盖公开字段白名单及非法操作符拒绝。
+- Vite 生产构建成功：8792 个模块，`built in 2m 19s`；仅保留仓库既有的组件重名、动态/静态导入和 CSS `//` 注释警告。`git diff --check` 无输出。
+- 未启动 MySQL、Flyway、后端、Vite 或浏览器，未执行真实查询、DDL 或发布；真实请求中的业务字段、`_searchTypes` 及数据库筛选结果由用户重启当前环境后验收。

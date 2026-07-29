@@ -9,6 +9,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationQue
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationObjectMapper;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationCreateVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,13 +50,101 @@ class BusinessApplicationServiceTest {
                 proxy(BusinessAppMapper.class, BusinessApplicationServiceTest::defaultValue));
         BusinessApplicationDTO dto = applicationDto();
 
-        Long id = service.create(dto);
+        BusinessApplicationCreateVO result = service.create(dto);
 
-        assertEquals(101L, id);
+        assertEquals(101L, result.getId());
+        assertEquals("crm_center", result.getApplicationCode());
         assertNotNull(inserted.get());
         assertEquals(1L, inserted.get().getTenantId());
         assertEquals(BusinessApplicationDesignStatus.DRAFT, inserted.get().getDesignStatus());
         assertEquals("crm_center", inserted.get().getApplicationCode());
+    }
+
+    @Test
+    @DisplayName("create generates the application code when the caller omits it")
+    void createGeneratesApplicationCodeWhenOmitted() throws Exception {
+        AtomicReference<AiBusinessApplication> inserted = new AtomicReference<>();
+        BusinessApplicationMapper applicationMapper = proxy(BusinessApplicationMapper.class, (method, args) -> {
+            if ("countByApplicationCode".equals(method)) {
+                return 0L;
+            }
+            if ("insert".equals(method)) {
+                AiBusinessApplication application = (AiBusinessApplication) args[0];
+                application.setId(102L);
+                inserted.set(application);
+                return 1;
+            }
+            return defaultValue(method, args);
+        });
+        BusinessApplicationService service = service(applicationMapper,
+                proxy(BusinessApplicationObjectMapper.class, BusinessApplicationServiceTest::defaultValue),
+                proxy(BusinessAppMapper.class, BusinessApplicationServiceTest::defaultValue));
+        BusinessApplicationDTO dto = applicationDto();
+        dto.setApplicationCode(null);
+        dto.setApplicationName("采购仓库");
+        dto.setSuiteCode("procurement");
+
+        BusinessApplicationCreateVO result = service.create(dto);
+
+        assertEquals(102L, result.getId());
+        assertEquals("procurement_warehouse", result.getApplicationCode());
+        assertEquals(result.getApplicationCode(), inserted.get().getApplicationCode());
+    }
+
+    @Test
+    @DisplayName("generated application codes avoid tenant duplicates with a stable suffix")
+    void generatedApplicationCodeAvoidsTenantDuplicates() throws Exception {
+        AtomicReference<AiBusinessApplication> inserted = new AtomicReference<>();
+        BusinessApplicationMapper applicationMapper = proxy(BusinessApplicationMapper.class, (method, args) -> {
+            if ("countByApplicationCode".equals(method)) {
+                return "crm_sales_center".equals(args[1]) ? 1L : 0L;
+            }
+            if ("insert".equals(method)) {
+                AiBusinessApplication application = (AiBusinessApplication) args[0];
+                application.setId(103L);
+                inserted.set(application);
+                return 1;
+            }
+            return defaultValue(method, args);
+        });
+        BusinessApplicationService service = service(applicationMapper,
+                proxy(BusinessApplicationObjectMapper.class, BusinessApplicationServiceTest::defaultValue),
+                proxy(BusinessAppMapper.class, BusinessApplicationServiceTest::defaultValue));
+        BusinessApplicationDTO dto = applicationDto();
+        dto.setApplicationCode(" ");
+        dto.setApplicationName("sales center");
+
+        BusinessApplicationCreateVO result = service.create(dto);
+
+        assertEquals("crm_sales_center_2", result.getApplicationCode());
+        assertEquals(result.getApplicationCode(), inserted.get().getApplicationCode());
+    }
+
+    @Test
+    @DisplayName("unknown Chinese application names still produce a stable valid code")
+    void unknownChineseApplicationNameProducesStableCode() throws Exception {
+        BusinessApplicationMapper applicationMapper = proxy(BusinessApplicationMapper.class, (method, args) -> {
+            if ("countByApplicationCode".equals(method)) {
+                return 0L;
+            }
+            if ("insert".equals(method)) {
+                AiBusinessApplication application = (AiBusinessApplication) args[0];
+                application.setId(104L);
+                return 1;
+            }
+            return defaultValue(method, args);
+        });
+        BusinessApplicationService service = service(applicationMapper,
+                proxy(BusinessApplicationObjectMapper.class, BusinessApplicationServiceTest::defaultValue),
+                proxy(BusinessAppMapper.class, BusinessApplicationServiceTest::defaultValue));
+        BusinessApplicationDTO dto = applicationDto();
+        dto.setApplicationCode(null);
+        dto.setApplicationName("财资中台");
+
+        String code = service.create(dto).getApplicationCode();
+
+        assertTrue(code.matches("^crm_app_[a-z0-9]+$"));
+        assertTrue(code.length() <= 64);
     }
 
     @Test
@@ -228,7 +317,7 @@ class BusinessApplicationServiceTest {
                                                BusinessApplicationObjectMapper objectMapper,
                                                BusinessAppMapper appMapper) throws Exception {
         BusinessApplicationService service = new BusinessApplicationService(
-                new ExistingSuiteService(), objectMapper, appMapper);
+                new ExistingSuiteService(), objectMapper, appMapper, new BusinessNamingService());
         setBaseMapper(service, applicationMapper);
         return service;
     }

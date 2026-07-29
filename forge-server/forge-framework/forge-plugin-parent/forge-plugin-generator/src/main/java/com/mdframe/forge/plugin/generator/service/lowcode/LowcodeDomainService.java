@@ -40,6 +40,8 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
     public static final String STATUS_DISABLED = "DISABLED";
 
     private static final long ROOT_PARENT_ID = 0L;
+    /** 业务领域在发布作用域缓存（{@link LowcodePublishScopeCache}）中的键前缀，写操作后按前缀失效。 */
+    private static final String DOMAIN_CACHE_PREFIX = "domain|";
     private static final Pattern DOMAIN_CODE_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{1,47}$");
     private static final Pattern PREFIX_PATTERN = Pattern.compile("^[a-z][a-z0-9_]*$");
     private static final String DEFAULT_APP_TYPE = "SINGLE";
@@ -130,6 +132,7 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         AiLowcodeDomain domain = new AiLowcodeDomain();
         copyDtoToEntity(dto, domain, tenantId, true);
         save(domain);
+        LowcodePublishScopeCache.invalidatePrefix(DOMAIN_CACHE_PREFIX);
         return domain.getId();
     }
 
@@ -141,6 +144,7 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         AiLowcodeDomain domain = requireDomain(dto.getId());
         copyDtoToEntity(dto, domain, resolveTenantId(), false);
         updateById(domain);
+        LowcodePublishScopeCache.invalidatePrefix(DOMAIN_CACHE_PREFIX);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -149,6 +153,7 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         validateStatus(status);
         domain.setStatus(status);
         updateById(domain);
+        LowcodePublishScopeCache.invalidatePrefix(DOMAIN_CACHE_PREFIX);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -162,6 +167,7 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
             throw new BusinessException("该业务领域已存在低代码应用，请先迁移应用或停用领域");
         }
         removeById(domain.getId());
+        LowcodePublishScopeCache.invalidatePrefix(DOMAIN_CACHE_PREFIX);
     }
 
     public AiLowcodeDomain requireEnabledDomain(Long id) {
@@ -176,7 +182,10 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         if (id == null) {
             throw new BusinessException("业务领域ID不能为空");
         }
-        AiLowcodeDomain domain = baseMapper.selectDomainById(resolveTenantId(), id);
+        Long tenantId = resolveTenantId();
+        AiLowcodeDomain domain = LowcodePublishScopeCache.get(
+                DOMAIN_CACHE_PREFIX + "id|" + tenantId + "|" + id,
+                () -> baseMapper.selectDomainById(tenantId, id));
         if (domain == null) {
             throw new BusinessException("业务领域不存在");
         }
@@ -187,7 +196,10 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         if (StringUtils.isBlank(domainCode)) {
             return null;
         }
-        return baseMapper.selectByCode(resolveTenantId(), domainCode);
+        Long tenantId = resolveTenantId();
+        return LowcodePublishScopeCache.get(
+                DOMAIN_CACHE_PREFIX + "code|" + tenantId + "|" + domainCode,
+                () -> baseMapper.selectByCode(tenantId, domainCode));
     }
 
     private void copyDtoToEntity(LowcodeDomainDTO dto, AiLowcodeDomain domain, Long tenantId, boolean create) {

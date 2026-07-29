@@ -57,6 +57,8 @@ export function resolveResError(code, message, needTip = true, detail = null) {
   switch (code) {
     case '-8': // 令牌无效
     case 401:
+    case 11007:
+    case 11008:
       // 退出流程或登录页上的鉴权失效属于预期状态，静默处理。
       if (authStore.isLoggingOut || isLoginPage) {
         authStore.resetToken()
@@ -66,42 +68,12 @@ export function resolveResError(code, message, needTip = true, detail = null) {
         return
       }
       isConfirming = true
-      $dialog.confirm({
-        title: '提示',
-        type: 'info',
-        content: message || '登录已过期，是否重新登录？',
-        confirm() {
-          authStore.logout()
-          window.$message?.success('已退出登录')
-          isConfirming = false
-        },
-        cancel() {
-          isConfirming = false
-        },
-      })
-      return false
-    case 11007:
-    case 11008:
-      if (authStore.isLoggingOut || isLoginPage) {
-        authStore.resetToken()
-        return false
-      }
-      if (isConfirming || !needTip)
-        return
-      isConfirming = true
-      $dialog.confirm({
-        title: '提示',
-        type: 'info',
-        content: `${message}，是否重新登录？`,
-        confirm() {
-          authStore.logout()
-          window.$message?.success('已退出登录')
-          isConfirming = false
-        },
-        cancel() {
-          isConfirming = false
-        },
-      })
+      // 凭证已失效，无需用户确认，直接退出并跳转登录页
+      window.$message?.error(message || '登录已过期，请重新登录')
+      authStore.logout()
+      window.setTimeout(() => {
+        isConfirming = false
+      }, 1200)
       return false
     case 403:
       message = message || '请求被拒绝'

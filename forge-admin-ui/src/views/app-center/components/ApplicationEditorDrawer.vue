@@ -15,19 +15,9 @@
         :rules="rules"
         label-placement="top"
       >
-        <n-grid :cols="2" :x-gap="14">
-          <n-form-item-gi label="应用名称" path="applicationName">
-            <n-input v-model:value="form.applicationName" placeholder="例如：客户经营" />
-          </n-form-item-gi>
-          <n-form-item-gi label="应用编码" path="applicationCode">
-            <n-input
-              v-model:value="form.applicationCode"
-              :disabled="isEditing"
-              placeholder="例如：crm_center"
-              @blur="form.applicationCode = normalizeCode(form.applicationCode)"
-            />
-          </n-form-item-gi>
-        </n-grid>
+        <n-form-item label="应用名称" path="applicationName">
+          <n-input v-model:value="form.applicationName" placeholder="例如：客户经营" />
+        </n-form-item>
 
         <n-form-item label="所属业务域" path="suiteCode">
           <n-select
@@ -67,6 +57,30 @@
             placeholder="说明应用解决什么问题、由谁使用"
           />
         </n-form-item>
+
+        <n-collapse class="advanced-settings">
+          <n-collapse-item name="identity">
+            <template #header>
+              <span>高级设置</span>
+            </template>
+            <template #header-extra>
+              <span class="advanced-settings__summary">
+                {{ isEditing ? '查看应用编码' : (form.applicationCode ? '已指定应用编码' : '应用编码由系统自动生成') }}
+              </span>
+            </template>
+            <n-form-item label="应用编码" path="applicationCode">
+              <n-input
+                v-model:value="form.applicationCode"
+                :disabled="isEditing"
+                placeholder="留空则由系统自动生成"
+                @blur="form.applicationCode = normalizeCode(form.applicationCode)"
+              />
+              <template #feedback>
+                用于路由和接口标识。系统会保证租户内唯一，创建后不可修改。
+              </template>
+            </n-form-item>
+          </n-collapse-item>
+        </n-collapse>
       </n-form>
 
       <div v-if="!isEditing && currentStep === 2" class="initialize-panel">
@@ -137,6 +151,7 @@ import {
 } from '@/api/business-application'
 import DictTag from '@/components/DictTag.vue'
 import IconSelector from '@/components/IconSelector.vue'
+import { resolveApplicationCreateResult } from './application-create-result'
 import ApplicationInitializeStep from './ApplicationInitializeStep.vue'
 import { buildModelCode, normalizeObjectCode } from './designer/form-first/namingUtils'
 
@@ -241,8 +256,7 @@ const rules = {
     trigger: ['blur', 'input'],
   },
   applicationCode: {
-    required: true,
-    validator: (_, value) => /^[a-z]\w{1,63}$/i.test(normalizeCode(value)),
+    validator: (_, value) => !normalizeCode(value) || /^[a-z]\w{1,63}$/i.test(normalizeCode(value)),
     message: '应用编码需以字母开头，仅包含字母、数字和下划线（2-64字符）',
     trigger: ['blur', 'input'],
   },
@@ -478,8 +492,11 @@ async function initializeApplicationFromTemplate(applicationId) {
 
 async function createApplicationDraft(payload) {
   const response = await createBusinessApplication(payload)
-  createdApplicationId.value = response.data
-  return response.data
+  const result = resolveApplicationCreateResult(response.data, payload.applicationCode)
+  createdApplicationId.value = result.id
+  form.applicationCode = result.applicationCode
+  payload.applicationCode = result.applicationCode
+  return result.id
 }
 
 async function initializeApplicationFromTable(applicationId) {
@@ -586,7 +603,7 @@ async function loadTables(datasourceId) {
 function buildPayload() {
   return {
     id: form.id || undefined,
-    applicationCode: normalizeCode(form.applicationCode),
+    applicationCode: trimToNull(normalizeCode(form.applicationCode)),
     applicationName: String(form.applicationName || '').trim(),
     suiteCode: form.suiteCode,
     icon: trimToNull(form.icon),
@@ -740,6 +757,17 @@ function defaultTemplateSource() {
 .initialize-panel {
   display: grid;
   gap: 18px;
+}
+
+.advanced-settings {
+  margin-top: 8px;
+  border-top: 1px solid var(--n-border-color, #e5e7eb);
+}
+
+.advanced-settings__summary {
+  color: var(--n-text-color-3, #8a9099);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .drawer-footer {

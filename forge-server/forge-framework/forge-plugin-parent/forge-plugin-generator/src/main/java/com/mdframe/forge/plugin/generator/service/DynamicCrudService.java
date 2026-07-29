@@ -69,6 +69,10 @@ public class DynamicCrudService {
             "id", "tenantId", "tenant_id", "createBy", "create_by", "createTime", "create_time",
             "createDept", "create_dept", "updateBy", "update_by", "updateTime", "update_time", "delFlag", "del_flag"
     );
+    private static final Set<String> SUPPORTED_SEARCH_TYPES = Set.of(
+            "eq", "ne", "like", "left_like", "right_like", "gt", "ge", "gte", "lt", "le", "lte",
+            "in", "between", "is_null", "is_not_null"
+    );
 
     private record RuntimeFieldRef(String fieldName,
                                    String modelCode,
@@ -155,7 +159,7 @@ public class DynamicCrudService {
         
         // 3. 解析搜索配置
         Set<String> allowedSearchFields = buildAllowedSearchFields(config);
-        Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
+        Map<String, String> searchTypeMap = buildEffectiveSearchTypeMap(config, query, allowedSearchFields);
         
         // 4. 构建搜索条件
         Map<String, Object> searchParams = (query != null) ? query.getSearchParams() : null;
@@ -4234,7 +4238,7 @@ public class DynamicCrudService {
     }
 
     private Set<String> buildAllowedSearchFields(AiCrudConfig config) {
-        Set<String> fields = new HashSet<>(DynamicQueryGenerator.extractFieldNames(config.getSearchSchema(), objectMapper));
+        Set<String> fields = new HashSet<>(buildAllowedCustomFields(config));
         if (isTreeRuntime(config)) {
             LowcodeTreeConfig treeConfig = resolveTreeConfig(config);
             if (StringUtils.isNotBlank(treeConfig.getFilterField())) {
@@ -4244,12 +4248,34 @@ public class DynamicCrudService {
         return fields;
     }
 
+    private Map<String, String> buildEffectiveSearchTypeMap(AiCrudConfig config,
+                                                             DynamicCrudQuery query,
+                                                             Set<String> allowedSearchFields) {
+        Map<String, String> result = new LinkedHashMap<>(
+                DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper));
+        Map<String, String> requested = query == null ? null : query.getSearchTypeMap();
+        if (requested == null || requested.isEmpty()) {
+            return result;
+        }
+        for (Map.Entry<String, String> entry : requested.entrySet()) {
+            String field = StringUtils.trimToNull(entry.getKey());
+            String searchType = StringUtils.lowerCase(StringUtils.trimToNull(entry.getValue()), Locale.ROOT);
+            if (field != null
+                    && allowedSearchFields.contains(field)
+                    && searchType != null
+                    && SUPPORTED_SEARCH_TYPES.contains(searchType)) {
+                result.put(field, searchType);
+            }
+        }
+        return result;
+    }
+
     private ExportQueryContext buildExportQueryContext(String configKey, DynamicCrudQuery query) {
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
         Map<String, String> columnMapping = repository.getColumnMapping(tableName);
         Set<String> allowedSearchFields = buildAllowedSearchFields(config);
-        Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
+        Map<String, String> searchTypeMap = buildEffectiveSearchTypeMap(config, query, allowedSearchFields);
         Map<String, Object> searchParams = query != null ? query.getSearchParams() : null;
         searchParams = expandIncludeChildrenParams(searchParams, config, tableName, allowedSearchFields, searchTypeMap);
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);

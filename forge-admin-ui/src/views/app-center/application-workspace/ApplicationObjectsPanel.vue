@@ -127,6 +127,10 @@ const props = defineProps({
     type: Array,
     default: null,
   },
+  openDesignerAfterCreate: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['changed', 'initialCreateOpened', 'openDesigner'])
@@ -208,7 +212,10 @@ async function bindObject(binding) {
     objectRole: binding.objectRole,
     sortOrder: objects.value.length,
   }]
-  await persistObjects(next)
+  await persistObjects(next, {
+    type: 'bound',
+    objectId: binding.objectId,
+  })
   binderVisible.value = false
   message.success('业务对象已加入应用')
 }
@@ -220,11 +227,18 @@ async function handleObjectCreated(result) {
       objectId: result.id,
       objectRole: role,
       sortOrder: objects.value.length,
-    }])
-    openDesigner({ objectCode: result.objectCode })
+    }], {
+      type: 'created',
+      objectId: result.id,
+      objectCode: result.objectCode,
+    })
+    if (props.openDesignerAfterCreate)
+      openDesigner({ objectCode: result.objectCode })
+    else
+      message.success('对象已创建并加入应用，可继续创建数据页面')
   }
-  catch {
-    message.error('对象已创建，但加入应用失败；可通过“关联已有对象”重试')
+  catch (error) {
+    message.error(error?.message || '对象已创建，但加入应用失败；可通过“关联已有对象”重试')
   }
 }
 
@@ -255,7 +269,7 @@ function removeObject(item) {
   })
 }
 
-async function persistObjects(next) {
+async function persistObjects(next, change = null) {
   if (!props.application?.id || saving.value)
     return
   saving.value = true
@@ -267,7 +281,7 @@ async function persistObjects(next) {
       options: item.options || null,
     })))
     await loadObjects()
-    emit('changed')
+    emit('changed', change)
   }
   finally {
     saving.value = false

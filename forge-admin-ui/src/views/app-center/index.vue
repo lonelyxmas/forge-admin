@@ -101,14 +101,12 @@
             />
             <div class="toolbar-actions">
               <span class="result-summary">{{ resultRangeText }}</span>
-              <n-dropdown trigger="click" :options="newApplicationModeOptions" @select="handleNewApplicationModeSelect">
-                <n-button type="primary" aria-label="新建应用" title="新建应用">
-                  <template #icon>
-                    <NIcon><AddOutline /></NIcon>
-                  </template>
-                  <span class="new-application-button-label">新建应用 <NIcon><ChevronDownOutline /></NIcon></span>
-                </n-button>
-              </n-dropdown>
+              <n-button type="primary" aria-label="新建应用" title="新建应用" @click="openApplicationEditor(null, 'BLANK')">
+                <template #icon>
+                  <NIcon><AddOutline /></NIcon>
+                </template>
+                新建应用
+              </n-button>
             </div>
           </div>
 
@@ -136,14 +134,9 @@
               description="当前条件下还没有应用"
             >
               <template #extra>
-                <n-space>
-                  <n-button type="primary" @click="openApplicationEditor(null, 'BLANK')">
-                    新建页面应用
-                  </n-button>
-                  <n-button secondary @click="openApplicationEditor(null, 'TEMPLATE_SINGLE_CRUD')">
-                    传统业务对象应用
-                  </n-button>
-                </n-space>
+                <n-button type="primary" @click="openApplicationEditor(null, 'BLANK')">
+                  新建应用
+                </n-button>
               </template>
             </n-empty>
 
@@ -205,13 +198,10 @@ import {
   AppsOutline,
   ChevronDownOutline,
   ChevronForwardOutline,
-  CubeOutline,
   EllipsisVertical,
-  GridOutline,
-  ServerOutline,
 } from '@vicons/ionicons5'
 import { NIcon, useMessage } from 'naive-ui'
-import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   businessSuiteSummary,
@@ -261,34 +251,6 @@ const pageSizeOptions = [
   { label: '10 条/页', value: 10 },
   { label: '20 条/页', value: 20 },
   { label: '50 条/页', value: 50 },
-]
-
-function renderNewApplicationModeIcon(icon) {
-  return () => h(NIcon, { size: 16 }, { default: () => h(icon) })
-}
-
-const newApplicationModeOptions = [
-  {
-    label: '页面应用（直接设计页面）',
-    key: 'BLANK',
-    icon: renderNewApplicationModeIcon(AppsOutline),
-  },
-  {
-    label: '传统业务对象（从模板生成）',
-    key: 'TEMPLATE_SINGLE_CRUD',
-    icon: renderNewApplicationModeIcon(GridOutline),
-  },
-  { type: 'divider', key: 'mode-divider' },
-  {
-    label: '挂接已有业务对象（不新建字段）',
-    key: 'EXISTING_OBJECT',
-    icon: renderNewApplicationModeIcon(CubeOutline),
-  },
-  {
-    label: '从数据库表导入业务对象',
-    key: 'DATABASE_TABLE',
-    icon: renderNewApplicationModeIcon(ServerOutline),
-  },
 ]
 
 const allApplicationTotal = computed(() => suites.value.reduce(
@@ -439,10 +401,6 @@ async function openApplicationEditor(application, initializeMode = 'BLANK') {
     editingApplication.value = null
   }
   applicationEditorVisible.value = true
-}
-
-function handleNewApplicationModeSelect(mode) {
-  openApplicationEditor(null, mode)
 }
 
 async function handleApplicationSaved(result) {

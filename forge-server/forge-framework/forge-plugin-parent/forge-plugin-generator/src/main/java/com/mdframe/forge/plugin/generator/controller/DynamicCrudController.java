@@ -1,5 +1,7 @@
 package com.mdframe.forge.plugin.generator.controller;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudExportTask;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudExportResult;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +31,9 @@ import java.util.Set;
 @RequestMapping("/ai/crud/{configKey}")
 @RequiredArgsConstructor
 public class DynamicCrudController {
+
+    private static final String SEARCH_TYPES_PARAM = "_searchTypes";
+    private static final int MAX_SEARCH_TYPE_FIELDS = 100;
 
     private final DynamicCrudService dynamicCrudService;
     private final DynamicCrudExcelService dynamicCrudExcelService;
@@ -146,6 +152,11 @@ public class DynamicCrudController {
         if (result.getSearchParams() == null || result.getSearchParams().isEmpty()) {
             result.setSearchParams(filterSearchParams(requestParams));
         }
+        if (result.getSearchTypeMap() == null || result.getSearchTypeMap().isEmpty()) {
+            result.setSearchTypeMap(parseSearchTypeMap(requestParams == null
+                    ? null
+                    : requestParams.get(SEARCH_TYPES_PARAM)));
+        }
         return result;
     }
 
@@ -161,6 +172,7 @@ public class DynamicCrudController {
         } else {
             query.setSearchParams(filterSearchParams(requestBody));
         }
+        query.setSearchTypeMap(parseSearchTypeMap(requestBody.get(SEARCH_TYPES_PARAM)));
         return query;
     }
 
@@ -169,11 +181,45 @@ public class DynamicCrudController {
             return null;
         }
         Set<String> controlParams = Set.of(
-                "pageNum", "pageSize", "orderByColumn", "isAsc", "searchParams", "designPreview");
+                "pageNum", "pageSize", "orderByColumn", "isAsc", "searchParams", "designPreview",
+                SEARCH_TYPES_PARAM);
         Map<String, Object> result = new HashMap<>();
         for (Map.Entry<String, Object> entry : params.entrySet()) {
             if (!controlParams.contains(entry.getKey())) {
                 result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return result.isEmpty() ? null : result;
+    }
+
+    private Map<String, String> parseSearchTypeMap(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        Map<?, ?> source;
+        if (rawValue instanceof Map<?, ?> values) {
+            source = values;
+        } else {
+            String text = String.valueOf(rawValue).trim();
+            if (text.isEmpty()) {
+                return null;
+            }
+            try {
+                JSONObject parsed = JSON.parseObject(text);
+                source = parsed == null ? Map.of() : parsed;
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : source.entrySet()) {
+            if (result.size() >= MAX_SEARCH_TYPE_FIELDS) {
+                break;
+            }
+            String field = entry.getKey() == null ? "" : String.valueOf(entry.getKey()).trim();
+            String searchType = entry.getValue() == null ? "" : String.valueOf(entry.getValue()).trim();
+            if (!field.isEmpty() && field.length() <= 128 && !searchType.isEmpty() && searchType.length() <= 32) {
+                result.put(field, searchType);
             }
         }
         return result.isEmpty() ? null : result;

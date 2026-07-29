@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationFormDataProvisionDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationObjectDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationQueryDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPublishDTO;
@@ -10,6 +11,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationRol
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationTemplateInitializeDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeCodegenRequest;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationCodegenService;
+import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationFormDataService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationObjectService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationTemplateService;
@@ -18,14 +20,18 @@ import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicatio
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationPublishRunService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationPublishService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationRollbackService;
+import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationRuntimeService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationVersionService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationFormDataVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationCreateVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationWorkspaceVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPublishCheckVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPublishResultVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPublishRunVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationRuntimeVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationTemplateResultVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVersionVO;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeCodePreviewVO;
@@ -62,6 +68,7 @@ public class BusinessApplicationController {
 
     private final BusinessApplicationService applicationService;
     private final BusinessApplicationObjectService applicationObjectService;
+    private final BusinessApplicationFormDataService formDataService;
     private final BusinessApplicationTemplateService templateService;
     private final BusinessApplicationWorkspaceService workspaceService;
     private final BusinessApplicationPublishService publishService;
@@ -69,6 +76,7 @@ public class BusinessApplicationController {
     private final BusinessApplicationPublishRunService publishRunService;
     private final BusinessApplicationPublishRecoveryService recoveryService;
     private final BusinessApplicationRollbackService rollbackService;
+    private final BusinessApplicationRuntimeService runtimeService;
     private final BusinessApplicationCodegenService codegenService;
 
     @GetMapping("/page")
@@ -107,6 +115,13 @@ public class BusinessApplicationController {
     @OperationLog(module = "业务应用", type = OperationType.QUERY, desc = "按编码查询应用工作台快照")
     public RespInfo<BusinessApplicationWorkspaceVO> workspaceByCode(@PathVariable String applicationCode) {
         return RespInfo.success(workspaceService.workspaceByCode(applicationCode));
+    }
+
+    @GetMapping("/by-code/{applicationCode}/runtime")
+    @SaCheckPermission("ai:businessApplication:runtime")
+    @OperationLog(module = "业务应用", type = OperationType.QUERY, desc = "查询已发布应用运行配置")
+    public RespInfo<BusinessApplicationRuntimeVO> runtimeByCode(@PathVariable String applicationCode) {
+        return RespInfo.success(runtimeService.runtimeByCode(applicationCode));
     }
 
     @GetMapping("/{id}/workspace")
@@ -165,7 +180,7 @@ public class BusinessApplicationController {
     @PostMapping
     @SaCheckPermission("ai:businessApplication:add")
     @OperationLog(module = "业务应用", type = OperationType.ADD, desc = "新增业务应用")
-    public RespInfo<Long> create(@RequestBody BusinessApplicationDTO dto) {
+    public RespInfo<BusinessApplicationCreateVO> create(@RequestBody BusinessApplicationDTO dto) {
         return RespInfo.success(applicationService.create(dto));
     }
 
@@ -209,6 +224,15 @@ public class BusinessApplicationController {
         return RespInfo.success();
     }
 
+    @PostMapping("/{id}/form-data/provision")
+    @SaCheckPermission("ai:businessApplication:edit")
+    @OperationLog(module = "业务应用", type = OperationType.ADD, desc = "准备页面表单数据存储")
+    public RespInfo<BusinessApplicationFormDataVO> provisionFormData(
+            @PathVariable Long id,
+            @RequestBody BusinessApplicationFormDataProvisionDTO dto) {
+        return RespInfo.success(formDataService.provision(id, dto));
+    }
+
     @PostMapping("/{id}/initialize-template")
     @SaCheckPermission("ai:businessApplication:edit")
     @OperationLog(module = "业务应用", type = OperationType.ADD, desc = "按模板初始化业务应用")
@@ -220,7 +244,7 @@ public class BusinessApplicationController {
 
     @PostMapping("/{id}/publish/check")
     @SaCheckPermission("ai:businessApplication:publish")
-    @OperationLog(module = "业务应用", type = OperationType.QUERY, desc = "执行应用发布预检查")
+    @OperationLog(module = "业务应用", type = OperationType.UPDATE, desc = "准备并执行应用发布预检查")
     public RespInfo<BusinessApplicationPublishCheckVO> publishCheck(
             @PathVariable Long id,
             @RequestBody(required = false) BusinessApplicationPublishDTO dto) {

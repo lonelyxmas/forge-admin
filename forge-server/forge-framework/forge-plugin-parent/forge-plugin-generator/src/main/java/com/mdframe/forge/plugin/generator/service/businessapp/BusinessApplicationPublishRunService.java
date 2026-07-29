@@ -38,6 +38,7 @@ public class BusinessApplicationPublishRunService
             BusinessApplicationPublishStep.SNAPSHOT, "准备快照",
             BusinessApplicationPublishStep.OBJECTS, "发布业务对象",
             BusinessApplicationPublishStep.ENTRIES, "切换页面入口",
+            BusinessApplicationPublishStep.PAGE_MENUS, "同步应用页面菜单",
             BusinessApplicationPublishStep.EXTENSIONS, "启用业务扩展",
             BusinessApplicationPublishStep.COMMIT, "提交应用版本"
     );
@@ -162,10 +163,12 @@ public class BusinessApplicationPublishRunService
         step.setMessage(StringUtils.abbreviate(errorSummary, 500));
         step.setFinishedTime(LocalDateTime.now());
         boolean hasSideEffect = Set.of(BusinessApplicationPublishStep.OBJECTS,
-                BusinessApplicationPublishStep.ENTRIES, BusinessApplicationPublishStep.EXTENSIONS,
+                BusinessApplicationPublishStep.ENTRIES, BusinessApplicationPublishStep.PAGE_MENUS,
+                BusinessApplicationPublishStep.EXTENSIONS,
                 BusinessApplicationPublishStep.COMMIT).contains(stepCode)
                 || steps.stream().anyMatch(item -> "SUCCESS".equals(item.getStatus())
                 && Set.of(BusinessApplicationPublishStep.OBJECTS, BusinessApplicationPublishStep.ENTRIES,
+                BusinessApplicationPublishStep.PAGE_MENUS,
                 BusinessApplicationPublishStep.EXTENSIONS).contains(item.getStepCode()));
         String status = hasSideEffect ? BusinessApplicationPublishStatus.PARTIAL
                 : BusinessApplicationPublishStatus.FAILED;

@@ -1,41 +1,8 @@
 <template>
   <div class="dimension-studio">
-    <section class="dimension-hero">
-      <div class="hero-main">
-        <p class="hero-kicker">
-          Dimension Registry
-        </p>
-        <h1 class="hero-title">
-          数据维度管理台
-        </h1>
-        <p class="hero-description">
-          把状态、地区、组织、渠道等编码类字段统一维护为可复用维度。手动维度适合稳定字典，SQL 维度适合随业务库自动同步。
-        </p>
-      </div>
-
-      <div class="hero-stats">
-        <div v-for="card in statCards" :key="card.key" class="hero-stat-card">
-          <div class="hero-stat-label">
-            {{ card.label }}
-          </div>
-          <div class="hero-stat-value">
-            {{ card.value }}
-          </div>
-          <div class="hero-stat-note">
-            {{ card.note }}
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="dimension-panel">
       <div class="panel-toolbar">
-        <div>
-          <p class="panel-kicker">
-            Translation Assets
-          </p>
-          <h3>维度清单</h3>
-        </div>
+        <h3>数据维度</h3>
         <div class="toolbar-actions">
           <NInput
             v-model:value="queryForm.dimensionName"
@@ -92,13 +59,11 @@
         :bordered="false"
         :striped="false"
         :scroll-x="1460"
-        max-height="calc(100vh - 250px)"
         :edit-grid-cols="12"
         edit-label-placement="top"
         edit-form-class="data-dimension-edit-form"
         modal-width="min(1120px, calc(100vw - 32px))"
         add-button-text="新增维度"
-        @load-list-success="handleDimensionLoadSuccess"
       >
         <template #form-dimensionGuide="{ formData }">
           <div class="dimension-guide">
@@ -299,43 +264,9 @@ const queryForm = reactive({
   status: null,
 })
 
-const dimensionStats = reactive({
-  total: 0,
-  manual: 0,
-  sql: 0,
-  active: 0,
-})
-
 const sourceTypeOptions = computed(() => dict.value.data_dimension_source_type || [])
 
 const statusOptions = computed(() => dict.value.sys_enable_disable || [])
-
-const statCards = computed(() => [
-  {
-    key: 'total',
-    label: '筛选结果',
-    value: dimensionStats.total,
-    note: '匹配当前筛选条件的维度资产总数',
-  },
-  {
-    key: 'manual',
-    label: '当前页手动维度',
-    value: dimensionStats.manual,
-    note: '适合状态、枚举和稳定字典类翻译',
-  },
-  {
-    key: 'sql',
-    label: '当前页 SQL 维度',
-    value: dimensionStats.sql,
-    note: '可从业务库同步读取最新维度值',
-  },
-  {
-    key: 'active',
-    label: '当前页启用',
-    value: dimensionStats.active,
-    note: '可被数据集字段绑定并参与翻译',
-  },
-])
 
 const tableColumns = computed(() => [
   {
@@ -613,14 +544,6 @@ function handleOpenAddDimension() {
 
 function handleEditDimension(row) {
   crudRef.value?.showEdit({ ...row, __modalTitle: '编辑维度' })
-}
-
-function handleDimensionLoadSuccess({ list, total }) {
-  const rows = list || []
-  dimensionStats.total = total || 0
-  dimensionStats.manual = rows.filter(item => item.sourceType === 'MANUAL').length
-  dimensionStats.sql = rows.filter(item => item.sourceType === 'SQL').length
-  dimensionStats.active = rows.filter(item => item.status === 1).length
 }
 
 function beforeRenderForm(formData) {
@@ -956,105 +879,33 @@ function handleDeleteDimension(row) {
 
 <style scoped>
 .dimension-studio {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 10px;
   background: #f8fafc;
-  min-height: 100%;
-  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.dimension-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
+.dimension-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 12px;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-.dimension-panel {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 12px;
-  background: #fff;
-}
-
-.hero-main {
-  min-width: 0;
-}
-
-.hero-kicker,
-.panel-kicker {
-  margin: 0 0 4px;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 760px;
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.hero-stat-note {
-  display: none;
-}
-
-.dimension-panel {
   padding: 10px;
+}
+
+/* AiCrudPage 依赖父级 flex 链提供高度，否则 flex-height 表格体会塌陷为 0 */
+.dimension-panel :deep(.ai-crud-page) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .panel-toolbar {
@@ -1343,13 +1194,8 @@ function handleDeleteDimension(row) {
 }
 
 @media (max-width: 1200px) {
-  .dimension-hero,
   .dimension-guide {
     grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .toolbar-actions {
@@ -1371,14 +1217,6 @@ function handleDeleteDimension(row) {
   .dimension-guide__facts,
   .dimension-preview-summary {
     grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .hero-description {
-    white-space: normal;
   }
 
   .dimension-sql-preview-bar {

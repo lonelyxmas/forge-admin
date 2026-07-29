@@ -1,41 +1,8 @@
 <template>
   <div class="connection-studio">
-    <section class="studio-hero">
-      <div class="hero-main">
-        <p class="hero-kicker">
-          Data Source Registry
-        </p>
-        <h1 class="hero-title">
-          数据连接管理台
-        </h1>
-        <p class="hero-description">
-          统一管理分析侧数据库连接、校验链路和元数据探查入口。连接资产在这里完成接入、验证与维护，再供数据集建模复用。
-        </p>
-      </div>
-
-      <div class="hero-stats">
-        <div v-for="card in statCards" :key="card.key" class="hero-stat-card">
-          <div class="hero-stat-label">
-            {{ card.label }}
-          </div>
-          <div class="hero-stat-value">
-            {{ card.value }}
-          </div>
-          <div class="hero-stat-note">
-            {{ card.note }}
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="connection-panel">
       <div class="panel-toolbar">
-        <div>
-          <p class="panel-kicker">
-            Access Inventory
-          </p>
-          <h3>连接清单</h3>
-        </div>
+        <h3>数据连接</h3>
         <div class="toolbar-actions">
           <n-input
             v-model:value="queryForm.connectionName"
@@ -92,13 +59,11 @@
         :bordered="false"
         :striped="false"
         :scroll-x="1420"
-        max-height="calc(100vh - 250px)"
         :edit-grid-cols="12"
         edit-label-placement="top"
         edit-form-class="data-connection-edit-form"
         modal-width="min(1120px, calc(100vw - 32px))"
         add-button-text="新增数据连接"
-        @load-list-success="handleConnectionLoadSuccess"
         @modal-close="handleModalClose"
       >
         <template #form-connectionOverview="{ formData }">
@@ -281,13 +246,6 @@ const queryForm = reactive({
   status: null,
 })
 
-const connectionStats = reactive({
-  total: 0,
-  enabled: 0,
-  disabled: 0,
-  engineKinds: 0,
-})
-
 const dbTypeOptions = computed(() => dict.value.data_db_type || [])
 
 const driverClassMap = {
@@ -298,33 +256,6 @@ const driverClassMap = {
 }
 
 const statusOptions = computed(() => dict.value.sys_enable_disable || [])
-
-const statCards = computed(() => [
-  {
-    key: 'total',
-    label: '筛选结果',
-    value: connectionStats.total,
-    note: '匹配当前搜索条件的数据连接总数',
-  },
-  {
-    key: 'enabled',
-    label: '当前页启用',
-    value: connectionStats.enabled,
-    note: '可供数据集建模继续引用的连接数',
-  },
-  {
-    key: 'disabled',
-    label: '当前页禁用',
-    value: connectionStats.disabled,
-    note: '已保留但暂不可继续消费的连接数',
-  },
-  {
-    key: 'engines',
-    label: '引擎覆盖',
-    value: connectionStats.engineKinds,
-    note: '当前页覆盖的数据库类型数量',
-  },
-])
 
 const tableColumns = computed(() => {
   // 显式订阅 testing 集合，使行的"测试连接"按钮可动态切换 label/disabled
@@ -636,13 +567,6 @@ function handleReset() {
   crudRef.value?.search({})
 }
 
-function handleConnectionLoadSuccess({ list, total }) {
-  connectionStats.total = total || 0
-  connectionStats.enabled = (list || []).filter(item => item.status === 1).length
-  connectionStats.disabled = (list || []).filter(item => item.status !== 1).length
-  connectionStats.engineKinds = new Set((list || []).map(item => item.dbType).filter(Boolean)).size
-}
-
 function handleOpenAddConnection() {
   currentEditingConnection.value = null
   crudRef.value?.showAdd()
@@ -899,157 +823,32 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 <style scoped>
 .connection-studio {
-  background: #f8fafc;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 10px;
-}
-
-.studio-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
+  background: #f8fafc;
+  box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .connection-panel {
-  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 12px;
   background: #fff;
 }
 
-.hero-main {
-  min-width: 0;
-}
-
-.hero-kicker,
-.panel-kicker {
-  margin: 0 0 4px;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 720px;
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.hero-title {
-  margin: 0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.18;
-}
-
-.hero-description {
-  overflow: hidden;
-  max-width: 720px;
-  margin: 4px 0 0;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hero-stat-card {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgb(148 163 184 / 14%);
-  border-radius: 10px;
-  background: rgb(255 255 255 / 78%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
-}
-
-.hero-stat-card::after {
-  display: none;
-}
-
-.hero-stat-label {
-  overflow: hidden;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.hero-stat-value {
-  margin-top: 2px;
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.hero-stat-note {
-  display: none;
+/* AiCrudPage 依赖父级 flex 链提供高度，否则 flex-height 表格体会塌陷为 0 */
+.connection-panel :deep(.ai-crud-page) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .connection-panel {
@@ -1297,14 +1096,6 @@ function getJdbcDatabaseName(jdbcUrl) {
 }
 
 @media (max-width: 1400px) {
-  .studio-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .toolbar-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     min-width: 100%;
@@ -1319,14 +1110,6 @@ function getJdbcDatabaseName(jdbcUrl) {
   :global(.data-connection-edit-form .connection-guide-grid),
   .toolbar-actions {
     grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .hero-description {
-    white-space: normal;
   }
 
   .panel-toolbar,

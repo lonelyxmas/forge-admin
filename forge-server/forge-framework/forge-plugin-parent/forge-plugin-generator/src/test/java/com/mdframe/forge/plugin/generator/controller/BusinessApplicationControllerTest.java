@@ -2,7 +2,9 @@ package com.mdframe.forge.plugin.generator.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationFormDataProvisionDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationQueryDTO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationCreateVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("BusinessApplicationController contract")
 class BusinessApplicationControllerTest {
@@ -62,6 +65,8 @@ class BusinessApplicationControllerTest {
         assertArrayEquals(new String[]{"/{id}/status"}, status.getAnnotation(PutMapping.class).value());
         assertArrayEquals(new String[]{"/{id}"}, delete.getAnnotation(DeleteMapping.class).value());
         assertPermission(create, "ai:businessApplication:add");
+        assertTrue(create.getGenericReturnType().getTypeName()
+                .contains(BusinessApplicationCreateVO.class.getSimpleName()));
         assertPermission(update, "ai:businessApplication:edit");
         assertPermission(status, "ai:businessApplication:status");
         assertPermission(delete, "ai:businessApplication:delete");
@@ -81,6 +86,17 @@ class BusinessApplicationControllerTest {
     }
 
     @Test
+    @DisplayName("form data provisioning stays inside the application edit boundary")
+    void formDataProvisioningUsesApplicationEditPermission() throws NoSuchMethodException {
+        Method provision = BusinessApplicationController.class.getDeclaredMethod(
+                "provisionFormData", Long.class, BusinessApplicationFormDataProvisionDTO.class);
+
+        assertArrayEquals(new String[]{"/{id}/form-data/provision"},
+                provision.getAnnotation(PostMapping.class).value());
+        assertPermission(provision, "ai:businessApplication:edit");
+    }
+
+    @Test
     @DisplayName("workspace and readiness are independent lazy summary endpoints")
     void workspaceEndpointsUseListPermission() throws NoSuchMethodException {
         Method workspace = BusinessApplicationController.class.getDeclaredMethod("workspace", Long.class);
@@ -90,6 +106,17 @@ class BusinessApplicationControllerTest {
         assertArrayEquals(new String[]{"/{id}/readiness"}, readiness.getAnnotation(GetMapping.class).value());
         assertPermission(workspace, "ai:businessApplication:list");
         assertPermission(readiness, "ai:businessApplication:list");
+    }
+
+    @Test
+    @DisplayName("formal runtime uses the dedicated runtime permission")
+    void runtimeEndpointUsesRuntimePermission() throws NoSuchMethodException {
+        Method runtime = BusinessApplicationController.class.getDeclaredMethod(
+                "runtimeByCode", String.class);
+
+        assertArrayEquals(new String[]{"/by-code/{applicationCode}/runtime"},
+                runtime.getAnnotation(GetMapping.class).value());
+        assertPermission(runtime, "ai:businessApplication:runtime");
     }
 
     private void assertPermission(Method method, String permission) {

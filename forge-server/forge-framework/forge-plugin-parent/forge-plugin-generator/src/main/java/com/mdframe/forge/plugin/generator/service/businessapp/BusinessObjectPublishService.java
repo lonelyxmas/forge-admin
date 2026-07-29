@@ -112,6 +112,21 @@ public class BusinessObjectPublishService {
         return publishCheck(context, permissionSummary);
     }
 
+    /**
+     * 执行发布检查并返回加载的设计上下文，供应用协调发布在预检后透传给
+     * {@link #publish(Long, BusinessObjectPublishDTO, BusinessPermissionSummaryVO, BusinessObjectDesignerService.DesignerContext)}
+     * 复用，避免同一请求内重复加载上下文。
+     */
+    public ResolvedObjectCheck publishCheckResolved(Long objectId, BusinessPermissionSummaryVO permissionSummary) {
+        BusinessObjectDesignerService.DesignerContext context = designerService.loadContext(objectId);
+        return new ResolvedObjectCheck(publishCheck(context, permissionSummary), context);
+    }
+
+    /** 发布检查结果与其加载的设计上下文。 */
+    public record ResolvedObjectCheck(BusinessPublishCheckVO check,
+                                      BusinessObjectDesignerService.DesignerContext context) {
+    }
+
     private BusinessPublishCheckVO publishCheck(BusinessObjectDesignerService.DesignerContext context,
                                                 BusinessPermissionSummaryVO permissionSummary) {
         designerService.compileFormFirstRuntimeSchema(context);
@@ -141,7 +156,21 @@ public class BusinessObjectPublishService {
     public Long publish(Long objectId,
                         BusinessObjectPublishDTO dto,
                         BusinessPermissionSummaryVO permissionSummary) {
-        BusinessObjectDesignerService.DesignerContext context = designerService.loadContext(objectId);
+        return publish(objectId, dto, permissionSummary, null);
+    }
+
+    /**
+     * 发布业务对象。preloadedContext 非空时复用同一请求内预检阶段加载的设计上下文，
+     * 避免重复执行 loadContext 的整组查询；仅限加载后无外部变更的编排链路（应用协调发布）传入。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Long publish(Long objectId,
+                        BusinessObjectPublishDTO dto,
+                        BusinessPermissionSummaryVO permissionSummary,
+                        BusinessObjectDesignerService.DesignerContext preloadedContext) {
+        BusinessObjectDesignerService.DesignerContext context = preloadedContext != null
+                ? preloadedContext
+                : designerService.loadContext(objectId);
         if (dto != null && dto.getModelSchema() != null) {
             context.setModelSchema(dto.getModelSchema());
         }

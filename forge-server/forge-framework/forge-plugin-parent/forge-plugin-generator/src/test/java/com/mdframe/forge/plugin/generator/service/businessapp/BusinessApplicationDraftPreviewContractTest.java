@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,11 +26,13 @@ class BusinessApplicationDraftPreviewContractTest {
     }
 
     @Test
-    @DisplayName("应用发布前只刷新主对象聚合草稿图")
-    void applicationPublishPreparesPrimaryObjectDraft() throws Exception {
+    @DisplayName("发布检查和最终发布都先同步托管数据表")
+    void applicationPublishSynchronizesManagedDatabasesBeforeReadiness() throws Exception {
         String source = readSource("service/businessapp/BusinessApplicationPublishService.java");
 
         assertTrue(source.contains("preparePrimaryObjectDraft(applicationId);"));
+        assertEquals(2, countOccurrences(
+                source, "formDataService.synchronizeManagedDatabases(applicationId);"));
         assertTrue(source.contains("\"PRIMARY\".equalsIgnoreCase(item.getObjectRole())"));
         assertTrue(source.contains("ifPresent(objectDesignerService::prepareRuntimeDraft)"));
     }
@@ -60,5 +63,15 @@ class BusinessApplicationDraftPreviewContractTest {
                     .resolve(relativePath);
         }
         return Files.readString(source);
+    }
+
+    private int countOccurrences(String source, String target) {
+        int count = 0;
+        int fromIndex = 0;
+        while ((fromIndex = source.indexOf(target, fromIndex)) >= 0) {
+            count++;
+            fromIndex += target.length();
+        }
+        return count;
     }
 }
