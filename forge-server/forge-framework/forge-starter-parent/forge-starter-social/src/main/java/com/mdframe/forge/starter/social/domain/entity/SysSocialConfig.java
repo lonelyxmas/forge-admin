@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.mdframe.forge.starter.trans.annotation.DictTrans;
@@ -13,7 +14,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 三方登录配置表实体类
+ * 企业协同连接配置表实体类（原三方登录配置，升级为连接根）
  */
 @Data
 @TableName("sys_social_config")
@@ -44,12 +45,52 @@ public class SysSocialConfig {
     private String platformLogo;
 
     /**
-     * 应用ID/Key
+     * 连接编码（租户内唯一）
+     */
+    private String connectionCode;
+
+    /**
+     * 连接名称
+     */
+    private String connectionName;
+
+    /**
+     * 外部企业ID（企业微信CorpId等）
+     */
+    private String enterpriseId;
+
+    /**
+     * 连接类型：CORP_INTERNAL自建应用/THIRD_PARTY第三方/OAUTH_ONLY仅登录
+     */
+    private String connectionType;
+
+    /**
+     * 身份匹配策略：BIND_ONLY仅绑定已有/AUTO_CREATE自动创建/MANUAL人工处理
+     */
+    private String identityPolicy;
+
+    /**
+     * 目录权威来源：EXTERNAL外部权威/LOCAL本地权威/NONE不同步
+     */
+    private String directoryAuthority;
+
+    /**
+     * 目录同步默认挂载的根组织ID
+     */
+    private Long defaultOrgId;
+
+    /**
+     * API基础地址：为空使用平台官方地址，私有化部署可自定义
+     */
+    private String apiBaseUrl;
+
+    /**
+     * 应用ID/Key（旧登录配置字段，兼容期保留）
      */
     private String clientId;
 
     /**
-     * 应用Secret
+     * 应用Secret（旧登录配置明文字段，兼容期只读，新凭据统一存 sys_social_app_config 密文）
      */
     private String clientSecret;
 
@@ -109,6 +150,17 @@ public class SysSocialConfig {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    /**
+     * 创建组织ID
+     */
+    private Long createDept;
+
+    /**
+     * 逻辑删除标记：0正常，删除后写当前行主键
+     */
+    @TableLogic(value = "0", delval = "id")
+    private Long delFlag;
 
     // ========== 字段名称映射 ==========
 

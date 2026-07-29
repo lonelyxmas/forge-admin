@@ -39,7 +39,6 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
     static final String PROPERTY_SOURCE_NAME = "forgeCryptoBootstrap";
     static final String BOOTSTRAP_ENABLED_PROPERTY = "forge.crypto.bootstrap.enabled";
     static final String BOOTSTRAP_FILE_PROPERTY = "forge.crypto.bootstrap.file";
-    static final String CRYPTO_ENABLED_PROPERTY = "forge.crypto.enabled";
     static final String SECRET_KEY_PROPERTY = "forge.crypto.secret-key";
     static final String PERSISTENCE_ENABLED_PROPERTY = "forge.crypto.persistence.enabled";
     static final String WRITE_VERSIONED_PROPERTY = "forge.crypto.persistence.write-versioned";
@@ -82,8 +81,8 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+        // 持久化密钥自举不依赖 forge.crypto.enabled（传输加密开关），仅受 bootstrap.enabled 控制
         if (!getBoolean(environment, BOOTSTRAP_ENABLED_PROPERTY, true)
-                || !getBoolean(environment, CRYPTO_ENABLED_PROPERTY, true)
                 || StringUtils.hasText(environment.getProperty(SECRET_KEY_PROPERTY))) {
             return;
         }
@@ -263,11 +262,12 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
     private String findExternalOverride(ConfigurableEnvironment environment, String key) {
         for (PropertySource<?> propertySource : environment.getPropertySources()) {
             String name = propertySource.getName();
-            if (PROPERTY_SOURCE_NAME.equals(name) || isConfigDataSource(name)) {
+            if (PROPERTY_SOURCE_NAME.equals(name) || isConfigDataSource(name) || isAggregatedSource(name)) {
                 continue;
             }
             Object value = propertySource.getProperty(key);
-            if (value != null && StringUtils.hasText(String.valueOf(value))) {
+            if (value != null && StringUtils.hasText(String.valueOf(value))
+                    && !isUnresolvedPlaceholder(String.valueOf(value))) {
                 return String.valueOf(value);
             }
         }
@@ -276,6 +276,18 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
 
     private boolean isConfigDataSource(String name) {
         return name.startsWith("Config resource '") || name.startsWith("applicationConfig:");
+    }
+
+    /**
+     * ConfigurationPropertySources.attach 注入的 configurationProperties 聚合源会透传全部底层源
+     * （含 yml 配置的原始占位符值），必须跳过，否则占位符字符串会覆盖自举文件中的真实密钥。
+     */
+    private boolean isAggregatedSource(String name) {
+        return "configurationProperties".equals(name);
+    }
+
+    private boolean isUnresolvedPlaceholder(String value) {
+        return value.contains("${");
     }
 
     private void writeAtomically(Path secretFile, Map<String, Object> values) throws IOException {

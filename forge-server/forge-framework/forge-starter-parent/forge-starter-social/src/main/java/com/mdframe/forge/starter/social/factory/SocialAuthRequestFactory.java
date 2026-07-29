@@ -42,11 +42,23 @@ public class SocialAuthRequestFactory {
     private final Map<String, AuthRequest> requestCache = new ConcurrentHashMap<>();
 
     /**
-     * 根据配置创建AuthRequest
+     * 根据配置创建AuthRequest（兼容期：使用连接旧明文 Secret，结果缓存）
      */
     public AuthRequest createRequest(SysSocialConfig config) {
         String cacheKey = buildCacheKey(config);
-        return requestCache.computeIfAbsent(cacheKey, key -> buildRequest(config));
+        return requestCache.computeIfAbsent(cacheKey, key -> buildRequest(config, null));
+    }
+
+    /**
+     * 使用显式 Secret 创建AuthRequest（LOGIN 应用解密凭据）。
+     * <p>
+     * 不进缓存，避免明文 Secret 长期驻留与轮换后使用旧值。
+     */
+    public AuthRequest createRequest(SysSocialConfig config, char[] explicitSecret) {
+        if (explicitSecret == null || explicitSecret.length == 0) {
+            return createRequest(config);
+        }
+        return buildRequest(config, new String(explicitSecret));
     }
 
     /**
@@ -67,11 +79,12 @@ public class SocialAuthRequestFactory {
     }
 
     private String buildCacheKey(SysSocialConfig config) {
-        return config.getPlatform() + ":" + config.getTenantId();
+        // 连接ID 维度隔离缓存，避免同平台多连接互相覆盖
+        return config.getPlatform() + ":" + config.getTenantId() + ":" + config.getId();
     }
 
-    private AuthRequest buildRequest(SysSocialConfig config) {
-        AuthConfig authConfig = buildAuthConfig(config);
+    private AuthRequest buildRequest(SysSocialConfig config, String secretOverride) {
+        AuthConfig authConfig = buildAuthConfig(config, secretOverride);
         SocialPlatform platform = SocialPlatform.getByCode(config.getPlatform());
 
         if (platform == null) {
@@ -98,10 +111,10 @@ public class SocialAuthRequestFactory {
         };
     }
 
-    private AuthConfig buildAuthConfig(SysSocialConfig config) {
+    private AuthConfig buildAuthConfig(SysSocialConfig config, String secretOverride) {
         AuthConfig.AuthConfigBuilder builder = AuthConfig.builder()
                 .clientId(config.getClientId())
-                .clientSecret(config.getClientSecret());
+                .clientSecret(StrUtil.isNotBlank(secretOverride) ? secretOverride : config.getClientSecret());
 
         if (StrUtil.isNotBlank(config.getRedirectUri())) {
             builder.redirectUri(config.getRedirectUri());

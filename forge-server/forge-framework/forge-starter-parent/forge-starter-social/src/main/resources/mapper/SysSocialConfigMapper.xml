@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.social.mapper.SysSocialConfigMapper">
+
+    <sql id="selectColumns">
+        id, platform, platform_name, platform_logo,
+        connection_code, connection_name, enterprise_id, connection_type,
+        identity_policy, directory_authority, default_org_id,
+        client_id, client_secret, redirect_uri, agent_id, scope,
+        status, tenant_id, remark,
+        create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <!-- 兼容期接口：按平台查询启用配置，多连接歧义由服务层失败关闭 -->
+    <select id="selectByPlatformAndTenant" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE platform = #{platform}
+          AND status = 1
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledByTenant" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE status = 1
+          AND del_flag = 0
+          AND tenant_id = #{tenantId}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectAllEnabled" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE status = 1
+          AND del_flag = 0
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectConnectionByCode" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE connection_code = #{connectionCode}
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledByPlatform" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE platform = #{platform}
+          AND status = 1
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        ORDER BY id
+    </select>
+
+    <!-- Task 4C：盘点仍保存旧明文 client_secret 的连接 -->
+    <select id="selectLegacySecretInventory" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE client_secret IS NOT NULL
+          AND client_secret != ''
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        <if test="afterId != null">
+            AND id &gt; #{afterId}
+        </if>
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+
+    <!-- Task 4C：CAS 清空旧明文，仅当值未被并发修改时生效 -->
+    <update id="clearLegacySecretCas">
+        UPDATE sys_social_config
+        SET client_secret = ''
+        WHERE id = #{id}
+          AND client_secret = #{expectedSecret}
+          AND del_flag = 0
+    </update>
+
+    <select id="selectByPlatformAny" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE platform = #{platform}
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        ORDER BY id
+    </select>
+</mapper>

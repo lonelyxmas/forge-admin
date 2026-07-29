@@ -1,21 +1,20 @@
 package com.mdframe.forge.starter.social.controller;
 
+import com.mdframe.forge.starter.collaboration.model.VerifiedSocialIdentity;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.social.domain.dto.SocialBindRequest;
+import com.mdframe.forge.starter.social.domain.dto.SocialOAuthIntent;
 import com.mdframe.forge.starter.social.domain.dto.SocialPlatformInfo;
 import com.mdframe.forge.starter.social.domain.dto.UserSocialBinding;
 import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
 import com.mdframe.forge.starter.social.domain.entity.SysUserSocial;
-import com.mdframe.forge.starter.social.factory.SocialAuthRequestFactory;
 import com.mdframe.forge.starter.social.service.ISocialConfigService;
 import com.mdframe.forge.starter.social.service.ISocialUserService;
+import com.mdframe.forge.starter.social.service.SocialOAuthLoginService;
+import com.mdframe.forge.starter.social.service.SocialOAuthStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import me.zhyd.oauth.model.AuthCallback;
-import me.zhyd.oauth.model.AuthResponse;
-import me.zhyd.oauth.model.AuthUser;
-import me.zhyd.oauth.request.AuthRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,7 +28,8 @@ public class SocialUserController {
 
     private final ISocialUserService socialUserService;
     private final ISocialConfigService socialConfigService;
-    private final SocialAuthRequestFactory authRequestFactory;
+    private final SocialOAuthStateService oauthStateService;
+    private final SocialOAuthLoginService oauthLoginService;
 
     @GetMapping("/user/bindings")
     public RespInfo<List<UserSocialBinding>> getUserBindings(@RequestParam(required = false) Long tenantId) {
@@ -64,30 +64,31 @@ public class SocialUserController {
         Long userId = SessionHelper.getUserId();
         Long tenantId = SessionHelper.getTenantId();
 
-        String platform = request.getPlatform();
-        SysSocialConfig config = socialConfigService.selectByPlatformAndTenant(platform, tenantId);
-        if (config == null || config.getStatus() != 1) {
+        // 消费服务端签发的 state，绑定动作与发起用户必须一致
+        SocialOAuthIntent intent = oauthStateService.consumeState(request.getState());
+        if (!SocialOAuthIntent.ACTION_BIND.equals(intent.getAction())) {
+            return RespInfo.error("该授权凭据不适用于绑定，请重新发起绑定");
+        }
+        if (intent.getUserId() == null || !intent.getUserId().equals(userId)) {
+            return RespInfo.error("绑定发起用户与当前用户不一致，请重新发起绑定");
+        }
+
+        SysSocialConfig config = socialConfigService.selectConfigById(intent.getConnectionId());
+        if (config == null || config.getStatus() == null || config.getStatus() != 1) {
             return RespInfo.error("该平台登录未启用");
         }
-
-        AuthRequest authRequest = authRequestFactory.createRequest(config);
-        AuthCallback callback = AuthCallback.builder()
-                .code(request.getCode())
-                .state(request.getState())
-                .build();
-
-        AuthResponse<AuthUser> response = authRequest.login(callback);
-        if (!response.ok()) {
-            log.error("绑定三方账号失败: platform={}, msg={}", platform, response.getMsg());
-            return RespInfo.error(response.getMsg());
+        if (tenantId != null && !tenantId.equals(config.getTenantId())) {
+            return RespInfo.error("连接归属租户与当前租户不一致");
         }
 
-        boolean bound = socialUserService.bindSocialUser(userId, response.getData(), platform, tenantId);
+        VerifiedSocialIdentity identity = oauthLoginService.exchange(config, request.getCode(), request.getState());
+
+        boolean bound = socialUserService.bindVerifiedIdentity(identity, userId);
         if (!bound) {
             return RespInfo.error("该平台已绑定，请勿重复操作");
         }
 
-        log.info("绑定三方账号成功: userId={}, platform={}", userId, platform);
+        log.info("绑定三方账号成功: userId={}, connectionId={}, platform={}", userId, config.getId(), config.getPlatform());
         return RespInfo.success();
     }
 

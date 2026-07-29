@@ -40,4 +40,21 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
      * 登录时按邮箱和当前租户查询用户
      */
     SysUser selectByEmailForLogin(@Param("email") String email, @Param("tenantId") Long tenantId);
+
+    /**
+     * 协同目录同步：按手机号/邮箱查询租户内未删除用户（身份冲突检测，仅限本租户）
+     */
+    List<SysUser> selectActiveUsersByPhoneOrEmail(@Param("tenantId") Long tenantId,
+                                                  @Param("phone") String phone,
+                                                  @Param("email") String email);
+
+    /**
+     * 协同目录同步：仅更新同步拥有的资料字段，不触碰密码/状态/角色等本地资产
+     */
+    int updateUserProfileBySync(@Param("tenantId") Long tenantId,
+                                @Param("userId") Long userId,
+                                @Param("realName") String realName,
+                                @Param("avatar") String avatar,
+                                @Param("email") String email,
+                                @Param("phone") String phone);
 }

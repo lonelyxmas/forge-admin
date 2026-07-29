@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.crypto.advice.EncryptResponseBodyAdvice;
 import com.mdframe.forge.starter.crypto.cache.ReplayTokenCache;
 import com.mdframe.forge.starter.crypto.crypto.EncryptorFactory;
 import com.mdframe.forge.starter.crypto.crypto.impl.AESEncryptor;
+import com.mdframe.forge.starter.crypto.crypto.impl.AESGCMEncryptor;
 import com.mdframe.forge.starter.crypto.crypto.impl.SM4Encryptor;
 import com.mdframe.forge.starter.crypto.filter.ReplayAttackFilter;
 import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeStrategyFactory;
@@ -98,6 +99,11 @@ public class CryptoAutoConfiguration {
         return new AESEncryptor(properties);
     }
 
+    @Bean
+    public AESGCMEncryptor aesGcmEncryptor(CryptoProperties properties) {
+        return new AESGCMEncryptor(properties);
+    }
+
     // ==================== 脱敏相关 Bean ====================
 
     @Bean
@@ -109,11 +115,13 @@ public class CryptoAutoConfiguration {
     @Bean
     public EncryptorFactory encryptorFactory(CryptoProperties properties,
                                              SM4Encryptor sm4Encryptor,
-                                             AESEncryptor aesEncryptor) {
+                                             AESEncryptor aesEncryptor,
+                                             AESGCMEncryptor aesGcmEncryptor) {
         EncryptorFactory factory = new EncryptorFactory(properties);
         factory.register(sm4Encryptor);
         factory.register(aesEncryptor);
-        log.info("加密器工厂初始化完成, 已注册算法: SM4, AES");
+        factory.register(aesGcmEncryptor);
+        log.info("加密器工厂初始化完成, 已注册算法: SM4, AES, AES_GCM");
         return factory;
     }
 

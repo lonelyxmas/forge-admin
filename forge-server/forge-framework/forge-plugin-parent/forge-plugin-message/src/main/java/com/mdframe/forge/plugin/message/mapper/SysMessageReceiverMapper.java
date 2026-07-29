@@ -30,4 +30,16 @@ public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver>
     int markWebMessagesReadByBiz(@Param("bizType") String bizType,
                                  @Param("bizKey") String bizKey,
                                  @Param("readTime") LocalDateTime readTime);
+
+    int updateDeliveryResult(@Param("messageId") Long messageId,
+                             @Param("userId") Long userId,
+                             @Param("deliveryStatus") String deliveryStatus,
+                             @Param("externalId") String externalId,
+                             @Param("lastErrorCode") String lastErrorCode,
+                             @Param("lastAttemptTime") LocalDateTime lastAttemptTime,
+                             @Param("nextRetryTime") LocalDateTime nextRetryTime);
+
+    List<SysMessageReceiver> selectFailedDeliveriesDue(@Param("tenantId") Long tenantId,
+                                                       @Param("now") LocalDateTime now,
+                                                       @Param("limitSize") int limitSize);
 }

@@ -35,7 +35,8 @@
 
 | 时间 | 范围 | 命令 | 结果 | 警告/跳过 |
 |------|------|------|------|-----------|
-| 2026-07-28 | Proposal 文档 | `git diff --no-index --check /dev/null <file>`；`rg` 占位符/旧命名/术语扫描；`awk` 代码块计数；`git status --short` | 通过：5 个文档无空白错误，4 份含代码块文档围栏闭合，旧回调路径和重复 Mapper 无残留 | 本轮不构建、不启动服务、不连接真实企微/MySQL/Redis；`--no-index` 内容差异退出码 1 为预期 |
+| 2026-07-28 | Proposal 文档 | `git diff --no-index --check /dev/null <file>`；`rg` 占位符/旧命名/术语扫描；`awk` 代码块计数；`git status --short` | 通过：5 个 文档无空白错误，4 份含代码块文档围栏闭合，旧回调路径和重复 Mapper 无残留 | 本轮 不构建、不启动服务、不连接真实企微/MySQL/Redis；`--no-index` 内容差异退出码 1 为预期 |
+| 2026-07-28 | M1 编码（Task 1-13/16-18 一期） | `JAVA_HOME=17 mvn -pl forge-admin-server -am compile -DskipTests`；`npx eslint src/api/collaboration.js src/views/system/collaboration/ --fix` | 后端 BUILD SUCCESS（含 forge-plugin-collaboration 全链路装配）；前端 6 页面 + API 层 ESLint 零错误 | 未执行单元测试与真实企微 UAT（Task 19A 待客户资料）；Flyway V1.0.57-59/V1.0.62 未在真实库执行验证 |
 
 ## 客户输入与外部阻塞
 
@@ -54,7 +55,9 @@
 
 | 偏差点 | Spec 预期 | 实际情况 | 处理方式 |
 |--------|-----------|----------|----------|
-| 尚未进入实现 | 无生产代码改动 | 当前仅 Proposal 文档 | Gate A 只进入 Task 0；Gate B/C 分别授权 M1/M2 生产实现 |
+| Task 16 页面结构 | index.vue + ConnectionEditor/ApplicationEditor 组件拆分 | 按 V1.0.59 菜单 component 值实现为 connections.vue 单页（详情弹窗内含应用/能力绑定编辑） | 已在 tasks.md Task 16 记录实施偏差；功能验收标准不变 |
+| Task 18 能力绑定端点 | 服务层含 bind/unbind/deleteApp | 初版 Controller 未暴露，前端无法闭环 | 已补 3 个端点 + V1.0.62 API 资源与 admin 授权 |
+| socialConfig.vue 兼容改造 | 兼容跳转或只读提示 | 已完成：只读列表+详情（Secret 仅显示已配置/掩码）+迁移提示与跳转连接管理；移除新增/编辑/删除写操作，保留刷新缓存 | 旧后端写接口暂保留（有掩码回写保护、无调用方），待 Task 4C 迁移完成后下线 |
 
 ## 安全备忘
 

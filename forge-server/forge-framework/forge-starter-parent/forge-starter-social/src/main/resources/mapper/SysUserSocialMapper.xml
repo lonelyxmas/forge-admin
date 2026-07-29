@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.social.mapper.SysUserSocialMapper">
+
+    <sql id="selectColumns">
+        id, user_id, platform, connection_id, external_enterprise_id, managed_by_sync,
+        external_status, source_hash, last_sync_time, uuid, username, nickname, avatar,
+        email, access_token, refresh_token, expire_time, bind_time, tenant_id, del_flag
+    </sql>
+
+    <select id="selectBinding" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE connection_id = #{connectionId}
+          AND uuid = #{externalUserId}
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="selectBindingByUser" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE connection_id = #{connectionId}
+          AND user_id = #{userId}
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="selectBindingsByUsers" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE connection_id = #{connectionId}
+          AND del_flag = 0
+          AND user_id IN
+        <foreach collection="userIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+    </select>
+
+    <select id="selectByUserId" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE user_id = #{userId}
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        ORDER BY bind_time DESC
+    </select>
+
+    <select id="selectByPlatformAndUuid" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE platform = #{platform}
+          AND uuid = #{uuid}
+          AND del_flag = 0
+    </select>
+
+    <select id="selectByUserIdAndPlatform" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE user_id = #{userId}
+          AND platform = #{platform}
+          AND del_flag = 0
+    </select>
+
+    <update id="bindForgeUserCas">
+        UPDATE sys_user_social
+        SET user_id = #{userId},
+            bind_time = NOW()
+        WHERE id = #{id}
+          AND del_flag = 0
+          AND (user_id IS NULL OR user_id = #{userId})
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+    </update>
+
+    <!-- Task 4C：盘点缺少连接维度的存量绑定 -->
+    <select id="selectMissingConnection" resultType="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_user_social
+        WHERE connection_id IS NULL
+          AND del_flag = 0
+        <if test="tenantId != null">
+            AND tenant_id = #{tenantId}
+        </if>
+        <if test="afterId != null">
+            AND id &gt; #{afterId}
+        </if>
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+
+    <!-- Task 4C：CAS 回填连接维度，仅当仍未归属时生效 -->
+    <update id="backfillConnectionCas">
+        UPDATE sys_user_social
+        SET connection_id = #{connectionId},
+            external_enterprise_id = #{externalEnterpriseId}
+        WHERE id = #{id}
+          AND connection_id IS NULL
+          AND del_flag = 0
+    </update>
+
+</mapper>

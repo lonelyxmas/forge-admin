@@ -49,4 +49,28 @@
           AND m.send_channel = 'WEB'
           AND r.read_flag = 0
     </update>
+
+    <update id="updateDeliveryResult">
+        UPDATE sys_message_receiver
+        SET delivery_status = #{deliveryStatus},
+            delivery_attempts = IFNULL(delivery_attempts, 0) + 1,
+            external_id = #{externalId},
+            last_error_code = #{lastErrorCode},
+            last_attempt_time = #{lastAttemptTime},
+            next_retry_time = #{nextRetryTime}
+        WHERE message_id = #{messageId}
+          AND user_id = #{userId}
+    </update>
+
+    <select id="selectFailedDeliveriesDue"
+            resultType="com.mdframe.forge.plugin.message.domain.entity.SysMessageReceiver">
+        SELECT r.*
+        FROM sys_message_receiver r
+        WHERE r.tenant_id = #{tenantId}
+          AND r.delivery_status = 'FAILED'
+          AND r.next_retry_time IS NOT NULL
+          AND r.next_retry_time &lt;= #{now}
+        ORDER BY r.next_retry_time ASC
+        LIMIT #{limitSize}
+    </select>
 </mapper>

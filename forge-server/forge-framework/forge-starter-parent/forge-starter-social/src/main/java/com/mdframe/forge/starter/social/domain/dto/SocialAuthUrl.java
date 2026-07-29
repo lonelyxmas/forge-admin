@@ -24,6 +24,11 @@ public class SocialAuthUrl implements Serializable {
     private String platform;
 
     /**
+     * 连接编码
+     */
+    private String connectionCode;
+
+    /**
      * 平台名称
      */
     private String platformName;

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.collaboration.mapper.SocialSyncLogMapper">
+
+    <resultMap id="SyncLogResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialSyncLog">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="syncType" column="sync_type"/>
+        <result property="triggerSource" column="trigger_source"/>
+        <result property="stage" column="stage"/>
+        <result property="status" column="status"/>
+        <result property="deptCount" column="dept_count"/>
+        <result property="userCount" column="user_count"/>
+        <result property="tagCount" column="tag_count"/>
+        <result property="createdCount" column="created_count"/>
+        <result property="updatedCount" column="updated_count"/>
+        <result property="inactivatedCount" column="inactivated_count"/>
+        <result property="issueCount" column="issue_count"/>
+        <result property="cursorInfo" column="cursor_info"/>
+        <result property="errorCode" column="error_code"/>
+        <result property="errorSummary" column="error_summary"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <resultMap id="SyncIssueResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialSyncIssue">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="syncLogId" column="sync_log_id"/>
+        <result property="objectType" column="object_type"/>
+        <result property="externalId" column="external_id"/>
+        <result property="issueCode" column="issue_code"/>
+        <result property="issueSummary" column="issue_summary"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="processAction" column="process_action"/>
+        <result property="processBy" column="process_by"/>
+        <result property="processTime" column="process_time"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="delFlag" column="del_flag"/>
+    </resultMap>
+
+    <sql id="syncLogColumns">
+        id, tenant_id, connection_id, sync_type, trigger_source, stage, status,
+        dept_count, user_count, tag_count, created_count, updated_count, inactivated_count, issue_count,
+        cursor_info, error_code, error_summary, start_time, end_time, create_by, create_time
+    </sql>
+
+    <!-- ==================== 批次日志 ==================== -->
+
+    <select id="selectRunningLog" resultMap="SyncLogResult">
+        SELECT <include refid="syncLogColumns"/>
+        FROM sys_social_sync_log
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND status = 'RUNNING'
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <update id="updateSyncLogStage">
+        UPDATE sys_social_sync_log
+        SET stage = #{stage},
+            cursor_info = #{cursorInfo}
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND status = 'RUNNING'
+    </update>
+
+    <!-- CAS：仅 RUNNING 批次允许收敛到终态 -->
+    <update id="completeSyncLog">
+        UPDATE sys_social_sync_log
+        SET status = #{log.status},
+            stage = 'FINALIZE',
+            dept_count = #{log.deptCount},
+            user_count = #{log.userCount},
+            tag_count = #{log.tagCount},
+            created_count = #{log.createdCount},
+            updated_count = #{log.updatedCount},
+            inactivated_count = #{log.inactivatedCount},
+            issue_count = #{log.issueCount},
+            cursor_info = #{log.cursorInfo},
+            error_code = #{log.errorCode},
+            error_summary = #{log.errorSummary},
+            end_time = NOW()
+        WHERE id = #{log.id}
+          AND (#{log.tenantId} IS NULL OR tenant_id = #{log.tenantId})
+          AND status = 'RUNNING'
+    </update>
+
+    <!-- 运行时表物理删除；RUNNING 批次拒绝删除（由孤儿自愈或收敛后再删） -->
+    <delete id="deleteFinishedSyncLog">
+        DELETE FROM sys_social_sync_log
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND status != 'RUNNING'
+    </delete>
+
+    <select id="selectSyncLogPage" resultMap="SyncLogResult">
+        SELECT <include refid="syncLogColumns"/>
+        FROM sys_social_sync_log
+        WHERE tenant_id = #{tenantId}
+        <if test="connectionId != null">
+            AND connection_id = #{connectionId}
+        </if>
+        <if test="syncType != null and syncType != ''">
+            AND sync_type = #{syncType}
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        ORDER BY id DESC
+    </select>
+
+    <!-- ==================== 问题单 ==================== -->
+
+    <insert id="insertIssue" useGeneratedKeys="true" keyProperty="issue.id">
+        INSERT INTO sys_social_sync_issue
+            (tenant_id, connection_id, sync_log_id, object_type, external_id, issue_code, issue_summary,
+             process_status, retry_count, create_time, update_time, del_flag)
+        VALUES
+            (#{issue.tenantId}, #{issue.connectionId}, #{issue.syncLogId}, #{issue.objectType},
+             #{issue.externalId}, #{issue.issueCode}, #{issue.issueSummary},
+             #{issue.processStatus}, #{issue.retryCount}, NOW(), NOW(), 0)
+    </insert>
+
+    <select id="selectPendingIssueByObject" resultMap="SyncIssueResult">
+        SELECT id, tenant_id, connection_id, sync_log_id, object_type, external_id, issue_code, issue_summary,
+               process_status, process_action, process_by, process_time, retry_count,
+               create_time, update_time, del_flag
+        FROM sys_social_sync_issue
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND object_type = #{objectType}
+          AND external_id = #{externalId}
+          AND process_status = 'PENDING'
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectIssuePage" resultMap="SyncIssueResult">
+        SELECT id, tenant_id, connection_id, sync_log_id, object_type, external_id, issue_code, issue_summary,
+               process_status, process_action, process_by, process_time, retry_count,
+               create_time, update_time, del_flag
+        FROM sys_social_sync_issue
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = 0
+        <if test="query.connectionId != null">
+            AND connection_id = #{query.connectionId}
+        </if>
+        <if test="query.syncLogId != null">
+            AND sync_log_id = #{query.syncLogId}
+        </if>
+        <if test="query.objectType != null and query.objectType != ''">
+            AND object_type = #{query.objectType}
+        </if>
+        <if test="query.processStatus != null and query.processStatus != ''">
+            AND process_status = #{query.processStatus}
+        </if>
+        <if test="query.issueCode != null and query.issueCode != ''">
+            AND issue_code = #{query.issueCode}
+        </if>
+        ORDER BY id DESC
+    </select>
+
+    <select id="selectIssueById" resultMap="SyncIssueResult">
+        SELECT id, tenant_id, connection_id, sync_log_id, object_type, external_id, issue_code, issue_summary,
+               process_status, process_action, process_by, process_time, retry_count,
+               create_time, update_time, del_flag
+        FROM sys_social_sync_issue
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND del_flag = 0
+    </select>
+
+    <!-- CAS：仅 PENDING 问题单允许流转 -->
+    <update id="resolveIssue">
+        UPDATE sys_social_sync_issue
+        SET process_status = #{processStatus},
+            process_action = #{processAction},
+            process_by = #{processBy},
+            process_time = NOW(),
+            update_time = NOW()
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND process_status = 'PENDING'
+          AND del_flag = 0
+    </update>
+
+    <select id="countPendingIssues" resultType="int">
+        SELECT COUNT(*)
+        FROM sys_social_sync_issue
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND process_status = 'PENDING'
+          AND del_flag = 0
+    </select>
+</mapper>

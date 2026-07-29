@@ -10,4 +10,12 @@
         ORDER BY m.create_time DESC, m.id DESC
         LIMIT 1
     </select>
+
+    <select id="selectByIdempotencyKey" resultType="com.mdframe.forge.plugin.message.domain.entity.SysMessage">
+        SELECT m.*
+        FROM sys_message m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.idempotency_key = #{idempotencyKey}
+        LIMIT 1
+    </select>
 </mapper>

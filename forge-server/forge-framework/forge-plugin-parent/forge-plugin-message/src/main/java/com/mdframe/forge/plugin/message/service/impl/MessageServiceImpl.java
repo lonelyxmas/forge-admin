@@ -31,6 +31,7 @@ import com.mdframe.forge.starter.message.service.MessageTemplateEngine;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,10 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage> implements MessageService {
 
     private static final Long DEFAULT_TENANT_ID = 1L;
+
+    private static final String CHANNEL_COLLABORATION = "COLLABORATION";
+
+    private static final String DELIVERY_STATUS_PENDING = "PENDING";
 
     private final SysMessageMapper messageMapper;
     private final SysMessageReceiverMapper receiverMapper;
@@ -82,20 +87,48 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     public SysMessage send(MessageSendRequestDTO req) {
         Long tenantId = resolveTenantId();
 
+        // 0. 幂等：相同幂等键并发只创建一份逻辑消息
+        if (StrUtil.isNotBlank(req.getIdempotencyKey())) {
+            SysMessage existing = messageMapper.selectByIdempotencyKey(tenantId, req.getIdempotencyKey());
+            if (existing != null) {
+                log.debug("消息幂等命中，跳过重复发送: idempotencyKey={}, messageId={}",
+                        req.getIdempotencyKey(), existing.getId());
+                return existing;
+            }
+        }
+
         // 1. 渲染消息内容（处理模板）
         RenderResult renderResult = renderMessageContent(req);
+        boolean collaboration = CHANNEL_COLLABORATION.equals(renderResult.channel);
         
-        // 2. 创建消息主记录
-        SysMessage msg = createMessageRecord(req, renderResult, tenantId);
+        // 2. 创建消息主记录（幂等键唯一索引兜底并发创建）
+        SysMessage msg;
+        try {
+            msg = createMessageRecord(req, renderResult, tenantId);
+        } catch (DuplicateKeyException e) {
+            SysMessage existing = StrUtil.isNotBlank(req.getIdempotencyKey())
+                    ? messageMapper.selectByIdempotencyKey(tenantId, req.getIdempotencyKey())
+                    : null;
+            if (existing != null) {
+                log.debug("消息幂等并发命中: idempotencyKey={}, messageId={}",
+                        req.getIdempotencyKey(), existing.getId());
+                return existing;
+            }
+            throw e;
+        }
         
-        // 3. 批量创建接收人记录（优化：使用回调方式避免内存溢出）
-        int receiverCount = batchCreateReceiverRecords(msg.getId(), req, tenantId);
+        // 3. 批量创建接收人记录（协同渠道初始化 PENDING 投递状态）
+        int receiverCount = batchCreateReceiverRecords(msg.getId(), req, tenantId,
+                collaboration ? DELIVERY_STATUS_PENDING : null);
         
-        // 4. 发送消息到渠道（对于WEB站内信，无需调用第三方）
-        MessageChannel.SendResult sendResult = sendToChannel(msg, renderResult, req);
-        
-        // 5. 创建发送记录
-        createSendRecord(msg.getId(), req.getChannel(), receiverCount, sendResult, tenantId);
+        // 4/5. 发送到渠道并落发送记录
+        if (collaboration) {
+            CollaborationDeliveryOutcome outcome = sendToCollaboration(msg, renderResult, req);
+            createCollaborationSendRecord(msg, req, receiverCount, outcome, tenantId);
+        } else {
+            MessageChannel.SendResult sendResult = sendToChannel(msg, renderResult, req);
+            createSendRecord(msg.getId(), req.getChannel(), receiverCount, sendResult, tenantId);
+        }
         
         return msg;
     }
@@ -164,6 +197,8 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         msg.setTemplateParams(req.getParams());
         msg.setBizType(req.getBizType());
         msg.setBizKey(req.getBizKey());
+        msg.setConnectionId(req.getConnectionId());
+        msg.setIdempotencyKey(StrUtil.blankToDefault(req.getIdempotencyKey(), null));
         msg.setStatus(0); // 初始状态：发送中
         messageMapper.insert(msg);
         return msg;
@@ -171,9 +206,12 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     
     /**
      * 批量创建接收人记录（优化：使用回调方式处理，避免内存溢出）
+     *
+     * @param deliveryStatus 初始投递状态；外部逐人投递渠道传 PENDING，站内信等传 null
      * @return 接收人总数
      */
-    private int batchCreateReceiverRecords(Long messageId, MessageSendRequestDTO req, Long tenantId) {
+    private int batchCreateReceiverRecords(Long messageId, MessageSendRequestDTO req, Long tenantId,
+                                           String deliveryStatus) {
         final int BATCH_SIZE = 500; // 每批次处理500条
         final int[] totalCount = {0}; // 使用数组包装以便在lambda中修改
         
@@ -194,6 +232,10 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
                     receiver.setMessageId(messageId);
                     receiver.setUserId(userId);
                     receiver.setReadFlag(0);
+                    if (deliveryStatus != null) {
+                        receiver.setDeliveryStatus(deliveryStatus);
+                        receiver.setDeliveryAttempts(0);
+                    }
                     receiver.setCreateTime(now);
                     receivers.add(receiver);
                 }
@@ -255,6 +297,82 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     }
     
     /**
+     * 企业协同渠道逐人投递：调用协同渠道并将逐人结果落库；
+     * 部分失败不影响已成功接收人，失败接收人由投递补偿任务按 next_retry_time 重试
+     */
+    private CollaborationDeliveryOutcome sendToCollaboration(SysMessage msg, RenderResult renderResult,
+                                                             MessageSendRequestDTO req) {
+        List<SysMessageReceiver> receivers = sysMessageReceiverService.lambdaQuery()
+                .eq(SysMessageReceiver::getMessageId, msg.getId()).list();
+        if (CollectionUtil.isEmpty(receivers)) {
+            return new CollaborationDeliveryOutcome(0, 0, 0, null, null);
+        }
+        List<MessageChannel.ChannelRecipient> recipients = receivers.stream()
+                .map(r -> MessageChannel.ChannelRecipient.of(r.getUserId()))
+                .toList();
+        MessageChannel.ChannelSendRequest request = new MessageChannel.ChannelSendRequest(
+                msg.getTenantId(), req.getConnectionId(), msg.getId(), req.getIdempotencyKey(),
+                recipients, renderResult.title, renderResult.content, req.getParams());
+        MessageChannel.ChannelSendResult result = messageClient.sendToRecipients(CHANNEL_COLLABORATION, request);
+        
+        int sent = 0;
+        int failed = 0;
+        int skipped = 0;
+        String firstError = null;
+        LocalDateTime now = LocalDateTime.now();
+        if (result != null && result.deliveries() != null) {
+            for (MessageChannel.RecipientDeliveryResult delivery : result.deliveries()) {
+                boolean isFailed = MessageChannel.RecipientDeliveryResult.STATUS_FAILED.equals(delivery.status());
+                // 失败接收人给出下次重试时间，供投递补偿任务扫描
+                LocalDateTime nextRetryTime = isFailed ? now.plusMinutes(1) : null;
+                receiverMapper.updateDeliveryResult(msg.getId(), delivery.userId(), delivery.status(),
+                        delivery.externalId(), delivery.errorCode(), now, nextRetryTime);
+                if (MessageChannel.RecipientDeliveryResult.STATUS_SENT.equals(delivery.status())) {
+                    sent++;
+                } else if (isFailed) {
+                    failed++;
+                    if (firstError == null) {
+                        firstError = StrUtil.blankToDefault(delivery.errorCode(), delivery.errorMessage());
+                    }
+                } else {
+                    skipped++;
+                }
+            }
+        }
+        String providerRequestId = result != null ? result.providerRequestId() : null;
+        return new CollaborationDeliveryOutcome(sent, failed, skipped, providerRequestId, firstError);
+    }
+    
+    /**
+     * 创建企业协同渠道发送记录并更新消息状态（部分失败视为已发送，失败接收人走重试）
+     */
+    private void createCollaborationSendRecord(SysMessage msg, MessageSendRequestDTO req, int receiverCount,
+                                               CollaborationDeliveryOutcome outcome, Long tenantId) {
+        SysMessageSendRecord record = new SysMessageSendRecord();
+        record.setTenantId(tenantId);
+        record.setMessageId(msg.getId());
+        record.setConnectionId(req.getConnectionId());
+        record.setIdempotencyKey(req.getIdempotencyKey());
+        record.setAttemptNo(1);
+        record.setProviderRequestId(outcome.providerRequestId());
+        record.setChannel(CHANNEL_COLLABORATION);
+        record.setReceiverCount(receiverCount);
+        record.setSuccessCount(outcome.sentCount());
+        record.setFailCount(outcome.failedCount());
+        boolean allFailed = receiverCount > 0 && outcome.sentCount() == 0 && outcome.skippedCount() == 0;
+        record.setStatus(allFailed ? 2 : 1);
+        record.setErrorMsg(outcome.firstErrorMsg());
+        record.setSendTime(LocalDateTime.now());
+        recordMapper.insert(record);
+        
+        // 更新消息状态：全部失败才标记发送失败
+        SysMessage updateMsg = new SysMessage();
+        updateMsg.setId(msg.getId());
+        updateMsg.setStatus(allFailed ? 2 : 1);
+        messageMapper.updateById(updateMsg);
+    }
+    
+    /**
      * 创建发送记录
      */
     private void createSendRecord(Long messageId, String channel, int receiverCount, MessageChannel.SendResult result,
@@ -292,6 +410,13 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
             this.content = content;
             this.channel = channel;
         }
+    }
+
+    /**
+     * 企业协同渠道逐人投递汇总
+     */
+    private record CollaborationDeliveryOutcome(int sentCount, int failedCount, int skippedCount,
+                                                String providerRequestId, String firstErrorMsg) {
     }
 
     @Override

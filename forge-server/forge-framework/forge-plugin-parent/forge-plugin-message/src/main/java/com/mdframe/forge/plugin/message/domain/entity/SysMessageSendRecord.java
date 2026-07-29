@@ -35,7 +35,27 @@ public class SysMessageSendRecord implements Serializable {
     private Long messageId;
     
     /**
-     * 发送渠道：WEB/SMS/EMAIL/PUSH
+     * 企业协同连接ID（COLLABORATION 渠道使用，可为空）
+     */
+    private Long connectionId;
+    
+    /**
+     * 本次渠道投递幂等键（可为空）
+     */
+    private String idempotencyKey;
+    
+    /**
+     * 投递尝试序号（从 1 开始）
+     */
+    private Integer attemptNo;
+    
+    /**
+     * 供应商请求ID（用于排障）
+     */
+    private String providerRequestId;
+    
+    /**
+     * 发送渠道：WEB/SMS/EMAIL/PUSH/COLLABORATION
      */
     private String channel;
     

@@ -24,6 +24,16 @@ public class SocialPlatformInfo implements Serializable {
     private String platform;
 
     /**
+     * 连接编码（租户内唯一，多连接下用于精确发起授权）
+     */
+    private String connectionCode;
+
+    /**
+     * 连接名称
+     */
+    private String connectionName;
+
+    /**
      * 平台名称
      */
     private String platformName;

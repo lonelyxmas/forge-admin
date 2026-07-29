@@ -66,6 +66,11 @@
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-collaboration</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-generator</artifactId>
         </dependency>
 

@@ -371,6 +371,12 @@
                 <artifactId>forge-starter-outbound</artifactId>
                 <version>${revision}</version>
             </dependency>
+
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-starter-collaboration</artifactId>
+                <version>${revision}</version>
+            </dependency>
             
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
@@ -443,6 +449,12 @@
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
                 <artifactId>forge-plugin-message</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-plugin-collaboration</artifactId>
                 <version>${revision}</version>
             </dependency>
             

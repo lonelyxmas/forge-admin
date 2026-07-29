@@ -1,25 +1,24 @@
 <template>
   <div class="social-config-page">
+    <n-alert type="info" class="mb-3" title="配置管理已迁移" closable>
+      三方登录连接、物理应用与 Secret 凭据已统一迁移至「企业协同 - 连接管理」维护，本页仅保留只读兼容视图，不再支持新增、编辑和删除。
+      <template #action>
+        <n-button size="small" type="primary" @click="handleGoCollaboration">
+          前往连接管理
+        </n-button>
+      </template>
+    </n-alert>
+
     <AiCrudPage
       ref="crudRef"
       api="/system/socialConfig"
-      :api-config="{
-        list: 'get@/system/socialConfig/page',
-        detail: 'post@/system/socialConfig/getById',
-        add: 'post@/system/socialConfig/add',
-        update: 'post@/system/socialConfig/edit',
-        delete: 'post@/system/socialConfig/remove',
-      }"
+      :api-config="{ list: 'get@/system/socialConfig/page' }"
       :search-schema="searchSchema"
       :columns="tableColumns"
-      :edit-schema="editSchema"
       row-key="id"
-      add-button-text="新增三方登录配置"
-      :load-detail-on-edit="true"
-      :edit-grid-cols="2"
-      modal-width="900px"
-      :before-render-detail="handleBeforeRenderDetail"
-      :before-submit="handleBeforeSubmit"
+      :hide-add="true"
+      :hide-batch-delete="true"
+      :hide-selection="true"
     >
       <template #toolbar-end>
         <n-button
@@ -37,7 +36,7 @@
 
     <n-modal
       v-model:show="detailVisible"
-      title="三方登录配置详情"
+      title="三方登录配置详情（只读）"
       preset="card"
       style="width: 800px"
       :mask-closable="false"
@@ -61,17 +60,26 @@
             />
             <span v-else>-</span>
           </n-descriptions-item>
+          <n-descriptions-item label="连接编码">
+            {{ currentConfig.connectionCode || '-' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="连接名称">
+            {{ currentConfig.connectionName || '-' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="外部企业ID">
+            {{ currentConfig.enterpriseId || '-' }}
+          </n-descriptions-item>
           <n-descriptions-item label="应用ID">
-            {{ currentConfig.clientId }}
+            {{ currentConfig.clientId || '-' }}
           </n-descriptions-item>
           <n-descriptions-item label="应用Secret">
-            ******
-          </n-descriptions-item>
-          <n-descriptions-item label="回调地址" :span="2">
-            {{ currentConfig.redirectUri || '-' }}
+            {{ currentConfig.secretConfigured ? (currentConfig.secretMasked || '已配置') : '未配置' }}
           </n-descriptions-item>
           <n-descriptions-item label="AgentId">
             {{ currentConfig.agentId || '-' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="回调地址" :span="2">
+            {{ currentConfig.redirectUri || '-' }}
           </n-descriptions-item>
           <n-descriptions-item label="授权范围">
             {{ currentConfig.scope || '-' }}
@@ -95,6 +103,9 @@
           <n-button @click="detailVisible = false">
             关闭
           </n-button>
+          <n-button type="primary" @click="handleGoCollaboration">
+            去连接管理维护
+          </n-button>
         </n-space>
       </template>
     </n-modal>
@@ -103,6 +114,7 @@
 
 <script setup>
 import { computed, h, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { AiCrudPage } from '@/components/ai-form'
 import AuthImage from '@/components/common/AuthImage.vue'
 import SystemTableCell from '@/components/common/SystemTableCell.vue'
@@ -112,6 +124,7 @@ import { request } from '@/utils'
 
 defineOptions({ name: 'SocialConfig' })
 
+const router = useRouter()
 const crudRef = ref(null)
 const detailVisible = ref(false)
 const currentConfig = ref(null)
@@ -191,16 +204,23 @@ const tableColumns = computed(() => [
     },
   },
   {
+    prop: 'connectionCode',
+    label: '连接编码',
+    width: 150,
+    showOverflowTooltip: true,
+    render: row => row.connectionCode || '-',
+  },
+  {
     prop: 'clientId',
     label: '应用ID',
     width: 180,
     showOverflowTooltip: true,
   },
   {
-    prop: 'redirectUri',
-    label: '回调地址',
-    width: 200,
-    showOverflowTooltip: true,
+    prop: 'secretConfigured',
+    label: 'Secret',
+    width: 90,
+    render: row => (row.secretConfigured ? '已配置' : '未配置'),
   },
   {
     prop: 'status',
@@ -219,139 +239,12 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 140,
+    width: 130,
     fixed: 'right',
     actions: [
       { label: '查看', key: 'view', type: 'primary', onClick: handleView },
-      { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
-      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
+      { label: '去维护', key: 'maintain', type: 'primary', onClick: handleGoCollaboration },
     ],
-  },
-])
-
-const editSchema = computed(() => [
-  {
-    type: 'divider',
-    label: '基础配置',
-    props: {
-      titlePlacement: 'left',
-    },
-    span: 2,
-  },
-  {
-    field: 'platform',
-    label: '平台类型',
-    type: 'select',
-    rules: [{ required: true, message: '请选择平台类型', trigger: 'change' }],
-    props: {
-      options: platformOptions.value,
-      placeholder: '请选择平台类型',
-      clearable: false,
-    },
-  },
-  {
-    field: 'platformName',
-    label: '平台名称',
-    type: 'input',
-    rules: [{ required: true, message: '请输入平台名称', trigger: 'blur' }],
-    props: {
-      placeholder: '请输入平台名称，如：微信登录',
-    },
-  },
-  {
-    field: 'platformLogo',
-    label: '平台Logo',
-    type: 'imageUpload',
-    span: 2,
-    businessType: 'social-logo',
-    limit: 1,
-    fileSize: 2,
-    valueType: 'string',
-    props: {
-      showTip: true,
-    },
-  },
-  {
-    type: 'divider',
-    label: '应用配置',
-    props: {
-      titlePlacement: 'left',
-    },
-    span: 2,
-  },
-  {
-    field: 'clientId',
-    label: '应用ID/Key',
-    type: 'input',
-    rules: [{ required: true, message: '请输入应用ID', trigger: 'blur' }],
-    props: {
-      placeholder: '请输入应用ID或Key',
-    },
-  },
-  {
-    field: 'clientSecret',
-    label: '应用Secret',
-    type: 'input',
-    rules: [{ required: true, message: '请输入应用Secret', trigger: 'blur' }],
-    props: {
-      placeholder: '请输入应用Secret',
-      type: 'password',
-      showPasswordOn: 'click',
-    },
-  },
-  {
-    field: 'redirectUri',
-    label: '回调地址',
-    type: 'input',
-    span: 2,
-    props: {
-      placeholder: '请输入回调地址，如：https://example.com/auth/callback',
-    },
-  },
-  {
-    field: 'agentId',
-    label: 'AgentId',
-    type: 'input',
-    props: {
-      placeholder: '企业微信等需要时填写',
-    },
-  },
-  {
-    field: 'scope',
-    label: '授权范围',
-    type: 'input',
-    props: {
-      placeholder: '请输入授权范围，多个用逗号分隔',
-    },
-  },
-  {
-    type: 'divider',
-    label: '其他配置',
-    props: {
-      titlePlacement: 'left',
-    },
-    span: 2,
-  },
-  {
-    field: 'status',
-    label: '状态',
-    type: 'select',
-    defaultValue: '0',
-    rules: [{ required: true, message: '请选择状态', trigger: 'change' }],
-    props: {
-      options: statusOptions.value,
-      clearable: false,
-    },
-  },
-  {
-    field: 'remark',
-    label: '备注说明',
-    type: 'textarea',
-    span: 2,
-    props: {
-      placeholder: '请输入备注说明',
-      rows: 3,
-    },
   },
 ])
 
@@ -370,31 +263,8 @@ async function handleView(row) {
   }
 }
 
-function handleEdit(row) {
-  crudRef.value?.showEdit(row)
-}
-
-function handleDelete(row) {
-  window.$dialog.warning({
-    title: '确认删除',
-    content: '确定要删除该三方登录配置吗？删除后将无法恢复！',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        const res = await request.post('/system/socialConfig/remove', null, {
-          params: { id: row.id },
-        })
-        if (res.code === 200) {
-          window.$message.success('删除成功')
-          crudRef.value?.refresh()
-        }
-      }
-      catch {
-        window.$message.error('删除失败')
-      }
-    },
-  })
+function handleGoCollaboration() {
+  router.push('/system/collaboration/connections')
 }
 
 async function handleRefreshCache() {
@@ -420,30 +290,18 @@ async function handleRefreshCache() {
     },
   })
 }
-
-function handleBeforeRenderDetail(data) {
-  if (!data)
-    return data
-
-  if (data.status !== null && data.status !== undefined) {
-    data.status = String(data.status)
-  }
-
-  return data
-}
-
-function handleBeforeSubmit(formData) {
-  if (formData.status !== null && formData.status !== undefined) {
-    formData.status = Number(formData.status)
-  }
-
-  return formData
-}
 </script>
 
 <style scoped>
 .social-config-page {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-config-page :deep(.ai-crud-page) {
+  flex: 1;
+  min-height: 0;
 }
 
 .detail-content {

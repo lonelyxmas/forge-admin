@@ -35,6 +35,18 @@
             <artifactId>forge-starter-file</artifactId>
         </dependency>
 
+        <!-- 持久化加密（供应商 Secret 版本化密文） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-crypto</artifactId>
+        </dependency>
+
+        <!-- 企业协同 SPI（外部 Secret Resolver 扩展点） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-collaboration</artifactId>
+        </dependency>
+
         <!-- MyBatis Plus -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -77,6 +89,13 @@
             <groupId>me.zhyd.oauth</groupId>
             <artifactId>JustAuth</artifactId>
             <version>1.16.6</version>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

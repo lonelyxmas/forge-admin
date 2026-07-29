@@ -162,17 +162,15 @@ async function handleCallback() {
       return
     }
 
-    const authUser = callbackRes.data
+    // 服务端换票成功，只返回一次性登录票据，不再下发三方用户明细
+    const ticketData = callbackRes.data
     message.value = '正在登录...'
 
     const loginParams = {
       authType: 'oauth2',
-      socialPlatform: platform,
-      socialUuid: authUser.uuid,
-      socialNickname: authUser.nickname,
-      socialAvatar: authUser.avatar,
-      socialEmail: authUser.email,
-      tenantId,
+      socialTicket: ticketData.socialTicket,
+      connectionCode: ticketData.connectionCode,
+      tenantId: tenantId ?? ticketData.tenantId,
       userClient,
       appId: import.meta.env.VITE_APP_ID || 'forge_pc_001',
     }

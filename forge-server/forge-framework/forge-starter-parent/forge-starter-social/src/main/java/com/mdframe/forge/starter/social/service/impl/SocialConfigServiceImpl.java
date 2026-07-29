@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.file.core.FileManager;
 import com.mdframe.forge.starter.social.domain.dto.SocialPlatformInfo;
 import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
@@ -53,10 +54,23 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
 
     @Override
     public SysSocialConfig selectByPlatformAndTenant(String platform, Long tenantId) {
-        return this.lambdaQuery()
-                .eq(SysSocialConfig::getPlatform,platform)
-                .eq(SysSocialConfig::getStatus,"1")
-                .eq(tenantId != null,SysSocialConfig::getTenantId,tenantId).last("limit 1").one();
+        List<SysSocialConfig> connections = baseMapper.selectEnabledByPlatform(platform, tenantId);
+        if (connections.isEmpty()) {
+            return null;
+        }
+        if (connections.size() > 1) {
+            // 兼容期失败关闭：多连接歧义时禁止按平台猜测归属，必须按连接编码访问
+            throw new BusinessException(StrUtil.format("平台[{}]存在{}个启用连接，请按连接编码访问", platform, connections.size()));
+        }
+        return connections.get(0);
+    }
+
+    @Override
+    public SysSocialConfig selectConnectionByCode(String connectionCode) {
+        if (StrUtil.isBlank(connectionCode)) {
+            return null;
+        }
+        return baseMapper.selectConnectionByCode(null, connectionCode);
     }
 
     @Override
@@ -85,6 +99,8 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
                     
                     return SocialPlatformInfo.builder()
                             .platform(config.getPlatform())
+                            .connectionCode(config.getConnectionCode())
+                            .connectionName(config.getConnectionName())
                             .platformName(config.getPlatformName())
                             .platformLogo(config.getPlatformLogo())
                             .platformLogoBase64(logoBase64)
@@ -96,8 +112,20 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
 
     @Override
     public boolean insertConfig(SysSocialConfig config) {
+        sanitizeSecretEcho(config, null);
+        if (StrUtil.isBlank(config.getConnectionName())) {
+            config.setConnectionName(StrUtil.blankToDefault(config.getPlatformName(), config.getPlatform()));
+        }
         boolean success = this.save(config);
         if (success) {
+            // 连接编码缺省时用主键生成确定性编码，保证租户内唯一
+            if (StrUtil.isBlank(config.getConnectionCode())) {
+                SysSocialConfig codePatch = new SysSocialConfig();
+                codePatch.setId(config.getId());
+                codePatch.setConnectionCode(StrUtil.format("{}-{}", config.getPlatform().toLowerCase(), config.getId()));
+                this.updateById(codePatch);
+                config.setConnectionCode(codePatch.getConnectionCode());
+            }
             authRequestFactory.clearCache(config);
         }
         return success;
@@ -105,6 +133,8 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
 
     @Override
     public boolean updateConfig(SysSocialConfig config) {
+        SysSocialConfig current = config.getId() != null ? this.getById(config.getId()) : null;
+        sanitizeSecretEcho(config, current);
         boolean success = this.updateById(config);
         if (success) {
             authRequestFactory.clearCache(config);
@@ -138,12 +168,29 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
         authRequestFactory.clearCache();
     }
 
+    /**
+     * 掩码回传保护：前端只拿到固定掩码，回传掩码/空值时保留原 Secret，禁止用掩码覆盖真实凭据
+     */
+    private void sanitizeSecretEcho(SysSocialConfig config, SysSocialConfig current) {
+        String secret = config.getClientSecret();
+        boolean maskEcho = StrUtil.isNotBlank(secret) && secret.chars().allMatch(c -> c == '*');
+        if (StrUtil.isBlank(secret) || maskEcho) {
+            config.setClientSecret(current != null ? current.getClientSecret() : null);
+        }
+    }
+
     private LambdaQueryWrapper<SysSocialConfig> buildQueryWrapper(SysSocialConfig query) {
         LambdaQueryWrapper<SysSocialConfig> wrapper = new LambdaQueryWrapper<>();
 
         if (ObjectUtil.isNotEmpty(query)) {
             if (ObjectUtil.isNotEmpty(query.getPlatform())) {
                 wrapper.eq(SysSocialConfig::getPlatform, query.getPlatform());
+            }
+            if (ObjectUtil.isNotEmpty(query.getConnectionCode())) {
+                wrapper.eq(SysSocialConfig::getConnectionCode, query.getConnectionCode());
+            }
+            if (ObjectUtil.isNotEmpty(query.getConnectionName())) {
+                wrapper.like(SysSocialConfig::getConnectionName, query.getConnectionName());
             }
             if (ObjectUtil.isNotEmpty(query.getStatus())) {
                 wrapper.eq(SysSocialConfig::getStatus, query.getStatus());

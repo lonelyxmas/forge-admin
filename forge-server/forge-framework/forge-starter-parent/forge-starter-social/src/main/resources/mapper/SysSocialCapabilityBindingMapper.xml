@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.social.mapper.SysSocialCapabilityBindingMapper">
+
+    <sql id="selectColumns">
+        id, tenant_id, connection_id, capability, app_config_id,
+        config_json, status, remark,
+        create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectActiveBinding" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialCapabilityBinding">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_capability_binding
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND capability = #{capability}
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByConnection" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialCapabilityBinding">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_capability_binding
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND del_flag = 0
+        ORDER BY capability
+    </select>
+
+    <select id="countActiveByApp" resultType="int">
+        SELECT COUNT(*)
+        FROM sys_social_capability_binding
+        WHERE tenant_id = #{tenantId}
+          AND app_config_id = #{appConfigId}
+          AND del_flag = 0
+    </select>
+</mapper>

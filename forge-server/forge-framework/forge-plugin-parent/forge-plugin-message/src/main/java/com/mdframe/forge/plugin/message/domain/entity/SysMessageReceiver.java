@@ -55,6 +55,36 @@ public class SysMessageReceiver implements Serializable {
     private LocalDateTime readTime;
     
     /**
+     * 外部渠道投递状态：PENDING/SENT/FAILED/SKIPPED（站内信为 NULL）
+     */
+    private String deliveryStatus;
+    
+    /**
+     * 投递尝试次数
+     */
+    private Integer deliveryAttempts;
+    
+    /**
+     * 外部渠道逐人消息ID
+     */
+    private String externalId;
+    
+    /**
+     * 最近一次投递失败错误码
+     */
+    private String lastErrorCode;
+    
+    /**
+     * 最近一次投递尝试时间
+     */
+    private LocalDateTime lastAttemptTime;
+    
+    /**
+     * 下次重试时间
+     */
+    private LocalDateTime nextRetryTime;
+    
+    /**
      * 创建时间
      */
     @TableField(value = "create_time")

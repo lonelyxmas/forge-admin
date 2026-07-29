@@ -7,6 +7,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.MapPropertySource;
@@ -93,6 +94,47 @@ class CryptoSecretEnvironmentPostProcessorTest {
 
         assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY)).isNotBlank();
         assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY)).isNotBlank();
+    }
+
+    @Test
+    void shouldIgnorePlaceholderValuesExposedByAttachedConfigurationSource() {
+        Path secretFile = tempDir.resolve("attached/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of());
+        // 模拟 application.yml 中的占位符默认值（config data 源）
+        environment.getPropertySources().addLast(new MapPropertySource(
+                "Config resource 'class path resource [application.yml]' via location 'optional:classpath:/'",
+                Map.of(
+                        CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY,
+                        "${FORGE_CRYPTO_SECRET_KEY:}",
+                        CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY,
+                        "${FORGE_CRYPTO_PERSISTENCE_WRITE_VERSIONED:false}",
+                        CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY,
+                        "${FORGE_CRYPTO_PERSISTENCE_ACTIVE_KEY:}")));
+        // 模拟 SpringApplication.prepareEnvironment 在 EPP 之前挂载的聚合源
+        ConfigurationPropertySources.attach(environment);
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        String transportKey = environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY);
+        String activeKey = environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY);
+        assertThat(Base64.getDecoder().decode(transportKey)).hasSize(16);
+        assertThat(Base64.getDecoder().decode(activeKey)).hasSize(16);
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY))
+                .isEqualTo("true");
+    }
+
+    @Test
+    void shouldBootstrapEvenWhenTransportCryptoDisabled() {
+        Path secretFile = tempDir.resolve("disabled/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of("forge.crypto.enabled", "false"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY)).isNotBlank();
+        assertThat(secretFile).isRegularFile();
     }
 
     @Test

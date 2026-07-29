@@ -27,9 +27,16 @@ public interface ISocialConfigService {
     SysSocialConfig selectConfigById(Long id);
 
     /**
-     * 根据平台和租户查询配置
+     * 根据平台和租户查询配置（兼容期接口）
+     * <p>
+     * 仅当平台下存在唯一启用连接时返回；存在多个连接时失败关闭，要求按连接编码访问
      */
     SysSocialConfig selectByPlatformAndTenant(String platform, Long tenantId);
+
+    /**
+     * 按连接编码查询当前租户连接
+     */
+    SysSocialConfig selectConnectionByCode(String connectionCode);
 
     /**
      * 查询租户下所有启用的平台信息

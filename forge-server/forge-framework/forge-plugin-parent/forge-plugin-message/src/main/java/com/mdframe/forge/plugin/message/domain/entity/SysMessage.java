@@ -82,4 +82,14 @@ public class SysMessage extends TenantEntity {
      * 业务主键（如：订单ID、流程实例ID等）
      */
     private String bizKey;
+    
+    /**
+     * 企业协同连接ID（COLLABORATION 渠道使用，可为空）
+     */
+    private Long connectionId;
+    
+    /**
+     * 消息幂等键（相同幂等键并发只创建一份逻辑消息，可为空）
+     */
+    private String idempotencyKey;
 }
