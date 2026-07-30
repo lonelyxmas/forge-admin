@@ -67,9 +67,12 @@
             <artifactId>forge-starter-job</artifactId>
         </dependency>
 
+        <!-- 定时任务插件仅供 3 个协同 Job Handler 使用；设为 optional 避免传递到不启调度器的服务（如 app-server），
+             app-server 引入本插件仅取免登/连接器能力，不会被拽入 Quartz 调度集群 -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-job</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <dependency>

@@ -86,8 +86,11 @@ public class WeComLoginConnector implements LoginConnector {
             phone = fetchMobile(context, userTicket);
         }
 
+        // best-effort 获取头像（通讯录 CONTACT token）
+        String avatar = fetchAvatar(context, userId);
+
         return new VerifiedSocialIdentity(context.tenantId(), context.connectionId(),
-                context.connectionCode(), platform(), userId, null, null, null, phone, Instant.now());
+                context.connectionCode(), platform(), userId, null, avatar, null, phone, Instant.now());
     }
 
     /**
@@ -108,6 +111,29 @@ public class WeComLoginConnector implements LoginConnector {
             // 手机号非登录必要项：换取失败仅记录并跳过，避免阻断免登
             log.warn("企微成员手机号换取失败，跳过补齐: connectionId={}, reason={}",
                     context.connectionId(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * best-effort 获取成员头像：调 /cgi-bin/user/get（CONTACT token）读取 avatar 字段。
+     * 需要通讯录权限（IP 白名单/读取成员权限），失败不阻断登录，仅跳过头像获取。
+     */
+    private String fetchAvatar(CollaborationExecutionContext context, String userId) {
+        try {
+            JSONObject userInfo = apiClient.execute(WeComRequest.<JSONObject>builder()
+                    .path("/cgi-bin/user/get")
+                    .method("GET")
+                    .queryParams(Map.of("userid", userId))
+                    .tokenType(AccessTokenProvider.TokenType.CONTACT)
+                    .responseType(JSONObject.class)
+                    .build(), context);
+            String avatar = userInfo.getString("avatar");
+            return StringUtils.hasText(avatar) ? avatar : null;
+        } catch (Exception e) {
+            // 头像非登录必要项：获取失败仅记录并跳过
+            log.warn("企微成员头像获取失败，跳过: connectionId={}, userId={}, reason={}",
+                    context.connectionId(), userId, e.getMessage());
             return null;
         }
     }

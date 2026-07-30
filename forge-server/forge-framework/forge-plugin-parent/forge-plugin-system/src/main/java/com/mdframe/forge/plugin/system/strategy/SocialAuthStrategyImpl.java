@@ -4,7 +4,11 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.entity.SysUserRole;
+import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.enums.AuthType;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
@@ -21,6 +25,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 /**
  * 三方登录认证策略实现
@@ -56,6 +64,12 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
 
     @Autowired
     private SysUserMapper userMapper;
+
+    @Autowired
+    private SysUserTenantMapper userTenantMapper;
+
+    @Autowired
+    private SysUserRoleMapper userRoleMapper;
 
     @Override
     protected void validateRequest(LoginRequest request) {
@@ -95,10 +109,22 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
             // 手机号增量补齐：已绑定用户本地无手机号时，用本次授权换取的手机号回填
             backfillPhoneIfBlank(sysUser, identity);
 
+            // 头像增量补齐：已绑定用户本地无头像时，用本次授权获取的头像回填
+            backfillAvatarIfBlank(sysUser, identity);
+
+            // 补齐租户成员 + 默认角色（幂等：已存在则跳过，仅首次有效）
+            ensureUserTenant(sysUser.getId(), tenantId);
+            assignDefaultRoles(sysUser.getId(), tenantId, connection);
+
+            // OAuth 场景持久化清除改密标记，防止 /auth/userInfo 从 DB 重加载时覆盖
+            dismissForcePasswordChangeIfNeeded(sysUser);
+
             LoginUser loginUser = userLoadService.loadUserByUsername(sysUser.getUsername(), tenantId);
             if (loginUser == null) {
                 throw new RuntimeException("加载用户信息失败");
             }
+            // belt-and-suspenders：session 层也确保 false
+            loginUser.setForcePasswordChange(false);
             log.info("三方登录成功（已绑定）: connectionId={}, userId={}", identity.connectionId(), sysUser.getId());
             return loginUser;
         }
@@ -119,6 +145,15 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         // 5. 自动注册（消费型连接或企业连接 AUTO_CREATE 策略）
         SysUser newUser = registerConsumerUser(identity, tenantId, request);
 
+        // 5.1 补齐租户成员关系
+        ensureUserTenant(newUser.getId(), tenantId);
+
+        // 5.2 分配默认角色（连接级优先，全局兜底）
+        assignDefaultRoles(newUser.getId(), tenantId, connection);
+
+        // 5.3 清除改密标记（registerConsumerUser 如命中已有用户，可能带有目录同步设的 true）
+        dismissForcePasswordChangeIfNeeded(newUser);
+
         // 6. 以服务端已验证身份建立连接维度绑定
         if (!socialUserService.bindVerifiedIdentity(identity, newUser.getId())) {
             throw new RuntimeException("绑定三方账号失败，请重试");
@@ -128,6 +163,9 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         if (loginUser == null) {
             throw new RuntimeException("加载新用户信息失败");
         }
+
+        // belt-and-suspenders：session 层也确保 false
+        loginUser.setForcePasswordChange(false);
 
         log.info("三方登录自动注册成功: connectionId={}, userId={}", identity.connectionId(), newUser.getId());
         return loginUser;
@@ -188,6 +226,109 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         } catch (Exception e) {
             log.warn("三方登录手机号补齐失败，跳过: userId={}, reason={}", sysUser.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * OAuth 登录持久化清除 force_password_change 标记。
+     * 仅当 DB 中为 true 时执行更新，防止 /auth/userInfo 重新加载覆盖 session。
+     */
+    private void dismissForcePasswordChangeIfNeeded(SysUser sysUser) {
+        if (Boolean.TRUE.equals(sysUser.getForcePasswordChange())) {
+            SysUser update = new SysUser();
+            update.setId(sysUser.getId());
+            update.setForcePasswordChange(false);
+            userMapper.updateById(update);
+            log.info("OAuth 登录清除强制改密标记: userId={}", sysUser.getId());
+        }
+    }
+
+    /**
+     * 头像增量补齐：仅当本地用户无头像且本次授权获取到头像时回填，不覆盖已有头像。
+     */
+    private void backfillAvatarIfBlank(SysUser sysUser, VerifiedSocialIdentity identity) {
+        if (StrUtil.isBlank(identity.avatar()) || StrUtil.isNotBlank(sysUser.getAvatar())) {
+            return;
+        }
+        try {
+            SysUser update = new SysUser();
+            update.setId(sysUser.getId());
+            update.setAvatar(identity.avatar());
+            userMapper.updateById(update);
+            log.info("三方登录头像增量补齐: userId={}", sysUser.getId());
+        } catch (Exception e) {
+            log.warn("三方登录头像补齐失败，跳过: userId={}, reason={}", sysUser.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 补齐用户-租户成员关系（已存在则跳过）
+     */
+    private void ensureUserTenant(Long userId, Long tenantId) {
+        if (tenantId == null) {
+            return;
+        }
+        LambdaQueryWrapper<SysUserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysUserTenant::getUserId, userId)
+                .eq(SysUserTenant::getTenantId, tenantId)
+                .last("LIMIT 1");
+        if (userTenantMapper.selectOne(wrapper) != null) {
+            return;
+        }
+        SysUserTenant userTenant = new SysUserTenant();
+        userTenant.setTenantId(tenantId);
+        userTenant.setUserId(userId);
+        userTenant.setMemberType(2);
+        userTenant.setIsDefault(1);
+        userTenant.setStatus(1);
+        userTenantMapper.insert(userTenant);
+        log.info("三方登录补齐租户成员: userId={}, tenantId={}", userId, tenantId);
+    }
+
+    /**
+     * 分配默认角色：连接级 defaultRoleIds 优先，为空时回退全局 forge.social.default-role-ids。
+     * 已有该角色则跳过（幂等）。
+     */
+    private void assignDefaultRoles(Long userId, Long tenantId, SysSocialConfig connection) {
+        Long[] roleIds = resolveDefaultRoleIds(connection);
+        if (roleIds == null || roleIds.length == 0) {
+            log.debug("三方登录无默认角色配置: connectionId={}", connection.getId());
+            return;
+        }
+        for (Long roleId : roleIds) {
+            if (roleId == null) {
+                continue;
+            }
+            LambdaQueryWrapper<SysUserRole> check = new LambdaQueryWrapper<>();
+            check.eq(SysUserRole::getUserId, userId)
+                    .eq(SysUserRole::getRoleId, roleId)
+                    .eq(SysUserRole::getTenantId, tenantId)
+                    .last("LIMIT 1");
+            if (userRoleMapper.selectOne(check) != null) {
+                continue;
+            }
+            SysUserRole userRole = new SysUserRole();
+            userRole.setUserId(userId);
+            userRole.setRoleId(roleId);
+            userRole.setTenantId(tenantId);
+            userRole.setCreateTime(LocalDateTime.now());
+            userRoleMapper.insert(userRole);
+        }
+        log.info("三方登录分配默认角色: userId={}, roleIds={}", userId, Arrays.toString(roleIds));
+    }
+
+    /**
+     * 解析默认角色ID：连接级字段优先（逗号分隔字符串），为空时取全局配置
+     */
+    private Long[] resolveDefaultRoleIds(SysSocialConfig connection) {
+        String connectionRoles = connection.getDefaultRoleIds();
+        if (StrUtil.isNotBlank(connectionRoles)) {
+            return Stream.of(connectionRoles.split(","))
+                    .map(String::trim)
+                    .filter(StrUtil::isNotBlank)
+                    .map(Long::valueOf)
+                    .toArray(Long[]::new);
+        }
+        return socialProperties.getDefaultRoleIds();
     }
 
     @Override

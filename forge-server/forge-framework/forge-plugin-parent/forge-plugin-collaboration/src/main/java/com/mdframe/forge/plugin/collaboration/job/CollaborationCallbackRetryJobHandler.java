@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
 import com.mdframe.forge.starter.social.service.ISocialConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -25,6 +26,7 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
+@ConditionalOnClass(IJobExecutor.class)
 @IgnoreTenant
 @RequiredArgsConstructor
 @JobHandler(value = "collaborationCallbackRetry", description = "企业协同回调收件箱补偿", group = "COLLABORATION")

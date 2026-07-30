@@ -70,6 +70,11 @@ public class SysSocialConfig {
     private String identityPolicy;
 
     /**
+     * 自动建号默认角色ID列表（逗号分隔），连接级覆盖全局配置
+     */
+    private String defaultRoleIds;
+
+    /**
      * 目录权威来源：EXTERNAL外部权威/LOCAL本地权威/NONE不同步
      */
     private String directoryAuthority;

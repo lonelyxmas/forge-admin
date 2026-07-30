@@ -62,6 +62,11 @@ public class SocialConnectionSummaryVO {
     private String identityPolicy;
 
     /**
+     * 自动建号默认角色ID列表（逗号分隔）
+     */
+    private String defaultRoleIds;
+
+    /**
      * 目录权威来源：EXTERNAL/LOCAL/NONE
      */
     private String directoryAuthority;
@@ -152,6 +157,7 @@ public class SocialConnectionSummaryVO {
         vo.setEnterpriseId(config.getEnterpriseId());
         vo.setConnectionType(config.getConnectionType());
         vo.setIdentityPolicy(config.getIdentityPolicy());
+        vo.setDefaultRoleIds(config.getDefaultRoleIds());
         vo.setDirectoryAuthority(config.getDirectoryAuthority());
         vo.setDefaultOrgId(config.getDefaultOrgId());
         vo.setApiBaseUrl(config.getApiBaseUrl());

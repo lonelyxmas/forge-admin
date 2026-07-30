@@ -6,7 +6,20 @@
     <view class="mesh-layer mesh-layer-b" />
     <view class="mesh-layer mesh-layer-c" />
 
-    <view class="page-shell">
+    <!-- 企微免登 pending 时全屏 loading，不展示登录表单 -->
+    <view v-if="wecomPending" class="page-shell wecom-loading-shell">
+      <view class="wecom-loading-content">
+        <image class="wecom-loading-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
+        <text class="wecom-loading-text">正在登录...</text>
+        <view class="wecom-loading-dots">
+          <view class="dot dot-1" />
+          <view class="dot dot-2" />
+          <view class="dot dot-3" />
+        </view>
+      </view>
+    </view>
+
+    <view v-else class="page-shell">
       <view class="brand-bar">
         <view class="brand-main">
           <view class="brand-mark">
@@ -123,6 +136,7 @@ export default {
       requestPrefix: import.meta.env.VITE_REQUEST_PREFIX || '/',
       redirect: '/pages/index/index',
       loading: false,
+      wecomPending: false,
       showPassword: false,
       captcha: {
         loading: false,
@@ -145,6 +159,7 @@ export default {
     }
     // 企微客户端内正处于免登流程时，等待其结果，避免闪现账号密码登录表单
     if (isWeComAutoLoginPending()) {
+      this.wecomPending = true
       this.loading = true
       const pending = getWeComAutoLoginPromise()
       if (pending) {
@@ -157,6 +172,7 @@ export default {
             return
           }
           // 免登跳过或失败：回退到常规账号密码登录
+          this.wecomPending = false
           this.loading = false
           this.loadCaptcha()
         })
@@ -978,6 +994,69 @@ export default {
   }
   50% {
     opacity: 0.78;
+  }
+}
+
+/* ===== 企微免登 loading 遮罩 ===== */
+.wecom-loading-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+.wecom-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32rpx;
+}
+
+.wecom-loading-logo {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 24rpx;
+}
+
+.wecom-loading-text {
+  font-size: 32rpx;
+  color: #475569;
+  font-weight: 500;
+}
+
+.wecom-loading-dots {
+  display: flex;
+  gap: 16rpx;
+}
+
+.wecom-loading-dots .dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: dotBounce 1.2s infinite ease-in-out;
+}
+
+.wecom-loading-dots .dot-1 {
+  animation-delay: 0s;
+}
+
+.wecom-loading-dots .dot-2 {
+  animation-delay: 0.2s;
+}
+
+.wecom-loading-dots .dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 </style>

@@ -5,7 +5,7 @@
     <sql id="selectColumns">
         id, platform, platform_name, platform_logo,
         connection_code, connection_name, enterprise_id, connection_type,
-        identity_policy, directory_authority, default_org_id,
+        identity_policy, default_role_ids, directory_authority, default_org_id,
         client_id, client_secret, redirect_uri, agent_id, scope,
         status, tenant_id, remark,
         create_by, create_time, create_dept, update_by, update_time, del_flag

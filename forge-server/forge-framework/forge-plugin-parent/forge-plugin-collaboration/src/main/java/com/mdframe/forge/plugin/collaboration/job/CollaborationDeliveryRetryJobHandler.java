@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
 import com.mdframe.forge.starter.job.annotation.JobHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@ConditionalOnClass(IJobExecutor.class)
 @IgnoreTenant
 @RequiredArgsConstructor
 @JobHandler(value = "collaborationDeliveryRetry", description = "企业协同消息投递补偿", group = "COLLABORATION")

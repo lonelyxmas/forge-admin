@@ -11,6 +11,7 @@ import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
 import com.mdframe.forge.starter.social.service.ISocialConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -26,6 +27,7 @@ import java.util.List;
  */
 @Slf4j
 @Component
+@ConditionalOnClass(IJobExecutor.class)
 @IgnoreTenant
 @RequiredArgsConstructor
 @JobHandler(value = "collaborationDirectorySync", description = "企业协同目录全量同步", group = "COLLABORATION")

@@ -39,6 +39,9 @@ public class CollaborationConnectionSaveRequest {
     /** 身份匹配策略：BIND_ONLY/AUTO_CREATE/MANUAL */
     private String identityPolicy;
 
+    /** 自动建号默认角色ID列表（逗号分隔） */
+    private String defaultRoleIds;
+
     /** 目录权威来源：EXTERNAL/LOCAL/NONE */
     private String directoryAuthority;
 
@@ -68,6 +71,7 @@ public class CollaborationConnectionSaveRequest {
         config.setEnterpriseId(enterpriseId);
         config.setConnectionType(connectionType);
         config.setIdentityPolicy(identityPolicy);
+        config.setDefaultRoleIds(defaultRoleIds);
         config.setDirectoryAuthority(directoryAuthority);
         config.setDefaultOrgId(defaultOrgId);
         config.setApiBaseUrl(apiBaseUrl);

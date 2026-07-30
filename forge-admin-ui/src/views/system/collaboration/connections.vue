@@ -48,6 +48,9 @@
             <n-descriptions-item label="身份匹配策略">
               <DictTag dict-type="sys_collab_identity_policy" :value="detail.connection?.identityPolicy" size="small" />
             </n-descriptions-item>
+            <n-descriptions-item label="默认角色">
+              {{ formatDefaultRoles(detail.connection?.defaultRoleIds) }}
+            </n-descriptions-item>
             <n-descriptions-item label="目录权威来源">
               <DictTag dict-type="sys_collab_directory_authority" :value="detail.connection?.directoryAuthority" size="small" />
             </n-descriptions-item>
@@ -321,6 +324,7 @@ import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { request } from '@/utils'
 
 defineOptions({ name: 'CollaborationConnections' })
 
@@ -368,6 +372,43 @@ const statusOptions = computed(() => dict.value.sys_normal_disable || [])
 const capabilityOptions = computed(() =>
   (dict.value.sys_collab_capability || []).filter(item => item.value !== 'TODO'),
 )
+
+// ==================== 角色选项（默认角色配置用） ====================
+const roleOptions = ref([])
+
+async function loadRoleOptions() {
+  try {
+    const res = await request.get('/system/role/page', {
+      params: { pageNum: 1, pageSize: 200 },
+    })
+    if (res.code === 200) {
+      roleOptions.value = (res.data?.records || []).map(item => ({
+        label: item.roleName,
+        value: item.id,
+      }))
+    }
+  }
+  catch (e) {
+    console.warn('加载角色列表失败:', e)
+  }
+}
+loadRoleOptions()
+
+/**
+ * 格式化默认角色：逗号分隔的角色ID字符串 → 角色名称列表
+ */
+function formatDefaultRoles(roleIdsStr) {
+  if (!roleIdsStr)
+    return '跟随全局配置'
+  const ids = roleIdsStr.split(',').map(id => Number(id.trim())).filter(Boolean)
+  if (ids.length === 0)
+    return '跟随全局配置'
+  const names = ids.map((id) => {
+    const role = roleOptions.value.find(r => r.value === id)
+    return role ? role.label : `ID:${id}`
+  })
+  return names.join('、')
+}
 
 // ==================== 主表 ====================
 
@@ -511,6 +552,18 @@ const editSchema = computed(() => [
     props: { options: identityPolicyOptions.value, clearable: false },
   },
   {
+    field: 'defaultRoleIds',
+    label: '默认角色',
+    type: 'select',
+    span: 2,
+    props: {
+      options: roleOptions.value,
+      multiple: true,
+      clearable: true,
+      placeholder: '自动建号时分配的默认角色（可多选），为空走全局配置',
+    },
+  },
+  {
     field: 'directoryAuthority',
     label: '目录权威来源',
     type: 'select',
@@ -555,6 +608,13 @@ function handleBeforeRenderDetail(data) {
     data.status = String(data.status)
   if (data.defaultOrgId !== null && data.defaultOrgId !== undefined)
     data.defaultOrgId = String(data.defaultOrgId)
+  // 默认角色：逗号分隔字符串 → 数值数组（供多选组件回显）
+  if (data.defaultRoleIds && typeof data.defaultRoleIds === 'string') {
+    data.defaultRoleIds = data.defaultRoleIds.split(',').map(id => Number(id.trim())).filter(Boolean)
+  }
+  else {
+    data.defaultRoleIds = []
+  }
   return data
 }
 
@@ -567,6 +627,13 @@ function handleBeforeSubmit(formData) {
   if (formData.status !== null && formData.status !== undefined)
     formData.status = Number(formData.status)
   formData.defaultOrgId = formData.defaultOrgId ? Number(formData.defaultOrgId) : null
+  // 默认角色：数值数组 → 逗号分隔字符串（后端存储格式）
+  if (Array.isArray(formData.defaultRoleIds) && formData.defaultRoleIds.length > 0) {
+    formData.defaultRoleIds = formData.defaultRoleIds.join(',')
+  }
+  else {
+    formData.defaultRoleIds = null
+  }
   // 企微留空时兜底官方地址，其余平台交由后端按平台默认地址处理
   if (!formData.apiBaseUrl && formData.platform === 'WECHAT_ENTERPRISE')
     formData.apiBaseUrl = WECOM_API_BASE_URL
