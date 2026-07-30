@@ -1,4 +1,7 @@
 <script>
+import { HOME_PAGE } from '@/utils/route'
+import { isWeComBrowser, startWeComAutoLogin } from '@/utils/wecom'
+
 function hideNativeTabBar() {
   if (typeof uni === 'undefined' || typeof uni.hideTabBar !== 'function') {
     return
@@ -9,9 +12,22 @@ function hideNativeTabBar() {
   })
 }
 
+// 企业微信客户端内自动免登：授权跳转或回调换票完成后进入首页
+function bootstrapWeComAutoLogin() {
+  if (!isWeComBrowser()) {
+    return
+  }
+  startWeComAutoLogin().then((result) => {
+    if (result?.status === 'logged-in') {
+      uni.reLaunch({ url: HOME_PAGE, fail: () => {} })
+    }
+  })
+}
+
 export default {
   onLaunch: function () {
     hideNativeTabBar()
+    bootstrapWeComAutoLogin()
     console.log('App Launch')
   },
   onShow: function () {

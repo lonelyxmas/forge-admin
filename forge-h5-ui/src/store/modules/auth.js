@@ -90,6 +90,22 @@ export const useAuthStore = defineStore('auth', {
       this.fetchAccessSnapshot()
       return res
     },
+    async oauthLogin({ socialTicket, connectionCode, tenantId } = {}) {
+      const payload = {
+        socialTicket,
+        connectionCode,
+        tenantId: tenantId || undefined,
+        authType: 'oauth2',
+        userClient: import.meta.env.VITE_USER_CLIENT || 'app',
+        appId: import.meta.env.VITE_APP_ID || undefined,
+        appSecret: import.meta.env.VITE_APP_SECRET || undefined,
+      }
+      const res = await api.login(payload)
+      this.setToken(res.data || {})
+      await this.fetchUserInfo()
+      this.fetchAccessSnapshot()
+      return res
+    },
     async fetchUserInfo() {
       if (!this.accessToken) {
         return null

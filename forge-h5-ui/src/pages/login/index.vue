@@ -105,6 +105,7 @@ import { useAuthStore } from '@/store'
 import api from '@/api'
 import { resolveStaticUrl } from '@/utils/assets'
 import { notify, toast } from '@/utils/notify'
+import { getWeComAutoLoginPromise, isWeComAutoLoginPending } from '@/utils/wecom'
 
 function normalizeLoginError(error) {
   const rawMessage = error?.message || error?.error?.message || error?.error?.msg || '登录失败，请稍后重试'
@@ -141,6 +142,26 @@ export default {
     if (authStore.isLogin) {
       this.goTarget()
       return
+    }
+    // 企微客户端内正处于免登流程时，等待其结果，避免闪现账号密码登录表单
+    if (isWeComAutoLoginPending()) {
+      this.loading = true
+      const pending = getWeComAutoLoginPromise()
+      if (pending) {
+        pending.then((result) => {
+          if (result?.status === 'logged-in' || authStore.isLogin) {
+            this.goTarget()
+            return
+          }
+          if (result?.status === 'redirecting') {
+            return
+          }
+          // 免登跳过或失败：回退到常规账号密码登录
+          this.loading = false
+          this.loadCaptcha()
+        })
+        return
+      }
     }
     this.loadCaptcha()
   },

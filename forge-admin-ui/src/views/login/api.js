@@ -45,4 +45,13 @@ export default {
 
   // 三方登录回调处理
   socialCallback: data => request.post('/social/callback', data, { needToken: false }),
+
+  // 企业微信PC客户端工作台免登：获取平台OAuth2授权地址
+  getWecomAuthorize: params => request.get('/collaboration/login/authorize', {
+    needToken: false,
+    params,
+  }),
+
+  // 企业微信免登回调：code&state 换取一次性登录票据
+  wecomLoginCallback: data => request.post('/collaboration/login/callback', data, { needToken: false }),
 }

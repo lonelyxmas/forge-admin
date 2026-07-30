@@ -37,6 +37,11 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
      */
     private static final String CONNECTION_TYPE_OAUTH_ONLY = "OAUTH_ONLY";
 
+    /**
+     * 连接身份策略：自动建号。企业连接免登首次登录时的建号开关，未开启则未绑定失败关闭
+     */
+    private static final String IDENTITY_POLICY_AUTO_CREATE = "AUTO_CREATE";
+
     @Autowired
     private ISocialUserService socialUserService;
 
@@ -87,6 +92,9 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
                 throw new RuntimeException("绑定的用户不存在");
             }
 
+            // 手机号增量补齐：已绑定用户本地无手机号时，用本次授权换取的手机号回填
+            backfillPhoneIfBlank(sysUser, identity);
+
             LoginUser loginUser = userLoadService.loadUserByUsername(sysUser.getUsername(), tenantId);
             if (loginUser == null) {
                 throw new RuntimeException("加载用户信息失败");
@@ -95,18 +103,20 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
             return loginUser;
         }
 
-        // 4. 未绑定：企业连接失败关闭，仅消费型连接允许按开关自动注册
+        // 4. 未绑定：企业连接按连接级身份策略 AUTO_CREATE 放开自动建号，消费型连接按全局开关
         String connectionType = connection.getConnectionType();
         boolean consumerConnection = StrUtil.isBlank(connectionType)
                 || CONNECTION_TYPE_OAUTH_ONLY.equals(connectionType);
-        if (!consumerConnection) {
+        if (consumerConnection) {
+            if (!Boolean.TRUE.equals(socialProperties.getAutoRegister())) {
+                throw new RuntimeException("该账号未绑定，请先绑定账号");
+            }
+        } else if (!IDENTITY_POLICY_AUTO_CREATE.equalsIgnoreCase(connection.getIdentityPolicy())) {
+            // 企业连接默认失败关闭；仅当连接身份策略为 AUTO_CREATE 时允许免登首次自动建号绑定
             throw new RuntimeException("企业账号尚未同步或绑定，请联系管理员");
         }
-        if (!Boolean.TRUE.equals(socialProperties.getAutoRegister())) {
-            throw new RuntimeException("该账号未绑定，请先绑定账号");
-        }
 
-        // 5. 消费型连接自动注册
+        // 5. 自动注册（消费型连接或企业连接 AUTO_CREATE 策略）
         SysUser newUser = registerConsumerUser(identity, tenantId, request);
 
         // 6. 以服务端已验证身份建立连接维度绑定
@@ -144,8 +154,10 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         newUser.setRealName(StrUtil.isNotBlank(identity.nickname()) ? identity.nickname() : "三方用户");
         newUser.setUserType(2);
         newUser.setEmail(identity.email());
-        if (StrUtil.isNotBlank(request.getPhone())) {
-            newUser.setPhone(request.getPhone());
+        // 手机号优先取平台已验证身份（snsapi_privateinfo 换取），回退登录请求携带值
+        String phone = StrUtil.isNotBlank(identity.phone()) ? identity.phone() : request.getPhone();
+        if (StrUtil.isNotBlank(phone)) {
+            newUser.setPhone(phone);
         }
 
         // 三方自动注册不生成共享默认密码，避免账号可被密码登录横向利用。
@@ -157,6 +169,25 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         userMapper.insert(newUser);
         log.info("三方登录自动创建用户: userId={}, username={}", newUser.getId(), newUser.getUsername());
         return newUser;
+    }
+
+    /**
+     * 手机号增量补齐：仅当本地用户无手机号且本次授权换到手机号时回填，不覆盖已有手机号。
+     * 回填失败（如手机号被占用）仅记录并跳过，不阻断登录。
+     */
+    private void backfillPhoneIfBlank(SysUser sysUser, VerifiedSocialIdentity identity) {
+        if (StrUtil.isBlank(identity.phone()) || StrUtil.isNotBlank(sysUser.getPhone())) {
+            return;
+        }
+        try {
+            SysUser update = new SysUser();
+            update.setId(sysUser.getId());
+            update.setPhone(identity.phone());
+            userMapper.updateById(update);
+            log.info("三方登录手机号增量补齐: userId={}", sysUser.getId());
+        } catch (Exception e) {
+            log.warn("三方登录手机号补齐失败，跳过: userId={}, reason={}", sysUser.getId(), e.getMessage());
+        }
     }
 
     @Override

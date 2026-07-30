@@ -7,6 +7,7 @@ import { setupRouter } from './router'
 import { setupStore } from './store'
 import { setupNaiveDiscreteApi } from './utils'
 import { loadRuntimeCryptoConfig } from './utils/crypto/crypto-config'
+import { runWeComAutoLogin } from './utils/wecom'
 import '@/styles/reset.css'
 import '@/styles/design-tokens.css'
 import '@/styles/animations.css'
@@ -33,6 +34,13 @@ async function bootstrap() {
   const appStore = useAppStore()
   const themeConfig = appStore.themeConfig || defaultThemeConfig
   applyThemeConfig(themeConfig, appStore.isDark)
+
+  // 企微PC客户端工作台免登：写入 token 后由路由守卫补拉用户信息/菜单/密钥交换
+  const wecomResult = await runWeComAutoLogin()
+  if (wecomResult?.status === 'redirecting') {
+    // 正在跳转企微授权页，停止后续挂载
+    return
+  }
 
   await setupRouter(app)
   app.mount('#app')

@@ -101,6 +101,7 @@ public class SocialOAuthStateService {
         payload.setNickname(identity.nickname());
         payload.setAvatar(identity.avatar());
         payload.setEmail(identity.email());
+        payload.setPhone(identity.phone());
         payload.setVerifiedAt(identity.verifiedAt() != null ? identity.verifiedAt().toEpochMilli() : System.currentTimeMillis());
         payload.setUserClient(client != null ? client.userClient() : null);
 
@@ -150,6 +151,7 @@ public class SocialOAuthStateService {
                 payload.getNickname(),
                 payload.getAvatar(),
                 payload.getEmail(),
+                payload.getPhone(),
                 Instant.ofEpochMilli(payload.getVerifiedAt()));
     }
 
@@ -166,6 +168,7 @@ public class SocialOAuthStateService {
         private String nickname;
         private String avatar;
         private String email;
+        private String phone;
         private long verifiedAt;
         private String userClient;
     }

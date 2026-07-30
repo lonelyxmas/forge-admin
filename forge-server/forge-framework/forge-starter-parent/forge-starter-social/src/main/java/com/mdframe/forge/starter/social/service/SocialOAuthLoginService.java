@@ -69,6 +69,7 @@ public class SocialOAuthLoginService {
                 authUser.getNickname(),
                 authUser.getAvatar(),
                 authUser.getEmail(),
+                null,
                 Instant.now());
     }
 

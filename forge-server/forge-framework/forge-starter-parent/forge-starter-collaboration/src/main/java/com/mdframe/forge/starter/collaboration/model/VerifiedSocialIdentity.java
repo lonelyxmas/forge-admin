@@ -15,6 +15,7 @@ import java.time.Instant;
  * @param nickname       昵称（可为空）
  * @param avatar         头像（可为空）
  * @param email          邮箱（可为空）
+ * @param phone          手机号（可为空，仅平台授权 snsapi_privateinfo 后经官方接口换取）
  * @param verifiedAt     服务端验证时间
  */
 public record VerifiedSocialIdentity(
@@ -26,6 +27,7 @@ public record VerifiedSocialIdentity(
         String nickname,
         String avatar,
         String email,
+        String phone,
         Instant verifiedAt
 ) {
 }
