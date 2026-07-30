@@ -1,5 +1,6 @@
 <script>
 import { HOME_PAGE } from '@/utils/route'
+import { setupDebugConsole } from '@/utils/debug-console'
 import { isWeComBrowser, startWeComAutoLogin } from '@/utils/wecom'
 
 function hideNativeTabBar() {
@@ -25,7 +26,9 @@ function bootstrapWeComAutoLogin() {
 }
 
 export default {
-  onLaunch: function () {
+  onLaunch: async function () {
+    // 优先加载页内调试面板（?vdebug=1 开启），确保后续 console 可见
+    await setupDebugConsole()
     hideNativeTabBar()
     bootstrapWeComAutoLogin()
     console.log('App Launch')

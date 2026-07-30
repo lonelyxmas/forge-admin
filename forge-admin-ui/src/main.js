@@ -7,6 +7,7 @@ import { setupRouter } from './router'
 import { setupStore } from './store'
 import { setupNaiveDiscreteApi } from './utils'
 import { loadRuntimeCryptoConfig } from './utils/crypto/crypto-config'
+import { setupDebugConsole } from './utils/debug-console'
 import { runWeComAutoLogin } from './utils/wecom'
 import '@/styles/reset.css'
 import '@/styles/design-tokens.css'
@@ -17,6 +18,9 @@ import '@/styles/responsive-vars.css'
 import 'uno.css'
 
 async function bootstrap() {
+  // 优先加载页内调试面板（?vdebug=1 开启），确保后续 console 可见
+  await setupDebugConsole()
+
   await loadRuntimeCryptoConfig()
 
   const app = createApp(App)

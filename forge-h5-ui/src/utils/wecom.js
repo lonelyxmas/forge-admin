@@ -56,10 +56,13 @@ function clearCallbackParams() {
 }
 
 async function runAutoLogin() {
-  if (!isWeComBrowser()) {
+  const inWeCom = isWeComBrowser()
+  const connectionCode = getConnectionCode()
+  // 联调诊断：打开控制台即可确认免登是否触发及跳过原因
+  console.warn(`[wecom] 免登检测: inWeCom=${inWeCom}, hasConnectionCode=${!!connectionCode}, ua=${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`)
+  if (!inWeCom) {
     return { status: 'skip', reason: 'not-wecom' }
   }
-  const connectionCode = getConnectionCode()
   if (!connectionCode) {
     console.warn('[wecom] 未配置 VITE_WECOM_CONNECTION_CODE，跳过企微免登')
     return { status: 'skip', reason: 'no-connection-code' }
