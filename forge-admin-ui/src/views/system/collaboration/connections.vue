@@ -139,17 +139,17 @@
             <n-input v-model:value="appForm.appName" placeholder="请输入应用名称" />
           </n-form-item-gi>
           <n-form-item-gi label="应用ID/Key" path="clientId">
-            <n-input v-model:value="appForm.clientId" placeholder="企微填 CorpId" />
+            <n-input v-model:value="appForm.clientId" placeholder="企微填 CorpId，OAuth 平台填 ClientID" />
           </n-form-item-gi>
           <n-form-item-gi label="AgentId" path="agentId">
-            <n-input v-model:value="appForm.agentId" placeholder="企微自建应用 AgentId" />
+            <n-input v-model:value="appForm.agentId" placeholder="企微自建应用 AgentId，OAuth 平台可空" />
           </n-form-item-gi>
           <n-form-item-gi label="应用Secret" path="secret" :span="2">
             <n-input
               v-model:value="appForm.secret"
               type="password"
               show-password-on="click"
-              :placeholder="appForm.id ? '留空表示保留现有Secret' : '请输入应用Secret'"
+              :placeholder="appForm.id ? '留空表示保留现有Secret' : '企微填 Secret，OAuth 平台填 ClientSecret'"
             />
           </n-form-item-gi>
           <n-form-item-gi label="回调Token" path="callbackToken">
@@ -157,7 +157,7 @@
               v-model:value="appForm.callbackToken"
               type="password"
               show-password-on="click"
-              :placeholder="appForm.id ? '留空保留现值' : '接收回调时填写'"
+              :placeholder="appForm.id ? '留空保留现值' : '仅企业平台接收事件回调时填写'"
             />
           </n-form-item-gi>
           <n-form-item-gi label="EncodingAESKey" path="encodingAesKey">
@@ -165,14 +165,14 @@
               v-model:value="appForm.encodingAesKey"
               type="password"
               show-password-on="click"
-              :placeholder="appForm.id ? '留空保留现值' : '接收回调时填写'"
+              :placeholder="appForm.id ? '留空保留现值' : '仅企业平台接收事件回调时填写'"
             />
           </n-form-item-gi>
           <n-form-item-gi label="OAuth回调地址" path="redirectUri" :span="2">
-            <n-input v-model:value="appForm.redirectUri" placeholder="扫码登录回调地址，可空" />
+            <n-input v-model:value="appForm.redirectUri" placeholder="OAuth 登录回调地址，须与平台侧登记一致" />
           </n-form-item-gi>
           <n-form-item-gi label="授权范围" path="scope">
-            <n-input v-model:value="appForm.scope" placeholder="如 snsapi_base，可空" />
+            <n-input v-model:value="appForm.scope" placeholder="如 snsapi_base / user_info，多个用逗号分隔" />
           </n-form-item-gi>
           <n-form-item-gi label="状态" path="status">
             <n-select v-model:value="appForm.status" :options="appStatusOptions" />
@@ -246,10 +246,63 @@
         </n-space>
       </template>
     </n-modal>
+    <!-- 消息测试：显式指定接收人发送协同消息，返回逐人投递结果 -->
+    <n-modal
+      v-model:show="msgTestVisible"
+      title="消息测试"
+      preset="card"
+      style="width: 560px"
+      :mask-closable="false"
+    >
+      <n-form
+        ref="msgTestFormRef"
+        :model="msgTestForm"
+        :rules="msgTestRules"
+        label-placement="left"
+        label-width="80px"
+      >
+        <n-form-item label="接收人" path="userIds">
+          <UserSelectPicker
+            v-model:model-value="msgTestForm.userIds"
+            v-model:label-value="msgTestForm.userLabels"
+            multiple
+            placeholder="请选择测试接收人（最多10人）"
+            title="选择测试接收人"
+          />
+        </n-form-item>
+        <n-form-item label="标题" path="title">
+          <n-input v-model:value="msgTestForm.title" placeholder="消息标题，可空" />
+        </n-form-item>
+        <n-form-item label="正文" path="content">
+          <n-input v-model:value="msgTestForm.content" type="textarea" :rows="3" placeholder="请输入消息正文" />
+        </n-form-item>
+      </n-form>
+      <n-alert type="info" :show-icon="false" size="small" class="mb-3">
+        接收人必须已同步/绑定该连接的外部账号，且在企微应用可见范围内，否则会被平台标记无效。
+      </n-alert>
+      <n-data-table
+        v-if="msgTestResult"
+        :columns="msgTestResultColumns"
+        :data="msgTestResult.deliveries || []"
+        :bordered="true"
+        size="small"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="msgTestVisible = false">
+            关闭
+          </n-button>
+          <n-button type="primary" :loading="msgTestLoading" @click="handleSubmitMsgTest">
+            发送
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
+import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -257,17 +310,30 @@ import {
   createConnectionApp,
   deleteConnectionApp,
   getConnectionDetail,
+  sendTestMessage,
   testConnection,
   triggerConnectionSync,
   unbindConnectionCapability,
   updateConnectionApp,
 } from '@/api/collaboration'
 import { AiCrudPage } from '@/components/ai-form'
+import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 defineOptions({ name: 'CollaborationConnections' })
+
+/**
+ * 企业型平台：具备企业ID、通讯录同步与应用消息能力。
+ * 其余平台（Gitee/GitHub/QQ 等）仅支持 OAuth 登录，不具备企业ID/通讯录/消息投递概念。
+ */
+const ENTERPRISE_PLATFORMS = new Set(['WECHAT_ENTERPRISE', 'DINGTALK', 'DINGTALK_ACCOUNT', 'FEISHU'])
+const WECOM_API_BASE_URL = 'https://qyapi.weixin.qq.com'
+
+function isEnterprisePlatform(platform) {
+  return ENTERPRISE_PLATFORMS.has(platform)
+}
 
 const crudRef = ref(null)
 const route = useRoute()
@@ -358,19 +424,34 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 260,
+    width: 330,
     fixed: 'right',
     actions: [
       { label: '详情', key: 'view', type: 'info', onClick: handleView },
       { label: '编辑', key: 'edit', type: 'primary', onClick: row => crudRef.value?.showEdit(row) },
       { label: '应用管理', key: 'manage', type: 'primary', onClick: handleManage },
-      { label: '测试', key: 'test', type: 'primary', onClick: handleOpenTest },
+      {
+        label: '测试',
+        key: 'test',
+        type: 'primary',
+        // 连通测试依赖 AccessToken 换取，纯 OAuth 登录平台无该能力
+        visible: row => isEnterprisePlatform(row.platform),
+        onClick: handleOpenTest,
+      },
       {
         label: '同步',
         key: 'sync',
         type: 'primary',
-        visible: row => row.directoryAuthority === 'EXTERNAL',
+        visible: row => isEnterprisePlatform(row.platform) && row.directoryAuthority === 'EXTERNAL',
         onClick: handleTriggerSync,
+      },
+      {
+        label: '消息测试',
+        key: 'msgTest',
+        type: 'info',
+        // 消息推送走应用 Token，仅企业型平台具备该能力
+        visible: row => isEnterprisePlatform(row.platform),
+        onClick: handleOpenMsgTest,
       },
       { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
     ],
@@ -411,8 +492,7 @@ const editSchema = computed(() => [
     field: 'enterpriseId',
     label: '外部企业ID',
     type: 'input',
-    rules: [{ required: true, message: '请输入外部企业ID', trigger: 'blur' }],
-    props: { placeholder: '企微 CorpId' },
+    props: { placeholder: '企业平台必填（企微 CorpId）；纯 OAuth 登录平台可留空' },
   },
   {
     field: 'connectionType',
@@ -448,9 +528,8 @@ const editSchema = computed(() => [
     field: 'apiBaseUrl',
     label: 'API基础地址',
     type: 'input',
-    defaultValue: 'https://qyapi.weixin.qq.com',
     span: 2,
-    props: { placeholder: '私有化部署可自定义，留空使用平台官方地址' },
+    props: { placeholder: '留空使用平台官方地址，私有化部署可自定义' },
   },
   {
     field: 'status',
@@ -480,9 +559,20 @@ function handleBeforeRenderDetail(data) {
 }
 
 function handleBeforeSubmit(formData) {
+  // 企业型平台依赖企业ID换取凭据，纯 OAuth 登录平台无此概念，故按平台条件校验而非静态必填
+  if (isEnterprisePlatform(formData.platform) && !formData.enterpriseId) {
+    window.$message.warning('该平台为企业型连接，请填写外部企业ID')
+    return false
+  }
   if (formData.status !== null && formData.status !== undefined)
     formData.status = Number(formData.status)
   formData.defaultOrgId = formData.defaultOrgId ? Number(formData.defaultOrgId) : null
+  // 企微留空时兜底官方地址，其余平台交由后端按平台默认地址处理
+  if (!formData.apiBaseUrl && formData.platform === 'WECHAT_ENTERPRISE')
+    formData.apiBaseUrl = WECOM_API_BASE_URL
+  // 纯 OAuth 平台不存在自建/第三方应用形态，统一归一为仅登录连接类型
+  if (!isEnterprisePlatform(formData.platform))
+    formData.connectionType = 'OAUTH_ONLY'
   return formData
 }
 
@@ -804,6 +894,89 @@ function handleTriggerSync(row) {
       }
     },
   })
+}
+
+// ==================== 消息测试 ====================
+
+const msgTestVisible = ref(false)
+const msgTestLoading = ref(false)
+const msgTestFormRef = ref(null)
+const msgTestForm = ref({ connectionId: null, userIds: [], userLabels: [], title: '', content: '' })
+const msgTestResult = ref(null)
+
+const msgTestRules = {
+  userIds: [{
+    validator: () => {
+      const ids = msgTestForm.value.userIds || []
+      if (!ids.length)
+        return new Error('请选择测试接收人')
+      if (ids.length > 10)
+        return new Error('测试接收人不能超过10人')
+      return true
+    },
+    trigger: 'change',
+  }],
+  content: [{ required: true, message: '请输入消息正文', trigger: 'blur' }],
+}
+
+const msgTestResultColumns = [
+  { title: '用户ID', key: 'userId', width: 90 },
+  {
+    title: '投递状态',
+    key: 'status',
+    width: 90,
+    render: (row) => {
+      const type = row.status === 'SENT' ? 'success' : row.status === 'SKIPPED' ? 'warning' : 'error'
+      return h(NTag, { type, size: 'small' }, () => row.status)
+    },
+  },
+  {
+    title: '失败原因',
+    key: 'errorMessage',
+    render: row => row.errorMessage || (row.status === 'SENT' ? '-' : row.errorCode || '-'),
+  },
+]
+
+function handleOpenMsgTest(row) {
+  msgTestForm.value = {
+    connectionId: row.id,
+    userIds: [],
+    userLabels: [],
+    title: 'Forge 推送测试',
+    content: '',
+  }
+  msgTestResult.value = null
+  msgTestVisible.value = true
+}
+
+async function handleSubmitMsgTest() {
+  try {
+    await msgTestFormRef.value?.validate()
+  }
+  catch {
+    return
+  }
+  msgTestLoading.value = true
+  msgTestResult.value = null
+  try {
+    const { connectionId, userIds, title, content } = msgTestForm.value
+    const res = await sendTestMessage({ connectionId, userIds, title, content })
+    if (res.code === 200) {
+      msgTestResult.value = res.data
+      const deliveries = res.data?.deliveries || []
+      const sent = deliveries.filter(item => item.status === 'SENT').length
+      if (sent === deliveries.length && sent > 0)
+        window.$message.success('全部发送成功，请在企微客户端查看')
+      else
+        window.$message.warning(`发送完成：成功 ${sent}/${deliveries.length}，失败原因见下方明细`)
+    }
+  }
+  catch {
+    window.$message.error('消息测试发送失败')
+  }
+  finally {
+    msgTestLoading.value = false
+  }
 }
 </script>
 

@@ -51,6 +51,13 @@ export function triggerConnectionSync(id, data) {
   return request.post(`${BASE}/connections/${id}/sync`, data)
 }
 
+/**
+ * 消息测试发送：必须显式指定接收人（≤10人），返回逐人投递结果
+ */
+export function sendTestMessage(data) {
+  return request.post(`${BASE}/message/test-send`, data)
+}
+
 // ==================== 运维查询 ====================
 
 export function resolveSyncIssue(id, data) {

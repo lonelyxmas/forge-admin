@@ -13,14 +13,12 @@ import com.mdframe.forge.starter.social.domain.dto.SocialOAuthIntent;
 import com.mdframe.forge.starter.social.domain.dto.SocialPlatformInfo;
 import com.mdframe.forge.starter.social.domain.dto.SocialTicketResponse;
 import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
-import com.mdframe.forge.starter.social.factory.SocialAuthRequestFactory;
 import com.mdframe.forge.starter.social.service.ISocialConfigService;
 import com.mdframe.forge.starter.social.service.SocialOAuthLoginService;
 import com.mdframe.forge.starter.social.service.SocialOAuthStateService;
 import com.mdframe.forge.starter.collaboration.model.VerifiedSocialIdentity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import me.zhyd.oauth.request.AuthRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,7 +36,6 @@ import java.util.List;
 public class SocialController {
 
     private final ISocialConfigService socialConfigService;
-    private final SocialAuthRequestFactory authRequestFactory;
     private final SocialOAuthStateService oauthStateService;
     private final SocialOAuthLoginService oauthLoginService;
 
@@ -90,8 +87,7 @@ public class SocialController {
         }
         String state = oauthStateService.issueState(intent);
 
-        AuthRequest authRequest = authRequestFactory.createRequest(config);
-        String authUrl = authRequest.authorize(state);
+        String authUrl = oauthLoginService.buildAuthorizeUrl(config, state);
 
         SocialAuthUrl result = SocialAuthUrl.builder()
                 .platform(config.getPlatform())

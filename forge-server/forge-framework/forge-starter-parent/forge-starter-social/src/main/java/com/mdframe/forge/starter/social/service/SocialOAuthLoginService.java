@@ -73,28 +73,47 @@ public class SocialOAuthLoginService {
     }
 
     /**
+     * 构建平台授权跳转地址。
+     * <p>
+     * 与授权码换取共用同一套「LOGIN 应用优先、连接回退」参数解析，避免授权地址与换取阶段
+     * 使用不同的 clientId/redirectUri 导致平台校验失败。
+     */
+    public String buildAuthorizeUrl(SysSocialConfig connection, String state) {
+        if (connection == null || connection.getStatus() == null || connection.getStatus() != 1) {
+            throw new BusinessException("连接不存在或已停用");
+        }
+        SysSocialAppConfig loginApp = resolveLoginApp(connection);
+        return authRequestFactory.createRequest(connection, loginApp).authorize(state);
+    }
+
+    /**
      * 构建 AuthRequest：LOGIN 应用密文凭据优先，无 LOGIN 绑定时回退旧明文配置
      */
     private AuthRequest buildAuthRequest(SysSocialConfig connection) {
-        char[] secret = resolveLoginSecret(connection);
-        if (secret != null) {
-            try {
-                return authRequestFactory.createRequest(connection, secret);
-            } finally {
-                java.util.Arrays.fill(secret, '\0');
+        SysSocialAppConfig loginApp = resolveLoginApp(connection);
+        if (loginApp != null) {
+            char[] secret = appConfigService.decryptAppSecret(loginApp);
+            if (secret != null && secret.length > 0) {
+                try {
+                    return authRequestFactory.createRequest(connection, loginApp, secret);
+                } finally {
+                    java.util.Arrays.fill(secret, '\0');
+                }
             }
         }
         if (StrUtil.isBlank(connection.getClientSecret())) {
             throw new BusinessException("连接未配置登录凭据，请在连接下绑定 LOGIN 能力应用");
         }
-        return authRequestFactory.createRequest(connection);
+        return authRequestFactory.createRequest(connection, loginApp, null);
     }
 
-    private char[] resolveLoginSecret(SysSocialConfig connection) {
+    /**
+     * 解析连接下已启用的 LOGIN 能力应用；兼容期未绑定时返回 null 由调用方回退连接旧字段
+     */
+    private SysSocialAppConfig resolveLoginApp(SysSocialConfig connection) {
         try {
-            SysSocialAppConfig app = appConfigService.requireEnabledApp(
+            return appConfigService.requireEnabledApp(
                     connection.getTenantId(), connection.getId(), CollaborationCapability.LOGIN);
-            return appConfigService.decryptAppSecret(app);
         } catch (BusinessException e) {
             // 兼容期：连接尚未迁移到 LOGIN 应用时回退旧明文字段
             log.debug("连接无可用 LOGIN 应用凭据，回退旧配置: connectionId={}, reason={}",

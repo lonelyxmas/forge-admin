@@ -24,6 +24,7 @@
           AND b.capability = #{capability}
           AND b.status = 1
           AND b.del_flag = 0
+        ORDER BY b.update_time DESC, b.id DESC
         LIMIT 1
     </select>
 
