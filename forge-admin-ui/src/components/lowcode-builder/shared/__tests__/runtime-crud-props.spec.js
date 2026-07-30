@@ -152,6 +152,15 @@ describe('runtime CRUD design preview props', () => {
     expect(resolveCrudPreviewReloadKey(completed)).toBe(resolveCrudPreviewReloadKey(source))
   })
 
+  it('handles missing runtime CRUD props in static designer preview', () => {
+    expect(resolveCrudPreviewReloadKey({ props: {} }, null)).toBe(JSON.stringify({
+      enabled: false,
+      mode: 'mock',
+      recordId: '',
+      listApi: '',
+    }))
+  })
+
   it('changes the preview reload key only when a real request condition changes', () => {
     const source = {
       props: {
