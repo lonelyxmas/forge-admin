@@ -89,6 +89,11 @@ public class SysMessage extends TenantEntity {
     private Long connectionId;
     
     /**
+     * 企业协同平台编码：WECHAT_ENTERPRISE/DINGTALK/FEISHU 等，非协同渠道为空
+     */
+    private String platform;
+    
+    /**
      * 消息幂等键（相同幂等键并发只创建一份逻辑消息，可为空）
      */
     private String idempotencyKey;

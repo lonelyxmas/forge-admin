@@ -4,9 +4,19 @@ import loginApi from '@/views/login/api'
 // 企业微信PC客户端工作台免登：仅在企业微信客户端内置浏览器（UA 含 wxwork）生效。
 // 流程：无 code → 取授权地址跳转企微 OAuth2；带 code&state 回跳 → 换票据静默登录。
 // 登录成功仅写入 token，后续 userInfo/菜单/密钥交换由路由守卫链路自动补齐。
+// 免登开关与 connectionCode 由后端连接配置下发（sys_social_config.sso_workbench_enabled），不再前端写死。
 
-function getConnectionCode() {
-  return import.meta.env.VITE_WECOM_CONNECTION_CODE || ''
+async function getConnectionCode() {
+  try {
+    const res = await loginApi.getWecomSsoConnection('WECHAT_ENTERPRISE')
+    if (res?.code === 200 && res.data?.enabled) {
+      return res.data.connectionCode || ''
+    }
+  }
+  catch (error) {
+    console.warn('[wecom] 获取免登连接配置失败:', error)
+  }
+  return ''
 }
 
 function getUserClient() {
@@ -56,14 +66,14 @@ function clearCallbackParams() {
  */
 export async function runWeComAutoLogin() {
   const inWeCom = isWeComBrowser()
-  const connectionCode = getConnectionCode()
-  // 联调诊断：打开控制台即可确认免登是否触发及跳过原因
-  console.warn(`[wecom] 免登检测: inWeCom=${inWeCom}, hasConnectionCode=${!!connectionCode}, ua=${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`)
   if (!inWeCom) {
     return { status: 'skip', reason: 'not-wecom' }
   }
+  const connectionCode = await getConnectionCode()
+  // 联调诊断：打开控制台即可确认免登是否触发及跳过原因
+  console.warn(`[wecom] 免登检测: inWeCom=${inWeCom}, hasConnectionCode=${!!connectionCode}, ua=${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`)
   if (!connectionCode) {
-    console.warn('[wecom] 未配置 VITE_WECOM_CONNECTION_CODE，跳过企微免登')
+    console.warn('[wecom] 未在连接配置中开启工作台免登，跳过企微免登')
     return { status: 'skip', reason: 'no-connection-code' }
   }
 

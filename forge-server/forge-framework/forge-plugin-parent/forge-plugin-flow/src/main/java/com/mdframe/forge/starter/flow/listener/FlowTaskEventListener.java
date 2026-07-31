@@ -1,24 +1,15 @@
 package com.mdframe.forge.starter.flow.listener;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mdframe.forge.plugin.message.domain.dto.MessageSendRequestDTO;
-import com.mdframe.forge.plugin.message.service.MessageService;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
-import com.mdframe.forge.starter.flow.entity.FlowModel;
 import com.mdframe.forge.starter.flow.entity.FlowTask;
 import com.mdframe.forge.starter.core.domain.FlowEventMessage;
-import com.mdframe.forge.starter.flow.event.FlowEventPublisher;
-import com.mdframe.forge.starter.flow.event.FlowWebhookNotifier;
+import com.mdframe.forge.starter.flow.event.FlowTaskNotifyEvent;
 import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowFormInstanceMapper;
-import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
-import com.mdframe.forge.starter.flow.service.FlowCcService;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
-import com.mdframe.forge.starter.flow.service.FlowTaskReceiverResolver;
-import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEntityEvent;
@@ -35,29 +26,28 @@ import org.flowable.engine.impl.persistence.entity.ExecutionEntity;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.task.service.impl.persistence.entity.TaskEntity;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * 流程任务事件监听器
- * 监听任务的创建、完成、删除等事件，同步数据到业务表
+ * 监听任务的创建、完成、删除等事件，同步数据到业务表；
+ * 站内信/企微卡片/抄送/事件通知等副作用统一以 {@link FlowTaskNotifyEvent}
+ * 发布，由 FlowTaskNotifyListener 在事务提交后异步处理
  */
 @Slf4j
 @Component
 public class FlowTaskEventListener implements FlowableEventListener {
 
     private static final String PHYSICAL_CLEANUP_REASON_KEYWORD = "删除流程数据";
-    private static final String FLOW_TODO_MESSAGE_BIZ_TYPE = "FLOW_TODO";
 
     @Autowired
     @Lazy
@@ -67,10 +57,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Lazy
     private FlowBusinessMapper flowBusinessMapper;
 
-    @Autowired
-    @Lazy
-    private FlowModelMapper flowModelMapper;
-    
     @Autowired
     @Lazy
     private TaskService taskService;
@@ -83,15 +69,9 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Lazy
     private HistoryService historyService;
 
-    /** Redis Pub/Sub 发布器（可选，未引入 Redis 依赖时为 null）*/
-    @Autowired(required = false)
-    @Lazy
-    private FlowEventPublisher flowEventPublisher;
-
-    /** HTTP Webhook 回调器 */
+    /** 通知事件发布器：通知类副作用在事务提交后由异步监听器执行 */
     @Autowired
-    @Lazy
-    private FlowWebhookNotifier flowWebhookNotifier;
+    private ApplicationEventPublisher eventPublisher;
 
     @Autowired
     @Lazy
@@ -103,19 +83,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
 
     @Autowired(required = false)
     @Lazy
-    private MessageService messageService;
-
-    @Autowired(required = false)
-    @Lazy
-    private FlowTaskReceiverResolver taskReceiverResolver;
-
-    @Autowired(required = false)
-    @Lazy
     private FlowFormInstanceMapper flowFormInstanceMapper;
-
-    @Autowired(required = false)
-    @Lazy
-    private FlowCcService flowCcService;
 
     @Override
     public void onEvent(FlowableEvent event) {
@@ -156,11 +124,8 @@ public class FlowTaskEventListener implements FlowableEventListener {
     private void handleTaskCreated(FlowableEvent event) {
         try {
             TaskEntity task = (TaskEntity) ((FlowableEntityEvent) event).getEntity();
-            log.info("========== 任务创建事件 ==========");
-            log.info("taskId={}, name={}, assignee={}",
-                    task.getId(), task.getName(), task.getAssignee());
-            log.info("processInstanceId={}, processDefinitionId={}",
-                    task.getProcessInstanceId(), task.getProcessDefinitionId());
+            log.debug("任务创建事件：taskId={}, name={}, assignee={}, processInstanceId={}",
+                    task.getId(), task.getName(), task.getAssignee(), task.getProcessInstanceId());
             
             // 检查是否已存在
             FlowTask existingTask = flowTaskMapper.selectByTaskId(task.getId());
@@ -173,7 +138,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
             FlowTask flowTask = buildFlowTask(task);
             flowTask.setStatus(0); // 待办状态
             
-            log.info("任务处理人: {}, 候选人: {}, 候选组: {}",
+            log.debug("任务处理人: {}, 候选人: {}, 候选组: {}",
                     flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
 
             // 审批人分配失败：无处理人且无候选人/候选组时，记录错误日志
@@ -209,14 +174,14 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         String businessKey = processInstance.getBusinessKey();
                         if (businessKey != null && !businessKey.isEmpty()) {
                             business = getFlowBusinessByBusinessKey(businessKey);
-                            log.info("通过 businessKey 查询业务信息: businessKey={}, business={}", businessKey, business);
+                            log.debug("通过 businessKey 查询业务信息: businessKey={}, business={}", businessKey, business);
                         }
                     }
                 } catch (Exception e) {
                     log.warn("获取 ProcessInstance 失败: processInstanceId={}", task.getProcessInstanceId(), e);
                 }
             } else {
-                log.info("通过 processInstanceId 查询业务信息: processInstanceId={}, business={}", task.getProcessInstanceId(), business);
+                log.debug("通过 processInstanceId 查询业务信息: processInstanceId={}, business={}", task.getProcessInstanceId(), business);
             }
             
             if (business != null) {
@@ -228,7 +193,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 flowTask.setStartUserName(business.getApplyUserName());
                 flowTask.setStartDeptId(business.getApplyDeptId());
                 flowTask.setStartDeptName(business.getApplyDeptName());
-                log.info("业务信息: title={}, businessKey={}, applyUserId={}, applyUserName={}",
+                log.debug("业务信息: title={}, businessKey={}, applyUserId={}, applyUserName={}",
                         business.getTitle(), business.getBusinessKey(), business.getApplyUserId(), business.getApplyUserName());
             } else {
                 // 没有业务信息时设置默认値
@@ -240,8 +205,8 @@ public class FlowTaskEventListener implements FlowableEventListener {
             flowTaskMapper.insert(flowTask);
             log.info("创建待办任务成功：taskId={}, title={}, assignee={}, candidateUsers={}, candidateGroups={}",
                     task.getId(), flowTask.getTitle(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
-            sendTaskCreatedMessage(flowTask, business);
-            log.info("==================================");
+            // 事务提交后异步推送站内信 + 企微卡片，不阻塞审批主链路
+            eventPublisher.publishEvent(FlowTaskNotifyEvent.todo(flowTask, business));
     
             // 发布 TASK_CREATED 事件，业务侧可监听并处理（如：发送待办通知、记录日志等）
             if (business != null) {
@@ -277,6 +242,9 @@ public class FlowTaskEventListener implements FlowableEventListener {
             TaskEntity task = (TaskEntity) ((FlowableEntityEvent) event).getEntity();
             log.info("任务完成事件：taskId={}, name={}", task.getId(), task.getName());
             
+            // 业务信息只查一次，后续补全任务字段和发布事件复用
+            FlowBusiness completedBusiness = getFlowBusiness(task.getProcessInstanceId());
+
             // 更新任务状态
             FlowTask flowTask = flowTaskMapper.selectByTaskId(task.getId());
             if (flowTask != null) {
@@ -290,22 +258,20 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 flowTask.setStatus(2); // 已完成
                 flowTask.setCompleteTime(LocalDateTime.now());
                 
-                FlowBusiness business = getFlowBusiness(task.getProcessInstanceId());
-                if (business != null) {
-                    flowTask.setTenantId(business.getTenantId());
-                    flowTask.setTitle(business.getTitle());
-                    flowTask.setBusinessKey(business.getBusinessKey());
-                    flowTask.setBusinessType(business.getBusinessType());
-                    flowTask.setStartUserId(business.getApplyUserId());
-                    flowTask.setStartUserName(business.getApplyUserName());
+                if (completedBusiness != null) {
+                    flowTask.setTenantId(completedBusiness.getTenantId());
+                    flowTask.setTitle(completedBusiness.getTitle());
+                    flowTask.setBusinessKey(completedBusiness.getBusinessKey());
+                    flowTask.setBusinessType(completedBusiness.getBusinessType());
+                    flowTask.setStartUserId(completedBusiness.getApplyUserId());
+                    flowTask.setStartUserName(completedBusiness.getApplyUserName());
                 }
                 
                 flowTaskMapper.insert(flowTask);
                 log.info("创建已完成任务记录：taskId={}", task.getId());
             }
             // 发布 TASK_COMPLETED 事件，业务侧可监听具体节点完成情况（如：更新业务表审批节点状态等）
-            FlowBusiness completedBusiness = getFlowBusiness(task.getProcessInstanceId());
-            markTaskTodoMessageRead(task.getId(), completedBusiness);
+            eventPublisher.publishEvent(FlowTaskNotifyEvent.todoRead(task.getId(), completedBusiness));
             if (completedBusiness != null) {
                 // 获取该任务的审批意见
                 String comment = null;
@@ -339,22 +305,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
         } catch (Exception e) {
             log.error("处理任务完成事件失败", e);
             recordEventListenerError(event, "EVENT_TASK_COMPLETED", e);
-        }
-    }
-
-    private void markTaskTodoMessageRead(String taskId, FlowBusiness business) {
-        if (messageService == null || taskId == null || taskId.isBlank()) {
-            return;
-        }
-        try {
-            final int[] updated = {0};
-            runWithBusinessTenant(business,
-                    () -> updated[0] = messageService.markWebReadByBiz(FLOW_TODO_MESSAGE_BIZ_TYPE, taskId));
-            if (updated[0] > 0) {
-                log.info("待办站内信已自动置为已读: taskId={}, updated={}", taskId, updated[0]);
-            }
-        } catch (Exception e) {
-            log.warn("待办站内信自动置已读失败，不阻断流程: taskId={}", taskId, e);
         }
     }
 
@@ -397,7 +347,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                     if (flowTask.getTenantId() == null && assignedBusiness.getTenantId() != null) {
                         flowTask.setTenantId(assignedBusiness.getTenantId());
                     }
-                    sendTaskCreatedMessage(flowTask, assignedBusiness);
+                    eventPublisher.publishEvent(FlowTaskNotifyEvent.todo(flowTask, assignedBusiness));
                     FlowEventMessage msg = FlowEventMessage.ofTask(
                             FlowEventMessage.TASK_ASSIGNED,
                             task.getProcessInstanceId(),
@@ -443,7 +393,8 @@ public class FlowTaskEventListener implements FlowableEventListener {
                     flowTaskMapper.updateById(flowTask);
                     log.info("更新任务状态为已取消：taskId={}", task.getId());
                 }
-                markTaskTodoMessageRead(task.getId(), getFlowBusiness(task.getProcessInstanceId()));
+                eventPublisher.publishEvent(
+                        FlowTaskNotifyEvent.todoRead(task.getId(), getFlowBusiness(task.getProcessInstanceId())));
             }
             
         } catch (Exception e) {
@@ -519,7 +470,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                     fillTenantId(msg, business);
                     publishEvent(msg, business.getProcessDefKey());
                     if (!rejected) {
-                        sendProcessCc(business, processVariables);
+                        eventPublisher.publishEvent(FlowTaskNotifyEvent.processCc(business, processVariables));
                     }
                 } else {
                     log.warn("未找到流程业务记录：processInstanceId={}", processInstanceId);
@@ -573,106 +524,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
             log.debug("从历史变量读取流程变量失败: processInstanceId={}", processInstanceId);
         }
         return variables;
-    }
-
-    private void sendProcessCc(FlowBusiness business, Map<String, Object> variables) {
-        if (flowCcService == null || flowOrgIntegrationService == null || variables == null || variables.isEmpty()) {
-            return;
-        }
-        List<String> roleKeys = resolveCcRoleKeys(variables.get("ccRoleKeys"));
-        if (roleKeys.isEmpty()) {
-            return;
-        }
-
-        Set<String> ccUserIds = new LinkedHashSet<>();
-        for (String roleKey : roleKeys) {
-            try {
-                List<String> userIds = flowOrgIntegrationService.getUserIdsByRoleCode(roleKey);
-                if (userIds != null) {
-                    ccUserIds.addAll(userIds);
-                }
-            } catch (Exception e) {
-                log.warn("流程抄送角色解析失败: businessKey={}, roleKey={}",
-                        business.getBusinessKey(), roleKey, e);
-            }
-        }
-        if (ccUserIds.isEmpty()) {
-            log.warn("流程抄送未找到接收人: businessKey={}, roleKeys={}", business.getBusinessKey(), roleKeys);
-            return;
-        }
-
-        List<String> userIds = new ArrayList<>(ccUserIds);
-        try {
-            runWithBusinessTenant(business, () -> flowCcService.sendCc(
-                    business.getProcessInstanceId(),
-                    business.getProcessDefKey(),
-                    null,
-                    business.getTitle(),
-                    "流程已通过，请知悉：" + safeText(business.getTitle(), business.getBusinessKey()),
-                    business.getBusinessKey(),
-                    userIds,
-                    resolveUserNames(userIds),
-                    business.getApplyUserId(),
-                    business.getApplyUserName()));
-        } catch (Exception e) {
-            log.warn("流程抄送发送失败，不阻断主流程: businessKey={}, ccUserIds={}",
-                    business.getBusinessKey(), userIds, e);
-        }
-    }
-
-    private List<String> resolveCcRoleKeys(Object rawValue) {
-        List<String> result = new ArrayList<>();
-        if (rawValue instanceof Iterable<?>) {
-            for (Object item : (Iterable<?>) rawValue) {
-                addNonBlank(result, item);
-            }
-            return result;
-        }
-        if (rawValue instanceof String) {
-            String text = ((String) rawValue).trim();
-            if (text.isEmpty()) {
-                return result;
-            }
-            for (String item : text.split("[,;，；]")) {
-                addNonBlank(result, item);
-            }
-            return result;
-        }
-        addNonBlank(result, rawValue);
-        return result;
-    }
-
-    private void addNonBlank(List<String> values, Object value) {
-        if (value == null) {
-            return;
-        }
-        String text = String.valueOf(value).trim();
-        if (!text.isEmpty()) {
-            values.add(text);
-        }
-    }
-
-    private List<String> resolveUserNames(List<String> userIds) {
-        List<String> names = new ArrayList<>();
-        for (String userId : userIds) {
-            String name = null;
-            try {
-                Map<String, Object> userInfo = flowOrgIntegrationService.getUserInfo(userId);
-                if (userInfo != null) {
-                    Object rawName = userInfo.get("name");
-                    if (rawName == null) {
-                        rawName = userInfo.get("realName");
-                    }
-                    if (rawName != null) {
-                        name = String.valueOf(rawName);
-                    }
-                }
-            } catch (Exception e) {
-                log.debug("解析抄送用户姓名失败: userId={}", userId);
-            }
-            names.add(name);
-        }
-        return names;
     }
 
     /**
@@ -836,42 +687,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
         return flowTask;
     }
 
-    private void sendTaskCreatedMessage(FlowTask flowTask, FlowBusiness business) {
-        if (messageService == null || flowTask == null || flowTask.getTaskId() == null) {
-            return;
-        }
-        if (taskReceiverResolver == null) {
-            log.warn("待办站内信接收人解析器未初始化: taskId={}", flowTask.getTaskId());
-            return;
-        }
-        Set<Long> receiverIds = taskReceiverResolver.resolveReceivers(flowTask);
-        if (receiverIds.isEmpty()) {
-            log.warn("待办任务没有可推送的站内信接收人: taskId={}, assignee={}, candidateUsers={}, candidateGroups={}",
-                    flowTask.getTaskId(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
-            return;
-        }
-
-        MessageSendRequestDTO request = new MessageSendRequestDTO();
-        request.setTitle("您有新的流程待办");
-        request.setContent("您有一个待办任务需要处理：" + safeText(flowTask.getTitle(), flowTask.getTaskName()));
-        request.setType("SYSTEM");
-        request.setChannel("WEB");
-        request.setSendScope("USERS");
-        request.setUserIds(receiverIds);
-        request.setParams(Map.of(
-                "taskId", flowTask.getTaskId(),
-                "processInstanceId", safeText(flowTask.getProcessInstanceId(), ""),
-                "jumpUrl", "/flow/todo?taskId=" + flowTask.getTaskId()
-        ));
-        try {
-            runWithBusinessTenant(business,
-                    () -> messageService.sendIfAbsent(request, FLOW_TODO_MESSAGE_BIZ_TYPE, flowTask.getTaskId()));
-            log.info("待办站内信已推送: taskId={}, receivers={}", flowTask.getTaskId(), receiverIds);
-        } catch (Exception e) {
-            log.warn("待办站内信推送失败，不阻断流程: taskId={}", flowTask.getTaskId(), e);
-        }
-    }
-
     private void updateFormInstanceStatus(String processInstanceId, String status, Long tenantId) {
         if (flowFormInstanceMapper == null || processInstanceId == null || processInstanceId.isBlank()
                 || tenantId == null || tenantId <= 0) {
@@ -882,10 +697,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
         } catch (Exception e) {
             log.warn("更新流程表单实例状态失败: processInstanceId={}, status={}", processInstanceId, status, e);
         }
-    }
-
-    private String safeText(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
     }
 
     private String normalizeTaskUserId(String value, String taskId, String fieldName) {
@@ -979,13 +790,9 @@ public class FlowTaskEventListener implements FlowableEventListener {
     }
 
     /**
-     * 统一发布流程事件：根据 FlowModel.notifyType 互斥选择通知方式
+     * 发布 FlowModel 配置化事件通知（Redis Pub/Sub / HTTP Webhook）
      *
-     * <ul>
-     *   <li>{@code redis}   → 方案B: Redis Pub/Sub</li>
-     *   <li>{@code webhook} → 方案C: HTTP Webhook（读取 FlowModel.webhookUrl）</li>
-     *   <li>{@code none} 或未配置 → 不发送任何通知</li>
-     * </ul>
+     * <p>实际的 FlowModel 查询与外部调用由 FlowTaskNotifyListener 在事务提交后异步执行</p>
      *
      * @param message       流程事件消息
      * @param processDefKey 流程定义 Key，用于查询 FlowModel 配置
@@ -994,87 +801,13 @@ public class FlowTaskEventListener implements FlowableEventListener {
         if (processDefKey == null) {
             return;
         }
-        Long tenantId = parseTenantId(message == null ? null : message.getTenantId());
-        if (tenantId != null) {
-            TenantContextHolder.executeWithTenant(tenantId, () -> doPublishEvent(message, processDefKey));
-            return;
-        }
-        doPublishEvent(message, processDefKey);
-    }
-
-    private void doPublishEvent(FlowEventMessage message, String processDefKey) {
-        try {
-            FlowModel model = flowModelMapper.selectOne(
-                    new LambdaQueryWrapper<FlowModel>()
-                            .eq(FlowModel::getModelKey, processDefKey)
-                            .last("LIMIT 1"));
-            if (model == null) {
-                log.debug("[FlowEvent] 未找到 FlowModel 配置，跳过通知: processDefKey={}", processDefKey);
-                return;
-            }
-
-            String notifyType = model.getNotifyType();
-            if (notifyType == null || "none".equalsIgnoreCase(notifyType)) {
-                log.debug("[FlowEvent] notifyType=none，跳过通知: processDefKey={}", processDefKey);
-                return;
-            }
-
-            // 方案B: Redis Pub/Sub
-            if ("redis".equalsIgnoreCase(notifyType)) {
-                if (flowEventPublisher != null) {
-                    flowEventPublisher.publish(message);
-                } else {
-                    log.warn("[FlowEvent] notifyType=redis 但 FlowEventPublisher 未初始化（请确认已引入 spring-boot-starter-data-redis）");
-                }
-                return;
-            }
-
-            // 方案C: HTTP Webhook
-            if ("webhook".equalsIgnoreCase(notifyType)) {
-                if (model.getWebhookUrl() != null && !model.getWebhookUrl().isBlank()) {
-                    flowWebhookNotifier.notify(model.getWebhookUrl(), message);
-                } else {
-                    log.warn("[FlowEvent] notifyType=webhook 但 webhookUrl 未配置: processDefKey={}", processDefKey);
-                }
-                return;
-            }
-
-            log.warn("[FlowEvent] 未知的 notifyType={}，跳过通知", notifyType);
-
-        } catch (Exception e) {
-            log.warn("[FlowEvent] 发布事件失败，不影响主流程: processDefKey={}, error={}", processDefKey, e.getMessage(), e);
-        }
-    }
-
-    private Long parseTenantId(String tenantId) {
-        if (tenantId == null || tenantId.isBlank()) {
-            return null;
-        }
-        try {
-            Long value = Long.parseLong(tenantId.trim());
-            return value > 0 ? value : null;
-        } catch (NumberFormatException e) {
-            log.warn("[FlowEvent] tenantId 格式错误，按当前上下文发布: tenantId={}", tenantId);
-            return null;
-        }
+        eventPublisher.publishEvent(FlowTaskNotifyEvent.eventPublish(message, processDefKey));
     }
 
     private void fillTenantId(FlowEventMessage message, FlowBusiness business) {
         if (message != null && business != null && business.getTenantId() != null) {
             message.setTenantId(String.valueOf(business.getTenantId()));
         }
-    }
-
-    private void runWithBusinessTenant(FlowBusiness business, Runnable action) {
-        if (action == null) {
-            return;
-        }
-        Long tenantId = business == null ? null : business.getTenantId();
-        if (tenantId != null && tenantId > 0) {
-            TenantContextHolder.executeWithTenant(tenantId, action);
-            return;
-        }
-        action.run();
     }
 
     /**

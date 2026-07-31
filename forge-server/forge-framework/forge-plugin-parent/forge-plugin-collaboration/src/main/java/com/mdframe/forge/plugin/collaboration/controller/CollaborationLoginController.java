@@ -123,6 +123,30 @@ public class CollaborationLoginController {
                 .build());
     }
 
+    /**
+     * 工作台免登发现：前端启动时查询指定平台是否开启免登及其 connectionCode，
+     * 替代前端写死的 VITE_WECOM_CONNECTION_CODE。未登录无租户上下文，故公开且忽略租户。
+     *
+     * @param platform 平台编码，默认企业微信
+     */
+    @GetMapping("/sso-connection")
+    @IgnoreTenant
+    @SaIgnore
+    public RespInfo<Map<String, Object>> ssoConnection(
+            @RequestParam(required = false, defaultValue = "WECHAT_ENTERPRISE") String platform) {
+        SysSocialConfig connection = socialConfigService.selectSsoWorkbenchConnection(platform);
+        Map<String, Object> result = new java.util.HashMap<>(4);
+        if (connection == null) {
+            result.put("enabled", false);
+            return RespInfo.success(result);
+        }
+        result.put("enabled", true);
+        result.put("connectionCode", connection.getConnectionCode());
+        result.put("platform", connection.getPlatform());
+        result.put("platformName", connection.getPlatformName());
+        return RespInfo.success(result);
+    }
+
     private SysSocialConfig requireEnabledConnection(String connectionCode) {
         SysSocialConfig connection = socialConfigService.selectConnectionByCode(connectionCode);
         if (connection == null || connection.getStatus() == null || connection.getStatus() != 1) {

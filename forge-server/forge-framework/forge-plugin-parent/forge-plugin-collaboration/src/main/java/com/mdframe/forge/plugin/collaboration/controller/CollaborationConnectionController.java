@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.collaboration.domain.model.DirectorySyncResult;
 import com.mdframe.forge.plugin.collaboration.dto.CollaborationAppSaveRequest;
 import com.mdframe.forge.plugin.collaboration.dto.CollaborationConnectionSaveRequest;
 import com.mdframe.forge.plugin.collaboration.dto.CollaborationSyncCommand;
+import com.mdframe.forge.plugin.collaboration.job.CollaborationSyncJobManager;
 import com.mdframe.forge.plugin.collaboration.service.directory.DirectorySyncOrchestrator;
 import com.mdframe.forge.plugin.collaboration.vo.CollaborationConnectionVO;
 import com.mdframe.forge.starter.collaboration.CollaborationCapability;
@@ -25,6 +26,7 @@ import com.mdframe.forge.starter.social.service.ISocialAppConfigService;
 import com.mdframe.forge.starter.social.service.ISocialConfigService;
 import com.mdframe.forge.plugin.collaboration.support.CollaborationTenantHelper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -47,6 +49,11 @@ public class CollaborationConnectionController {
     private final ISocialAppConfigService appConfigService;
     private final DirectorySyncOrchestrator syncOrchestrator;
     private final List<AccessTokenProvider> accessTokenProviders;
+    /**
+     * 定时同步托管器：仅在部署了调度器的服务（forge-plugin-job 存在）时可用；
+     * app-server 等不启调度器的服务此 Bean 缺失，用 ObjectProvider 兜底避免注入失败。
+     */
+    private final ObjectProvider<CollaborationSyncJobManager> syncJobManager;
 
     /**
      * 分页查询连接列表（凭据脱敏）
@@ -94,6 +101,9 @@ public class CollaborationConnectionController {
             entity.setTenantId(CollaborationTenantHelper.currentTenantId());
         }
         boolean result = socialConfigService.insertConfig(entity);
+        if (result) {
+            syncJobManager.ifAvailable(manager -> manager.applySchedule(entity));
+        }
         return result ? RespInfo.success() : RespInfo.error("新增连接失败");
     }
 
@@ -105,7 +115,11 @@ public class CollaborationConnectionController {
     @OperationLog(module = "企业协同连接", type = OperationType.UPDATE, desc = "修改连接")
     public RespInfo<Void> update(@RequestBody CollaborationConnectionSaveRequest request) {
         requireConnection(request.getId());
-        boolean result = socialConfigService.updateConfig(request.toEntity());
+        SysSocialConfig entity = request.toEntity();
+        boolean result = socialConfigService.updateConfig(entity);
+        if (result) {
+            syncJobManager.ifAvailable(manager -> manager.applySchedule(entity));
+        }
         return result ? RespInfo.success() : RespInfo.error("修改连接失败");
     }
 
@@ -118,6 +132,9 @@ public class CollaborationConnectionController {
     public RespInfo<Void> remove(@PathVariable Long id) {
         requireConnection(id);
         boolean result = socialConfigService.deleteConfigById(id);
+        if (result) {
+            syncJobManager.ifAvailable(manager -> manager.removeSchedule(id));
+        }
         return result ? RespInfo.success() : RespInfo.error("删除连接失败");
     }
 

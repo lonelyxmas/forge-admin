@@ -6,6 +6,7 @@
         id, platform, platform_name, platform_logo,
         connection_code, connection_name, enterprise_id, connection_type,
         identity_policy, default_role_ids, directory_authority, default_org_id,
+        api_base_url, todo_push_enabled, todo_push_h5_url, sso_workbench_enabled,
         client_id, client_secret, redirect_uri, agent_id, scope,
         status, tenant_id, remark,
         create_by, create_time, create_dept, update_by, update_time, del_flag
@@ -99,5 +100,17 @@
             AND tenant_id = #{tenantId}
         </if>
         ORDER BY id
+    </select>
+
+    <!-- 工作台免登发现：公开端点使用（未登录无租户上下文），取开启免登且启用的连接 -->
+    <select id="selectSsoWorkbenchConnection" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_config
+        WHERE platform = #{platform}
+          AND status = 1
+          AND sso_workbench_enabled = 1
+          AND del_flag = 0
+        ORDER BY id
+        LIMIT 1
     </select>
 </mapper>

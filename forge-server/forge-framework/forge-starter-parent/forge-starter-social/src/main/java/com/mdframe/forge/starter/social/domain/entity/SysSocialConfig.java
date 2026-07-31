@@ -90,6 +90,31 @@ public class SysSocialConfig {
     private String apiBaseUrl;
 
     /**
+     * 待办卡片推送开关：1开启 0关闭
+     */
+    private Integer todoPushEnabled;
+
+    /**
+     * 待办H5访问地址：须在平台可信域名内，用于拼接待办详情深链
+     */
+    private String todoPushH5Url;
+
+    /**
+     * 工作台免登开关：1开启 0关闭。开启后客户端工作台可用该连接的 connectionCode 免登（替代前端写死 VITE_WECOM_CONNECTION_CODE）
+     */
+    private Integer ssoWorkbenchEnabled;
+
+    /**
+     * 定时目录同步开关：1开启 0关闭。开启后由连接管理自动维护对应定时任务
+     */
+    private Integer syncScheduleEnabled;
+
+    /**
+     * 定时目录同步 Cron 表达式：syncScheduleEnabled=1 时生效
+     */
+    private String syncCron;
+
+    /**
      * 应用ID/Key（旧登录配置字段，兼容期保留）
      */
     private String clientId;

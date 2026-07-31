@@ -54,4 +54,9 @@ public interface SysSocialConfigMapper extends BaseMapper<SysSocialConfig> {
      * 查询租户+平台下全部未删除连接（不限状态，供存量身份归属唯一性判定）
      */
     List<SysSocialConfig> selectByPlatformAny(@Param("tenantId") Long tenantId, @Param("platform") String platform);
+
+    /**
+     * 查询指定平台下“开启工作台免登且已启用”的连接（供公开免登发现端点使用，跨租户取首个）
+     */
+    SysSocialConfig selectSsoWorkbenchConnection(@Param("platform") String platform);
 }

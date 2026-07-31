@@ -74,6 +74,14 @@ public class SocialConfigServiceImpl extends ServiceImpl<SysSocialConfigMapper, 
     }
 
     @Override
+    public SysSocialConfig selectSsoWorkbenchConnection(String platform) {
+        if (StrUtil.isBlank(platform)) {
+            return null;
+        }
+        return baseMapper.selectSsoWorkbenchConnection(platform);
+    }
+
+    @Override
     public List<SocialPlatformInfo> selectEnabledPlatforms(Long tenantId) {
         List<SysSocialConfig> configs;
         if (tenantId == null) {

@@ -84,6 +84,7 @@ public class MessageManageServiceImpl implements MessageManageService {
             vo.setTitle(msg.getTitle());
             vo.setType(msg.getType());
             vo.setChannel(msg.getSendChannel());
+            vo.setPlatform(msg.getPlatform());
             vo.setStatus(msg.getStatus());
             vo.setCreateTime(msg.getCreateTime());
             vo.setSenderName(msg.getSenderName());

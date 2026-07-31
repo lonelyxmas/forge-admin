@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 /**
  * 企业协同消息投递 VO（Task 18）。
  * <p>
- * 直接作为投递分页查询的 resultType（sys_message_receiver JOIN sys_message），
- * 只输出投递状态与错误码，不包含消息正文以外的敏感内容。
+ * 直接作为投递分页查询的 resultType（sys_message_receiver JOIN sys_message JOIN sys_user），
+ * 输出投递状态、错误码、接收人身份与已渲染的推送正文，供运维排障查看完整投递内容。
  */
 @Data
 public class CollaborationDeliveryVO {
@@ -23,11 +23,23 @@ public class CollaborationDeliveryVO {
     /** 接收人用户ID */
     private Long userId;
 
+    /** 接收人登录账号（sys_user.username） */
+    private String userAccount;
+
+    /** 接收人姓名（sys_user.real_name） */
+    private String userName;
+
     /** 企业协同连接ID */
     private Long connectionId;
 
+    /** 企业协同平台编码：WECHAT_ENTERPRISE/DINGTALK/FEISHU 等 */
+    private String platform;
+
     /** 消息标题 */
     private String title;
+
+    /** 推送消息完整正文（已渲染，含卡片 HTML） */
+    private String messageContent;
 
     /** 投递状态：PENDING/SENT/FAILED/SKIPPED */
     private String deliveryStatus;

@@ -19,6 +19,13 @@ export default {
     needToken: false,
     needTip: false,
   }),
+  getWecomSsoConnection: (params = {}) => request({
+    url: '/collaboration/login/sso-connection',
+    method: 'get',
+    params,
+    needToken: false,
+    needTip: false,
+  }),
   logout: () => request({ url: '/auth/logout', method: 'post', needTip: false }),
   getUserInfo: () => request({ url: '/auth/userInfo', method: 'get' }),
   getCurrentMenu: () => request({ url: '/auth/current/menu', method: 'get' }),

@@ -4,16 +4,19 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysUser;
-import com.mdframe.forge.plugin.system.entity.SysUserRole;
+import com.mdframe.forge.plugin.system.entity.SysUserOrg;
+import com.mdframe.forge.plugin.system.entity.SysUserOrgRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
-import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.enums.AuthType;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
 import com.mdframe.forge.starter.collaboration.model.VerifiedSocialIdentity;
 import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import com.mdframe.forge.starter.social.context.SocialProperties;
 import com.mdframe.forge.starter.social.domain.dto.LoginClientContext;
 import com.mdframe.forge.starter.social.domain.entity.SysSocialConfig;
@@ -26,7 +29,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.stream.Stream;
 
@@ -69,7 +71,10 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
     private SysUserTenantMapper userTenantMapper;
 
     @Autowired
-    private SysUserRoleMapper userRoleMapper;
+    private SysUserOrgMapper userOrgMapper;
+
+    @Autowired
+    private SysUserOrgRoleMapper userOrgRoleMapper;
 
     @Override
     protected void validateRequest(LoginRequest request) {
@@ -234,11 +239,16 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
      */
     private void dismissForcePasswordChangeIfNeeded(SysUser sysUser) {
         if (Boolean.TRUE.equals(sysUser.getForcePasswordChange())) {
-            SysUser update = new SysUser();
-            update.setId(sysUser.getId());
-            update.setForcePasswordChange(false);
-            userMapper.updateById(update);
+            TenantContextHolder.executeIgnore(() -> {
+                SysUser update = new SysUser();
+                update.setId(sysUser.getId());
+                update.setForcePasswordChange(false);
+                userMapper.updateById(update);
+                return null;
+            });
             log.info("OAuth 登录清除强制改密标记: userId={}", sysUser.getId());
+        } else {
+            log.debug("用户 forcePasswordChange 已为 false，跳过清除: userId={}", sysUser.getId());
         }
     }
 
@@ -286,7 +296,7 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
 
     /**
      * 分配默认角色：连接级 defaultRoleIds 优先，为空时回退全局 forge.social.default-role-ids。
-     * 已有该角色则跳过（幂等）。
+     * 写入 sys_user_org_role（用户-组织-角色三元组），已有则跳过（幂等）。
      */
     private void assignDefaultRoles(Long userId, Long tenantId, SysSocialConfig connection) {
         Long[] roleIds = resolveDefaultRoleIds(connection);
@@ -294,26 +304,58 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
             log.debug("三方登录无默认角色配置: connectionId={}", connection.getId());
             return;
         }
+
+        // 查找用户主组织（目录同步或手动分配的），无组织则跳过
+        Long orgId = resolveUserMainOrgId(userId, tenantId);
+        if (orgId == null) {
+            log.warn("三方登录无法分配角色：用户没有组织: userId={}, tenantId={}", userId, tenantId);
+            return;
+        }
+
         for (Long roleId : roleIds) {
             if (roleId == null) {
                 continue;
             }
-            LambdaQueryWrapper<SysUserRole> check = new LambdaQueryWrapper<>();
-            check.eq(SysUserRole::getUserId, userId)
-                    .eq(SysUserRole::getRoleId, roleId)
-                    .eq(SysUserRole::getTenantId, tenantId)
+            LambdaQueryWrapper<SysUserOrgRole> check = new LambdaQueryWrapper<>();
+            check.eq(SysUserOrgRole::getUserId, userId)
+                    .eq(SysUserOrgRole::getOrgId, orgId)
+                    .eq(SysUserOrgRole::getRoleId, roleId)
+                    .eq(SysUserOrgRole::getTenantId, tenantId)
                     .last("LIMIT 1");
-            if (userRoleMapper.selectOne(check) != null) {
+            if (userOrgRoleMapper.selectOne(check) != null) {
                 continue;
             }
-            SysUserRole userRole = new SysUserRole();
-            userRole.setUserId(userId);
-            userRole.setRoleId(roleId);
-            userRole.setTenantId(tenantId);
-            userRole.setCreateTime(LocalDateTime.now());
-            userRoleMapper.insert(userRole);
+            SysUserOrgRole userOrgRole = new SysUserOrgRole();
+            userOrgRole.setTenantId(tenantId);
+            userOrgRole.setUserId(userId);
+            userOrgRole.setOrgId(orgId);
+            userOrgRole.setRoleId(roleId);
+            userOrgRoleMapper.insert(userOrgRole);
         }
-        log.info("三方登录分配默认角色: userId={}, roleIds={}", userId, Arrays.toString(roleIds));
+        log.info("三方登录分配默认角色: userId={}, orgId={}, roleIds={}", userId, orgId, Arrays.toString(roleIds));
+    }
+
+    /**
+     * 查找用户主组织ID：优先 isMain=1，无则取第一个。
+     */
+    private Long resolveUserMainOrgId(Long userId, Long tenantId) {
+        // 优先取主组织
+        LambdaQueryWrapper<SysUserOrg> mainQuery = new LambdaQueryWrapper<>();
+        mainQuery.eq(SysUserOrg::getUserId, userId)
+                .eq(SysUserOrg::getTenantId, tenantId)
+                .eq(SysUserOrg::getIsMain, 1)
+                .last("LIMIT 1");
+        SysUserOrg mainOrg = userOrgMapper.selectOne(mainQuery);
+        if (mainOrg != null) {
+            return mainOrg.getOrgId();
+        }
+        // 回退取任意一个
+        LambdaQueryWrapper<SysUserOrg> anyQuery = new LambdaQueryWrapper<>();
+        anyQuery.eq(SysUserOrg::getUserId, userId)
+                .eq(SysUserOrg::getTenantId, tenantId)
+                .last("LIMIT 1");
+        SysUserOrg anyOrg = userOrgMapper.selectOne(anyQuery);
+        return anyOrg != null ? anyOrg.getOrgId() : null;
     }
 
     /**

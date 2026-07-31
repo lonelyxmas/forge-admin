@@ -57,7 +57,7 @@ public class MessageClient {
                             .map(r -> MessageChannel.RecipientDeliveryResult.failed(r.userId(),
                                     "CHANNEL_NOT_AVAILABLE", "channel not available: " + channelKey))
                             .toList();
-            return new MessageChannel.ChannelSendResult(null, deliveries);
+            return new MessageChannel.ChannelSendResult(null, deliveries, null);
         }
         return channel.sendToRecipients(request);
     }

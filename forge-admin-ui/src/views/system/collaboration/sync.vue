@@ -11,6 +11,15 @@
       :hide-batch-delete="true"
       :hide-selection="true"
     />
+
+    <CollaborationDetailModal
+      v-model:show="detailVisible"
+      title="同步批次详情"
+      :width="760"
+      :column="2"
+      :fields="detailFields"
+      :data="detailRow"
+    />
   </div>
 </template>
 
@@ -20,13 +29,16 @@ import { fetchConnectionOptions } from '@/api/collaboration'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import CollaborationDetailModal from './CollaborationDetailModal.vue'
 
 defineOptions({ name: 'CollaborationSync' })
 
 const crudRef = ref(null)
 const connectionOptions = ref([])
+const detailVisible = ref(false)
+const detailRow = ref(null)
 
-const { dict } = useDict('sys_collab_sync_status', 'sys_collab_sync_type', 'sys_collab_trigger_source')
+const { dict } = useDict('sys_collab_sync_status', 'sys_collab_sync_type', 'sys_collab_trigger_source', 'sys_collab_sync_stage')
 
 const syncStatusOptions = computed(() => dict.value.sys_collab_sync_status || [])
 const syncTypeOptions = computed(() => dict.value.sys_collab_sync_type || [])
@@ -77,7 +89,12 @@ const tableColumns = computed(() => [
     width: 100,
     render: row => h(DictTag, { dictType: 'sys_collab_trigger_source', value: row.triggerSource, size: 'small' }),
   },
-  { prop: 'stage', label: '当前阶段', width: 100 },
+  {
+    prop: 'stage',
+    label: '当前阶段',
+    width: 100,
+    render: row => h(DictTag, { dictType: 'sys_collab_sync_stage', value: row.stage, size: 'small' }),
+  },
   {
     prop: 'status',
     label: '状态',
@@ -97,13 +114,42 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 80,
+    width: 140,
+    fixed: 'right',
     // 运行时表只允许删除已收敛批次，运行中批次由后端拒绝且前端不展示入口
     actions: [
+      { label: '查看详情', key: 'detail', type: 'primary', onClick: handleViewDetail },
       { label: '删除', key: 'delete', type: 'error', visible: row => row.status !== 'RUNNING' },
     ],
   },
 ])
+
+const detailFields = computed(() => [
+  { key: 'id', label: '批次ID' },
+  { key: 'connectionId', label: '连接', render: row => connectionLabel(row.connectionId) },
+  { key: 'syncType', label: '同步类型', dictType: 'sys_collab_sync_type' },
+  { key: 'triggerSource', label: '触发来源', dictType: 'sys_collab_trigger_source' },
+  { key: 'stage', label: '当前阶段', dictType: 'sys_collab_sync_stage' },
+  { key: 'status', label: '状态', dictType: 'sys_collab_sync_status' },
+  { key: 'deptCount', label: '部门数' },
+  { key: 'userCount', label: '成员数' },
+  { key: 'tagCount', label: '标签数' },
+  { key: 'createdCount', label: '新建数' },
+  { key: 'updatedCount', label: '更新数' },
+  { key: 'inactivatedCount', label: '停用数' },
+  { key: 'issueCount', label: '问题单数' },
+  { key: 'createBy', label: '触发人ID' },
+  { key: 'startTime', label: '开始时间' },
+  { key: 'endTime', label: '结束时间' },
+  { key: 'createTime', label: '创建时间' },
+  { key: 'errorCode', label: '错误码', span: 2 },
+  { key: 'errorSummary', label: '错误摘要', span: 2, pre: true },
+])
+
+function handleViewDetail(row) {
+  detailRow.value = row
+  detailVisible.value = true
+}
 
 function connectionLabel(connectionId) {
   const option = connectionOptions.value.find(item => item.value === connectionId)

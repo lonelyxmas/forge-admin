@@ -50,7 +50,7 @@
         <n-form-item v-if="resolveForm.action === 'BIND'" label="目标用户ID">
           <n-input-number
             v-model:value="resolveForm.targetUserId"
-            placeholder="请输入绑定的 Forge 用户ID"
+            placeholder="请输入要绑定的系统用户ID"
             :show-button="false"
             style="width: 100%"
           />
@@ -67,6 +67,14 @@
         </n-space>
       </template>
     </n-modal>
+
+    <CollaborationDetailModal
+      v-model:show="detailVisible"
+      title="问题单详情"
+      :width="720"
+      :fields="detailFields"
+      :data="detailRow"
+    />
   </div>
 </template>
 
@@ -76,11 +84,14 @@ import { fetchConnectionOptions, resolveSyncIssue } from '@/api/collaboration'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import CollaborationDetailModal from './CollaborationDetailModal.vue'
 
 defineOptions({ name: 'CollaborationIssues' })
 
 const crudRef = ref(null)
 const connectionOptions = ref([])
+const detailVisible = ref(false)
+const detailRow = ref(null)
 
 const { dict } = useDict('sys_collab_issue_status')
 
@@ -130,9 +141,15 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 90,
+    width: 140,
     fixed: 'right',
     actions: [
+      {
+        label: '查看详情',
+        key: 'detail',
+        type: 'primary',
+        onClick: handleViewDetail,
+      },
       {
         label: '处理',
         key: 'resolve',
@@ -143,6 +160,32 @@ const tableColumns = computed(() => [
     ],
   },
 ])
+
+const detailFields = computed(() => [
+  { key: 'id', label: '问题单ID' },
+  { key: 'syncLogId', label: '同步批次ID' },
+  { key: 'connectionId', label: '连接', render: row => connectionLabel(row.connectionId) },
+  { key: 'objectType', label: '对象类型' },
+  { key: 'externalId', label: '外部ID' },
+  { key: 'issueCode', label: '问题编码' },
+  { key: 'processStatus', label: '处理状态', dictType: 'sys_collab_issue_status' },
+  { key: 'processAction', label: '处理动作' },
+  { key: 'processBy', label: '处理人ID' },
+  { key: 'processTime', label: '处理时间' },
+  { key: 'retryCount', label: '重试次数' },
+  { key: 'createTime', label: '创建时间' },
+  { key: 'issueSummary', label: '问题摘要', pre: true },
+])
+
+function connectionLabel(connectionId) {
+  const option = connectionOptions.value.find(item => item.value === connectionId)
+  return option ? option.label : String(connectionId ?? '-')
+}
+
+function handleViewDetail(row) {
+  detailRow.value = row
+  detailVisible.value = true
+}
 
 // ==================== 处理弹窗 ====================
 

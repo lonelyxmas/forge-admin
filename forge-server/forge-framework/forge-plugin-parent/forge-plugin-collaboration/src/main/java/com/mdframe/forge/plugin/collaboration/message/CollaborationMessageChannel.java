@@ -82,18 +82,24 @@ public class CollaborationMessageChannel implements MessageChannel {
                 ? List.of()
                 : request.recipients().stream().map(ChannelRecipient::userId).toList();
         if (userIds.isEmpty()) {
-            return new ChannelSendResult(null, List.of());
+            return new ChannelSendResult(null, List.of(), null);
         }
+        SysSocialConfig connection;
         if (request.connectionId() == null) {
-            return allFailed(userIds, ERROR_CONNECTION_UNAVAILABLE, "未指定企业协同连接");
-        }
-        SysSocialConfig connection = socialConfigService.selectConfigById(request.connectionId());
-        if (connection == null || connection.getStatus() == null || connection.getStatus() != 1) {
-            return allFailed(userIds, ERROR_CONNECTION_UNAVAILABLE, "企业协同连接不存在或已停用");
+            // 未指定连接时自动解析租户下唯一可用的消息连接（启用 + 平台支持 MESSAGE + 已绑定启用应用）
+            connection = resolveDefaultConnection(request.tenantId());
+            if (connection == null) {
+                return allFailed(userIds, ERROR_CONNECTION_UNAVAILABLE, "租户下无可用的企业协同消息连接", null);
+            }
+        } else {
+            connection = socialConfigService.selectConfigById(request.connectionId());
+            if (connection == null || connection.getStatus() == null || connection.getStatus() != 1) {
+                return allFailed(userIds, ERROR_CONNECTION_UNAVAILABLE, "企业协同连接不存在或已停用", null);
+            }
         }
         String platform = connection.getPlatform();
         if (!providerRegistry.supports(platform, CollaborationCapability.MESSAGE)) {
-            return allFailed(userIds, ERROR_CAPABILITY_UNAVAILABLE, "该平台未启用消息能力");
+            return allFailed(userIds, ERROR_CAPABILITY_UNAVAILABLE, "该平台未启用消息能力", platform);
         }
         MessageConnector connector = providerRegistry.requireConnector(
                 platform, CollaborationCapability.MESSAGE, MessageConnector.class);
@@ -102,7 +108,7 @@ public class CollaborationMessageChannel implements MessageChannel {
         try {
             context = buildContext(connection);
         } catch (BusinessException e) {
-            return allFailed(userIds, ERROR_CAPABILITY_UNAVAILABLE, e.getMessage());
+            return allFailed(userIds, ERROR_CAPABILITY_UNAVAILABLE, e.getMessage(), platform);
         }
 
         // 模板校验：非法/超长发送前整批拒绝
@@ -111,13 +117,13 @@ public class CollaborationMessageChannel implements MessageChannel {
         String rejectReason = templatePolicy.validate(msgType, request.title(), request.content(), url);
         if (rejectReason != null) {
             log.warn("企业协同消息模板校验拒绝: connectionId={}, messageId={}, reason={}",
-                    request.connectionId(), request.messageId(), rejectReason);
-            return allFailed(userIds, ERROR_TEMPLATE_INVALID, rejectReason);
+                    connection.getId(), request.messageId(), rejectReason);
+            return allFailed(userIds, ERROR_TEMPLATE_INVALID, rejectReason, platform);
         }
 
         // 接收人映射：未映射/停用明确 SKIPPED，可发送人交给平台 Connector
         RecipientResolution resolution = recipientResolver.resolve(
-                request.tenantId(), request.connectionId(), userIds);
+                request.tenantId(), connection.getId(), userIds);
         List<RecipientDeliveryResult> deliveries = new ArrayList<>(userIds.size());
         for (Long userId : resolution.unmappedUserIds()) {
             deliveries.add(RecipientDeliveryResult.skipped(userId, ERROR_NO_BINDING, "用户未绑定该连接的外部账号"));
@@ -126,7 +132,7 @@ public class CollaborationMessageChannel implements MessageChannel {
             deliveries.add(RecipientDeliveryResult.skipped(userId, ERROR_BINDING_DISABLED, "用户外部账号已停用或删除"));
         }
         if (resolution.sendable().isEmpty()) {
-            return new ChannelSendResult(null, deliveries);
+            return new ChannelSendResult(null, deliveries, platform);
         }
 
         Map<String, Long> externalToUser = new LinkedHashMap<>();
@@ -140,11 +146,11 @@ public class CollaborationMessageChannel implements MessageChannel {
             result = connector.send(providerRequest, context);
         } catch (RuntimeException e) {
             log.warn("企业协同消息平台调用异常: connectionId={}, messageId={}, error={}",
-                    request.connectionId(), request.messageId(), e.getMessage());
+                    connection.getId(), request.messageId(), e.getMessage());
             for (Long userId : resolution.sendable().keySet()) {
                 deliveries.add(RecipientDeliveryResult.failed(userId, ERROR_PROVIDER_ERROR, e.getMessage()));
             }
-            return new ChannelSendResult(null, deliveries);
+            return new ChannelSendResult(null, deliveries, platform);
         }
 
         for (ProviderMessageResult.RecipientDelivery delivery : result.deliveries()) {
@@ -161,7 +167,36 @@ public class CollaborationMessageChannel implements MessageChannel {
                         error != null ? error.message() : null));
             }
         }
-        return new ChannelSendResult(result.providerRequestId(), deliveries);
+        return new ChannelSendResult(result.providerRequestId(), deliveries, platform);
+    }
+
+    /**
+     * 自动解析租户默认消息连接：启用且平台支持 MESSAGE 能力、已绑定启用应用的连接；
+     * 命中多个时取第一个并告警，建议发送方显式指定 connectionId。
+     */
+    private SysSocialConfig resolveDefaultConnection(Long tenantId) {
+        SysSocialConfig query = new SysSocialConfig();
+        query.setTenantId(tenantId);
+        query.setStatus(1);
+        List<SysSocialConfig> candidates = socialConfigService.selectConfigList(query).stream()
+                .filter(conn -> providerRegistry.supports(conn.getPlatform(), CollaborationCapability.MESSAGE))
+                .filter(conn -> {
+                    try {
+                        appConfigService.requireEnabledApp(conn.getTenantId(), conn.getId(), CollaborationCapability.MESSAGE);
+                        return true;
+                    } catch (BusinessException e) {
+                        return false;
+                    }
+                })
+                .toList();
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        if (candidates.size() > 1) {
+            log.warn("租户存在多个可用消息连接，默认选用第一个: tenantId={}, connectionId={}",
+                    tenantId, candidates.get(0).getId());
+        }
+        return candidates.get(0);
     }
 
     /**
@@ -175,10 +210,10 @@ public class CollaborationMessageChannel implements MessageChannel {
                 app.getId(), app.getAppCode(), app.getAgentId(), Map.of());
     }
 
-    private ChannelSendResult allFailed(List<Long> userIds, String errorCode, String errorMessage) {
+    private ChannelSendResult allFailed(List<Long> userIds, String errorCode, String errorMessage, String platform) {
         List<RecipientDeliveryResult> deliveries = userIds.stream()
                 .map(userId -> RecipientDeliveryResult.failed(userId, errorCode, errorMessage))
                 .toList();
-        return new ChannelSendResult(null, deliveries);
+        return new ChannelSendResult(null, deliveries, platform);
     }
 }

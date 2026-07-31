@@ -32,6 +32,15 @@
             :options="channelOptions"
           />
         </n-form-item>
+        <n-form-item v-if="sendForm.channel === 'COLLABORATION'" label="协同连接" path="connectionId">
+          <n-select
+            v-model:value="sendForm.connectionId"
+            placeholder="选择协同连接（决定发往企业微信/钉钉/飞书）"
+            :options="connectionOptions"
+            clearable
+            filterable
+          />
+        </n-form-item>
         <n-form-item label="消息标题" path="title">
           <n-input v-model:value="sendForm.title" placeholder="请输入消息标题" />
         </n-form-item>
@@ -54,16 +63,12 @@
           />
         </n-form-item>
         <n-form-item v-if="sendForm.sendScope === 'USERS'" label="指定用户" path="userIds">
-          <n-select
-            v-model:value="sendForm.userIds"
+          <UserSelectPicker
+            v-model:model-value="sendForm.userIds"
+            v-model:label-value="sendForm.userLabels"
             multiple
-            placeholder="搜索并选择接收用户"
-            :options="userOptions"
-            filterable
-            clearable
-            remote
-            :loading="userLoading"
-            @search="handleUserSearch"
+            placeholder="点击选择接收用户"
+            title="选择接收用户"
           />
         </n-form-item>
         <n-form-item label="消息类型" path="type">
@@ -112,6 +117,9 @@
         <n-descriptions-item label="发送渠道">
           <DictTag dict-type="sys_message_channel" :value="currentDetail?.message?.sendChannel" />
         </n-descriptions-item>
+        <n-descriptions-item v-if="currentDetail?.message?.platform" label="协同平台">
+          <DictTag dict-type="sys_collab_platform" :value="currentDetail?.message?.platform" />
+        </n-descriptions-item>
         <n-descriptions-item label="发送时间">
           {{ currentDetail?.message?.createTime }}
         </n-descriptions-item>
@@ -156,15 +164,17 @@
 <script setup>
 import { computed, h, ref } from 'vue'
 import messageApi from '@/api/message'
+import { fetchConnectionOptions } from '@/api/collaboration'
 import { AiCrudPage } from '@/components/ai-form'
+import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
-import { request } from '@/utils'
 
 defineOptions({ name: 'MessageManage' })
 
 const MESSAGE_TYPE_DICT = 'sys_message_type'
 const MESSAGE_CHANNEL_DICT = 'sys_message_channel'
+const COLLAB_PLATFORM_DICT = 'sys_collab_platform'
 const MESSAGE_SEND_SCOPE_DICT = 'sys_message_send_scope'
 const MESSAGE_SEND_STATUS_DICT = 'sys_message_send_status'
 const MESSAGE_READ_STATUS_DICT = 'sys_message_read_status'
@@ -172,11 +182,10 @@ const MESSAGE_READ_STATUS_DICT = 'sys_message_read_status'
 const crudRef = ref(null)
 const showSendModal = ref(false)
 const sending = ref(false)
-const userLoading = ref(false)
 const showDetail = ref(false)
 const currentDetail = ref(null)
-const userOptions = ref([])
 const bizTypeOptions = ref([])
+const connectionOptions = ref([])
 
 const { dict } = useDict(
   MESSAGE_TYPE_DICT,
@@ -184,6 +193,7 @@ const { dict } = useDict(
   MESSAGE_SEND_SCOPE_DICT,
   MESSAGE_SEND_STATUS_DICT,
   MESSAGE_READ_STATUS_DICT,
+  COLLAB_PLATFORM_DICT,
 )
 
 const typeOptions = computed(() => dict.value[MESSAGE_TYPE_DICT] || [])
@@ -198,9 +208,11 @@ const sendForm = ref({
   templateCode: '',
   sendScope: 'USERS',
   userIds: [],
+  userLabels: [],
   type: 'SYSTEM',
   bizType: null,
   bizKey: '',
+  connectionId: null,
 })
 
 const apiConfig = {
@@ -281,6 +293,16 @@ const tableColumns = computed(() => [
     },
   },
   {
+    prop: 'platform',
+    label: '协同平台',
+    width: 110,
+    render: (row) => {
+      return row.platform
+        ? h(DictTag, { dictType: COLLAB_PLATFORM_DICT, value: row.platform, size: 'small' })
+        : '-'
+    },
+  },
+  {
     prop: 'status',
     label: '发送状态',
     width: 100,
@@ -340,34 +362,6 @@ function handleBeforeSearch(params) {
   return result
 }
 
-async function loadUsers(keyword = '') {
-  try {
-    userLoading.value = true
-    const params = {
-      pageNum: 1,
-      pageSize: 50,
-      realName: keyword || undefined,
-    }
-    const res = await request.get('/system/user/page', params)
-    if (res.code === 200 && res.data) {
-      userOptions.value = (res.data.records || []).map(user => ({
-        label: user.realName || user.userName,
-        value: user.id,
-      }))
-    }
-  }
-  catch (error) {
-    console.error('加载用户列表失败:', error)
-  }
-  finally {
-    userLoading.value = false
-  }
-}
-
-function handleUserSearch(keyword) {
-  loadUsers(keyword)
-}
-
 async function handleSend() {
   if (!sendForm.value.title || !sendForm.value.content) {
     window.$message.warning('请填写消息标题和内容')
@@ -376,6 +370,11 @@ async function handleSend() {
 
   if (sendForm.value.sendScope === 'USERS' && sendForm.value.userIds.length === 0) {
     window.$message.warning('请选择接收用户')
+    return
+  }
+
+  if (sendForm.value.channel === 'COLLABORATION' && !sendForm.value.connectionId) {
+    window.$message.warning('企业协同渠道需选择协同连接以指定发送平台')
     return
   }
 
@@ -412,6 +411,16 @@ function handleResetSendForm() {
     type: 'SYSTEM',
     bizType: null,
     bizKey: '',
+    connectionId: null,
+  }
+}
+
+async function loadConnections() {
+  try {
+    connectionOptions.value = await fetchConnectionOptions()
+  }
+  catch (error) {
+    console.error('加载协同连接失败:', error)
   }
 }
 
@@ -456,8 +465,8 @@ function toNumberOptions(options = []) {
   }))
 }
 
-loadUsers()
 loadBizTypes()
+loadConnections()
 </script>
 
 <style scoped>

@@ -39,6 +39,11 @@ public interface ISocialConfigService {
     SysSocialConfig selectConnectionByCode(String connectionCode);
 
     /**
+     * 查询指定平台下“开启工作台免登且已启用”的连接（公开免登发现端点使用，跨租户取首个，无则返回 null）
+     */
+    SysSocialConfig selectSsoWorkbenchConnection(String platform);
+
+    /**
      * 查询租户下所有启用的平台信息
      */
     List<SocialPlatformInfo> selectEnabledPlatforms(Long tenantId);

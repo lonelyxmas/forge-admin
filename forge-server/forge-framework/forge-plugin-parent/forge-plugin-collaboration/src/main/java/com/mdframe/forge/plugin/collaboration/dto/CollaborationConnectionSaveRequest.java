@@ -51,6 +51,21 @@ public class CollaborationConnectionSaveRequest {
     /** API基础地址：为空使用平台官方地址，私有化部署可自定义 */
     private String apiBaseUrl;
 
+    /** 工作台免登开关：1开启 0关闭，开启后客户端工作台可用本连接编码免登 */
+    private Integer ssoWorkbenchEnabled;
+
+    /** 待办卡片推送开关：1开启 0关闭 */
+    private Integer todoPushEnabled;
+
+    /** 待办H5访问地址：须在平台可信域名内 */
+    private String todoPushH5Url;
+
+    /** 定时目录同步开关：1开启 0关闭 */
+    private Integer syncScheduleEnabled;
+
+    /** 定时目录同步 Cron 表达式：syncScheduleEnabled=1 时生效 */
+    private String syncCron;
+
     /** 状态：0停用 1启用 */
     private Integer status;
 
@@ -75,6 +90,11 @@ public class CollaborationConnectionSaveRequest {
         config.setDirectoryAuthority(directoryAuthority);
         config.setDefaultOrgId(defaultOrgId);
         config.setApiBaseUrl(apiBaseUrl);
+        config.setSsoWorkbenchEnabled(ssoWorkbenchEnabled);
+        config.setTodoPushEnabled(todoPushEnabled);
+        config.setTodoPushH5Url(todoPushH5Url);
+        config.setSyncScheduleEnabled(syncScheduleEnabled);
+        config.setSyncCron(syncCron);
         config.setStatus(status);
         config.setRemark(remark);
         return config;

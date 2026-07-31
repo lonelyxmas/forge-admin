@@ -156,6 +156,14 @@ public class SysJobConfigServiceImpl extends ServiceImpl<SysJobConfigMapper, Sys
         synchronizeDesiredState(id, "执行计划");
     }
 
+    @Override
+    public SysJobConfig findByJobKey(String jobName, String jobGroup) {
+        if (StringUtils.isBlank(jobName) || StringUtils.isBlank(jobGroup)) {
+            return null;
+        }
+        return this.baseMapper.selectByJobKey(jobName, jobGroup);
+    }
+
     private void updateStatusAndSynchronize(Long id, int status) {
         SysJobConfig jobConfig = requireConfig(id);
         managementSecurityService.assertCanManageProtectedTask(jobConfig);

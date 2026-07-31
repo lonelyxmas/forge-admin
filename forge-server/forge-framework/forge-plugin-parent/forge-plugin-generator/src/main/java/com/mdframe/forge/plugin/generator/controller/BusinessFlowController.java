@@ -75,29 +75,27 @@ public class BusinessFlowController {
         return RespInfo.success(flowService.getFormAssets(objectCode, Boolean.TRUE.equals(includeInternal)));
     }
 
+    // 以下为待办审批人运行时接口：审批人多为企微免登普通员工，不持有设计态权限 ai:businessFlow:view，
+    // 故仅要求登录态，越权防护依赖 BusinessFlowService 的任务归属校验（loadFlowTaskDetail + 字段一致性断言）。
     @GetMapping("/task-form-context")
-    @SaCheckPermission("ai:businessFlow:view")
     @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务待办表单上下文")
     public RespInfo<BusinessTaskFormContextVO> taskFormContext(BusinessTaskFormContextQueryDTO query) {
         return RespInfo.success(flowService.getTaskFormContext(query));
     }
 
     @GetMapping("/task-form-context/readonly")
-    @SaCheckPermission("ai:businessFlow:view")
     @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务历史表单上下文")
     public RespInfo<BusinessTaskFormContextVO> taskFormReadonlyContext(BusinessTaskFormContextQueryDTO query) {
         return RespInfo.success(flowService.getTaskFormReadonlyContext(query));
     }
 
     @PutMapping("/task-form-context")
-    @SaCheckPermission("ai:businessFlow:view")
     @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "保存业务待办表单字段")
     public RespInfo<BusinessTaskFormContextVO> saveTaskFormContext(@RequestBody BusinessTaskFormSaveDTO dto) {
         return RespInfo.success(flowService.saveTaskFormContext(dto));
     }
 
     @PostMapping("/task-action")
-    @SaCheckPermission("ai:businessFlow:view")
     @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "办理业务待办任务")
     public RespInfo<BusinessFlowRuntimeVO> completeTask(@RequestBody BusinessTaskActionDTO dto) {
         return RespInfo.success(flowService.completeBusinessTask(dto));

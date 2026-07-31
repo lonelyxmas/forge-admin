@@ -22,6 +22,7 @@ public interface CollaborationDeliveryMapper {
     Page<CollaborationDeliveryVO> selectDeliveryPage(Page<CollaborationDeliveryVO> page,
                                                      @Param("tenantId") Long tenantId,
                                                      @Param("connectionId") Long connectionId,
+                                                     @Param("platform") String platform,
                                                      @Param("deliveryStatus") String deliveryStatus,
                                                      @Param("messageId") Long messageId);
 

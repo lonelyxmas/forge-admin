@@ -191,8 +191,9 @@ public interface MessageChannel {
      *
      * @param providerRequestId 供应商请求ID（用于排障，不含敏感内容）
      * @param deliveries        逐人投递结果
+     * @param platform          企业协同平台编码（非协同渠道或无法解析时为空）
      */
-    record ChannelSendResult(String providerRequestId, List<RecipientDeliveryResult> deliveries) {}
+    record ChannelSendResult(String providerRequestId, List<RecipientDeliveryResult> deliveries, String platform) {}
 
     /**
      * 单个接收人的投递结果

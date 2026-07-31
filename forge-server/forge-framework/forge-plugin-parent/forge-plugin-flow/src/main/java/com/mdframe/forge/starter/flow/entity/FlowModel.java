@@ -114,6 +114,15 @@ public class FlowModel {
     private String webhookUrl;
     
     /**
+     * 待办卡片详情深链模板（企业协同待办卡片点击跳转地址）。
+     * <p>为空时使用全局默认待办详情页；配置后按流程模型覆盖，支持占位符：
+     * {@code {taskId}}、{@code {businessKey}}、{@code {processInstanceId}}（自动 URL 编码）。
+     * 可填相对路径（形如 {@code /#/pages/xxx?bizKey={businessKey}}，自动拼接连接的 H5 域名）
+     * 或完整 http/https 地址。</p>
+     */
+    private String todoDetailUrlTemplate;
+
+    /**
      * 状态（0-设计/1-已发布/2-已挂起/3-已禁用）
      */
     private Integer status;

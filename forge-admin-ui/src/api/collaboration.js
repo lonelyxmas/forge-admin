@@ -13,6 +13,10 @@ export function getConnectionDetail(id) {
   return request.get(`${BASE}/connections/${id}`)
 }
 
+export function updateConnection(data) {
+  return request.put(`${BASE}/connections`, data)
+}
+
 export function deleteConnection(id) {
   return request.delete(`${BASE}/connections/${id}`)
 }

@@ -82,6 +82,31 @@ public class SocialConnectionSummaryVO {
     private String apiBaseUrl;
 
     /**
+     * 工作台免登开关：1开启 0关闭
+     */
+    private Integer ssoWorkbenchEnabled;
+
+    /**
+     * 待办卡片推送开关：1开启 0关闭
+     */
+    private Integer todoPushEnabled;
+
+    /**
+     * 待办H5访问地址：须在平台可信域名内
+     */
+    private String todoPushH5Url;
+
+    /**
+     * 定时目录同步开关：1开启 0关闭
+     */
+    private Integer syncScheduleEnabled;
+
+    /**
+     * 定时目录同步 Cron 表达式
+     */
+    private String syncCron;
+
+    /**
      * 应用ID/Key（旧登录配置，非敏感）
      */
     private String clientId;
@@ -161,6 +186,11 @@ public class SocialConnectionSummaryVO {
         vo.setDirectoryAuthority(config.getDirectoryAuthority());
         vo.setDefaultOrgId(config.getDefaultOrgId());
         vo.setApiBaseUrl(config.getApiBaseUrl());
+        vo.setSsoWorkbenchEnabled(config.getSsoWorkbenchEnabled());
+        vo.setTodoPushEnabled(config.getTodoPushEnabled());
+        vo.setTodoPushH5Url(config.getTodoPushH5Url());
+        vo.setSyncScheduleEnabled(config.getSyncScheduleEnabled());
+        vo.setSyncCron(config.getSyncCron());
         vo.setClientId(config.getClientId());
         boolean configured = StrUtil.isNotBlank(config.getClientSecret());
         vo.setSecretConfigured(configured);

@@ -2,13 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.mdframe.forge.plugin.collaboration.mapper.CollaborationDeliveryMapper">
 
-    <!-- 协同渠道逐人投递分页：只暴露投递状态维度，不关联消息正文以外内容 -->
+    <!-- 协同渠道逐人投递分页：输出投递状态、接收人身份与完整推送正文，供运维排障 -->
     <select id="selectDeliveryPage" resultType="com.mdframe.forge.plugin.collaboration.vo.CollaborationDeliveryVO">
         SELECT r.id,
                r.message_id,
                r.user_id,
+               u.username AS user_account,
+               u.real_name AS user_name,
                m.connection_id,
+               m.platform,
                m.title,
+               m.content AS message_content,
                r.delivery_status,
                r.delivery_attempts,
                r.external_id,
@@ -18,11 +22,15 @@
                r.create_time
         FROM sys_message_receiver r
         INNER JOIN sys_message m ON m.id = r.message_id AND m.tenant_id = r.tenant_id
+        LEFT JOIN sys_user u ON u.id = r.user_id
         WHERE r.tenant_id = #{tenantId}
           AND m.send_channel = 'COLLABORATION'
           AND r.delivery_status IS NOT NULL
         <if test="connectionId != null">
             AND m.connection_id = #{connectionId}
+        </if>
+        <if test="platform != null and platform != ''">
+            AND m.platform = #{platform}
         </if>
         <if test="deliveryStatus != null and deliveryStatus != ''">
             AND r.delivery_status = #{deliveryStatus}

@@ -154,10 +154,11 @@ public class CollaborationOperationsController {
     @OperationLog(module = "企业协同运维", type = OperationType.QUERY, desc = "分页查询消息投递")
     public RespInfo<Page<CollaborationDeliveryVO>> deliveryPage(PageQuery pageQuery,
                                                                 @RequestParam(required = false) Long connectionId,
+                                                                @RequestParam(required = false) String platform,
                                                                 @RequestParam(required = false) String deliveryStatus,
                                                                 @RequestParam(required = false) Long messageId) {
         Page<CollaborationDeliveryVO> page = deliveryMapper.selectDeliveryPage(pageQuery.toPage(),
-                CollaborationTenantHelper.currentTenantId(), connectionId, deliveryStatus, messageId);
+                CollaborationTenantHelper.currentTenantId(), connectionId, platform, deliveryStatus, messageId);
         return RespInfo.success(page);
     }
 

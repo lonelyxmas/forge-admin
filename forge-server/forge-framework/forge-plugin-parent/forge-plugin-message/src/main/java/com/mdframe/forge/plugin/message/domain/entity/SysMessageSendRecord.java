@@ -40,6 +40,11 @@ public class SysMessageSendRecord implements Serializable {
     private Long connectionId;
     
     /**
+     * 企业协同平台编码：WECHAT_ENTERPRISE/DINGTALK/FEISHU 等，非协同渠道为空
+     */
+    private String platform;
+    
+    /**
      * 本次渠道投递幂等键（可为空）
      */
     private String idempotencyKey;

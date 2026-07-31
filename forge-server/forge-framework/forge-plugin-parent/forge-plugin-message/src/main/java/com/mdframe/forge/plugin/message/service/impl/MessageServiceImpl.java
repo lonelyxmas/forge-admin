@@ -240,9 +240,9 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
                     receivers.add(receiver);
                 }
                 
-                // 批量插入
+                // 批量插入（saveBatch 批次刷入，避免逐条 insert 往返数据库）
                 if (!receivers.isEmpty()) {
-                    receivers.forEach(receiverMapper::insert);
+                    sysMessageReceiverService.saveBatch(receivers);
                     totalCount[0] += receivers.size();
                 }
             },
@@ -305,7 +305,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         List<SysMessageReceiver> receivers = sysMessageReceiverService.lambdaQuery()
                 .eq(SysMessageReceiver::getMessageId, msg.getId()).list();
         if (CollectionUtil.isEmpty(receivers)) {
-            return new CollaborationDeliveryOutcome(0, 0, 0, null, null);
+            return new CollaborationDeliveryOutcome(0, 0, 0, null, null, null);
         }
         List<MessageChannel.ChannelRecipient> recipients = receivers.stream()
                 .map(r -> MessageChannel.ChannelRecipient.of(r.getUserId()))
@@ -340,7 +340,8 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
             }
         }
         String providerRequestId = result != null ? result.providerRequestId() : null;
-        return new CollaborationDeliveryOutcome(sent, failed, skipped, providerRequestId, firstError);
+        String platform = result != null ? result.platform() : null;
+        return new CollaborationDeliveryOutcome(sent, failed, skipped, providerRequestId, firstError, platform);
     }
     
     /**
@@ -352,6 +353,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         record.setTenantId(tenantId);
         record.setMessageId(msg.getId());
         record.setConnectionId(req.getConnectionId());
+        record.setPlatform(outcome.platform());
         record.setIdempotencyKey(req.getIdempotencyKey());
         record.setAttemptNo(1);
         record.setProviderRequestId(outcome.providerRequestId());
@@ -365,11 +367,15 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         record.setSendTime(LocalDateTime.now());
         recordMapper.insert(record);
         
-        // 更新消息状态：全部失败才标记发送失败
+        // 更新消息状态：全部失败才标记发送失败；同时回写企业协同平台编码，供消息列表/投递记录区分平台
         SysMessage updateMsg = new SysMessage();
         updateMsg.setId(msg.getId());
         updateMsg.setStatus(allFailed ? 2 : 1);
+        updateMsg.setPlatform(outcome.platform());
         messageMapper.updateById(updateMsg);
+        // 同步回写返回实例，调用方可据此判断投递结果（逐人失败不抛异常）
+        msg.setStatus(updateMsg.getStatus());
+        msg.setPlatform(outcome.platform());
     }
     
     /**
@@ -416,7 +422,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
      * 企业协同渠道逐人投递汇总
      */
     private record CollaborationDeliveryOutcome(int sentCount, int failedCount, int skippedCount,
-                                                String providerRequestId, String firstErrorMsg) {
+                                                String providerRequestId, String firstErrorMsg, String platform) {
     }
 
     @Override
@@ -547,6 +553,26 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         }
         
         return vo;
+    }
+
+    @Override
+    public String resolveEnabledTemplateCode(String... candidateCodes) {
+        if (candidateCodes == null) {
+            return null;
+        }
+        for (String code : candidateCodes) {
+            if (StrUtil.isBlank(code)) {
+                continue;
+            }
+            Long count = templateMapper.selectCount(
+                    new LambdaQueryWrapper<SysMessageTemplate>()
+                            .eq(SysMessageTemplate::getTemplateCode, code)
+                            .eq(SysMessageTemplate::getEnabled, 1));
+            if (count != null && count > 0) {
+                return code;
+            }
+        }
+        return null;
     }
 
     private Long resolveTenantId() {

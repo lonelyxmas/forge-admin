@@ -66,18 +66,25 @@ public class DefaultTenantLineHandler implements TenantLineHandler {
             return true;
         }
 
-        // 2. 检查是否在手动配置的忽略表列表中
+        // 2. 如果上下文中没有租户ID，则跳过租户条件拼接，避免生成 tenant_id = NULL 导致查不到数据
+        //    典型场景：定时任务/系统级线程无租户上下文。此时不追加租户条件，而非拼接无效的 NULL。
+        if (TenantContextHolder.getTenantId() == null) {
+            log.debug("当前上下文无租户ID，跳过表[{}]的租户条件拼接", tableName);
+            return true;
+        }
+
+        // 3. 检查是否在手动配置的忽略表列表中
         if (tenantProperties.getIgnoreTables() != null &&
             tenantProperties.getIgnoreTables().contains(tableName)) {
             return true;
         }
 
-        // 3. 检查手动添加到缓存的忽略表
+        // 4. 检查手动添加到缓存的忽略表
         if (ignoreTableCache.contains(tableName)) {
             return true;
         }
 
-        // 4. 自动检测：如果启用了自动检测，检查表是否包含租户字段
+        // 5. 自动检测：如果启用了自动检测，检查表是否包含租户字段
         if (tenantProperties.getAutoDetectTenantColumn() && tenantTableChecker != null) {
             // 不包含租户字段的表需要忽略
             return !tenantTableChecker.hasTenantColumn(tableName);

@@ -80,6 +80,12 @@
             <artifactId>forge-plugin-generator</artifactId>
         </dependency>
 
+        <!-- 企业协同插件（COLLABORATION 消息渠道，待办企微卡片推送依赖本进程内渠道 Bean） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-collaboration</artifactId>
+        </dependency>
+
         <!-- Spring Data Redis (Pub/Sub 事件发布) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

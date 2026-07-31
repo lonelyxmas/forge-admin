@@ -3,11 +3,53 @@ import { useAuthStore } from '@/store'
 
 // 企业微信工作台免登：仅在 H5 且运行于企业微信客户端内生效。
 // 流程：无 code → 取授权地址跳转企微 OAuth2；带 code&state 回跳 → 换票据静默登录。
+// 免登开关与 connectionCode 由后端连接配置下发（sys_social_config.sso_workbench_enabled），不再前端写死。
 
 let autoLoginPromise = null
 
-function getConnectionCode() {
-  return import.meta.env.VITE_WECOM_CONNECTION_CODE || ''
+// 企微 OAuth 回跳地址不带 hash，授权前暂存深链目标页，登录后恢复（卡片消息跳待办详情等场景）
+const LOGIN_REDIRECT_KEY = 'wecom_login_redirect'
+
+function saveLoginRedirect() {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+    return
+  }
+  // hash 形如 #/pages/todo-detail?taskId=xxx，去掉 # 后作为 uni 路由地址
+  const target = (window.location.hash || '').replace(/^#/, '')
+  if (target && target.startsWith('/pages/')) {
+    try {
+      sessionStorage.setItem(LOGIN_REDIRECT_KEY, target)
+    } catch (e) { /* 存储不可用时降级回首页 */ }
+  }
+}
+
+/**
+ * 取出并清除免登前暂存的深链目标页（仅限 /pages/ 开头的站内路由）
+ */
+export function consumeWeComLoginRedirect() {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+    return ''
+  }
+  try {
+    const target = sessionStorage.getItem(LOGIN_REDIRECT_KEY) || ''
+    sessionStorage.removeItem(LOGIN_REDIRECT_KEY)
+    return target.startsWith('/pages/') ? target : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+async function getConnectionCode() {
+  try {
+    const res = await api.getWecomSsoConnection({ platform: 'WECHAT_ENTERPRISE' })
+    if (res?.data?.enabled) {
+      return res.data.connectionCode || ''
+    }
+  }
+  catch (error) {
+    console.warn('[wecom] 获取免登连接配置失败:', error)
+  }
+  return ''
 }
 
 function getUserClient() {
@@ -57,14 +99,14 @@ function clearCallbackParams() {
 
 async function runAutoLogin() {
   const inWeCom = isWeComBrowser()
-  const connectionCode = getConnectionCode()
-  // 联调诊断：打开控制台即可确认免登是否触发及跳过原因
-  console.warn(`[wecom] 免登检测: inWeCom=${inWeCom}, hasConnectionCode=${!!connectionCode}, ua=${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`)
   if (!inWeCom) {
     return { status: 'skip', reason: 'not-wecom' }
   }
+  const connectionCode = await getConnectionCode()
+  // 联调诊断：打开控制台即可确认免登是否触发及跳过原因
+  console.warn(`[wecom] 免登检测: inWeCom=${inWeCom}, hasConnectionCode=${!!connectionCode}, ua=${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`)
   if (!connectionCode) {
-    console.warn('[wecom] 未配置 VITE_WECOM_CONNECTION_CODE，跳过企微免登')
+    console.warn('[wecom] 未在连接配置中开启工作台免登，跳过企微免登')
     return { status: 'skip', reason: 'no-connection-code' }
   }
 
@@ -96,7 +138,8 @@ async function runAutoLogin() {
     return { status: 'skip', reason: 'already-login' }
   }
 
-  // 授权阶段：取授权地址并跳转企微 OAuth2
+  // 授权阶段：暂存深链目标后取授权地址并跳转企微 OAuth2（回跳不带 hash，需登录后恢复）
+  saveLoginRedirect()
   const res = await api.getWecomAuthorize({
     connectionCode,
     redirectUri: buildRedirectUri(),
@@ -127,7 +170,7 @@ export function startWeComAutoLogin() {
  * 当前是否处于企微免登流程中（授权跳转或回调换票期间）
  */
 export function isWeComAutoLoginPending() {
-  return isWeComBrowser() && !!getConnectionCode() && (hasWeComCallbackParams() || !!autoLoginPromise)
+  return isWeComBrowser() && (hasWeComCallbackParams() || !!autoLoginPromise)
 }
 
 /**

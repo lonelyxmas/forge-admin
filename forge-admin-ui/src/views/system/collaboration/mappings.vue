@@ -86,14 +86,14 @@ const orgColumns = [
   { key: 'externalDeptId', title: '外部部门ID', width: 140 },
   { key: 'externalParentId', title: '外部父部门ID', width: 140 },
   { key: 'externalDeptName', title: '外部部门名称', minWidth: 160, ellipsis: { tooltip: true } },
-  { key: 'orgId', title: 'Forge组织ID', width: 130 },
+  { key: 'orgId', title: '系统组织ID', width: 130 },
   { key: 'status', title: '状态', width: 90 },
   { key: 'updateTime', title: '更新时间', width: 170 },
 ]
 
 const userColumns = [
   { key: 'id', title: 'ID', width: 90 },
-  { key: 'userId', title: 'Forge用户ID', width: 120 },
+  { key: 'userId', title: '系统用户ID', width: 120 },
   { key: 'uuid', title: '外部用户ID', minWidth: 160, ellipsis: { tooltip: true } },
   { key: 'username', title: '用户名', width: 130, ellipsis: { tooltip: true } },
   { key: 'nickname', title: '昵称', width: 130, ellipsis: { tooltip: true } },
@@ -111,7 +111,7 @@ const postColumns = [
   { key: 'id', title: 'ID', width: 90 },
   { key: 'externalPostCode', title: '外部岗位编码', width: 160, ellipsis: { tooltip: true } },
   { key: 'externalPostName', title: '外部岗位名称', minWidth: 160, ellipsis: { tooltip: true } },
-  { key: 'postId', title: 'Forge岗位ID', width: 130 },
+  { key: 'postId', title: '系统岗位ID', width: 130 },
   { key: 'status', title: '状态', width: 90 },
 ]
 

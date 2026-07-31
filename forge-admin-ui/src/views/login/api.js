@@ -52,6 +52,12 @@ export default {
     params,
   }),
 
+  // 工作台免登发现：查询平台是否开启免登及其 connectionCode（替代前端写死配置）
+  getWecomSsoConnection: platform => request.get('/collaboration/login/sso-connection', {
+    needToken: false,
+    params: platform ? { platform } : {},
+  }),
+
   // 企业微信免登回调：code&state 换取一次性登录票据
   wecomLoginCallback: data => request.post('/collaboration/login/callback', data, { needToken: false }),
 }
