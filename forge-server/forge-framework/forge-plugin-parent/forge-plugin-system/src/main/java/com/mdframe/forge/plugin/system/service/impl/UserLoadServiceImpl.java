@@ -81,6 +81,18 @@ public class UserLoadServiceImpl implements IUserLoadService {
     }
 
     @Override
+    public LoginUser loadUniqueUserByVerifiedPhone(
+            String phone, Long tenantId, Long preferredActiveOrgId) {
+        List<SysUser> candidates = TenantContextHolder.executeIgnore(() ->
+                userMapper.selectEligibleUsersByVerifiedPhone(phone, tenantId));
+        if (candidates == null || candidates.size() != 1) {
+            throw new RuntimeException("手机号未唯一匹配有效用户");
+        }
+        SysUser user = candidates.get(0);
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId), preferredActiveOrgId);
+    }
+
+    @Override
     public LoginUser loadUserByEmail(String email, Long tenantId) {
         return loadUserByEmail(email, tenantId, null);
     }

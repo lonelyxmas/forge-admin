@@ -103,11 +103,15 @@ public class CapabilityInvocationAuditService {
             throw new BusinessException("能力调用审计缺少主体或结果状态");
         }
         requirePositive("actorUserId", event.actorUserId());
-        requirePositive("serviceUserId", event.serviceUserId());
         requirePositive("activeOrgId", event.activeOrgId());
-        if (event.actorType() == CapabilityActorType.SERVICE
-                && !Objects.equals(event.actorUserId(), event.serviceUserId())) {
-            throw new BusinessException("服务账号调用的实际主体必须与绑定服务账号一致");
+        if (event.actorType() == CapabilityActorType.SERVICE) {
+            requirePositive("serviceUserId", event.serviceUserId());
+            if (!Objects.equals(event.actorUserId(), event.serviceUserId())) {
+                throw new BusinessException("服务账号调用的实际主体必须与绑定服务账号一致");
+            }
+        }
+        else if (event.serviceUserId() != null) {
+            requirePositive("serviceUserId", event.serviceUserId());
         }
         requireStableCode("结果码", event.resultCode(), false);
         requireStableCode("错误码", event.errorCode(), true);

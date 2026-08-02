@@ -57,10 +57,13 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     .notMatch("/.well-known/oauth-authorization-server")
                     .notMatch("/oauth2/token")
                     .notMatch("/oauth2/revoke")
+                    .notMatch("/oauth2/userinfo")
                     // /mcp 必须由 MCP Bearer Filter 强制认证，禁止通用 Sa-Token 二次拦截
                     .notMatch("/mcp")
                     // 定时任务开放API由独立服务账号Bearer认证处理
                     .notMatch("/openapi/v1/jobs", "/openapi/v1/jobs/**", "/openapi/v1/executions/**")
+                    // 能力开放网关由 OpenGatewayAuthenticator 自行完成双模式认证
+                    .notMatch("/openapi/v1/capabilities/**")
                     // 排除获取验证码接口
                     .notMatch("/auth/captcha")
                     .notMatch("/auth/captcha/slider")
@@ -84,9 +87,11 @@ public class SaTokenConfig implements WebMvcConfigurer {
                         "/auth/captcha", "/auth/captcha/slider", "/auth/captcha/sms", "/auth/sso/exchange")
                 .excludePathPatterns("/crypto/config", "/crypto/public-key", "/crypto/exchange")
                 .excludePathPatterns("/.well-known/oauth-protected-resource",
-                        "/.well-known/oauth-authorization-server", "/oauth2/token", "/oauth2/revoke")
+                        "/.well-known/oauth-authorization-server", "/oauth2/token", "/oauth2/revoke",
+                        "/oauth2/userinfo")
                 .excludePathPatterns("/ai/capability/oauth/**", "/mcp")
                 .excludePathPatterns("/openapi/v1/jobs", "/openapi/v1/jobs/**", "/openapi/v1/executions/**")
+                .excludePathPatterns("/openapi/v1/capabilities/**")
                 // 排除静态资源
                 .excludePathPatterns("/static/**", "/css/**", "/js/**", "/images/**")
                 // 排除Swagger文档

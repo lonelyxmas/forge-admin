@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityClien
 import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientSecretCodec;
 import com.mdframe.forge.plugin.capability.controlplane.security.IssuedClientSecret;
 import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilityClientSecretVO;
+import com.mdframe.forge.starter.crypto.persistence.PersistentCryptoService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -29,7 +30,7 @@ class CapabilityClientServiceTest {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
         Clock clock = Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC);
-        CapabilityClientService service = new CapabilityClientService(mapper, codec, clock);
+        CapabilityClientService service = service(mapper, codec, clock);
         String rawSecret = "fcp_client_a_test-only-raw-secret";
         String keyHash = "a".repeat(64);
         when(codec.issue("client_a"))
@@ -42,7 +43,9 @@ class CapabilityClientServiceTest {
 
         CapabilityClientSecretVO response = service.create(
                 1L,
-                new CapabilityClientCreateDTO("client_a", "测试客户端", 10L, 20L, null, null));
+                new CapabilityClientCreateDTO(
+                        "client_a", "测试客户端", "HYBRID", 10L, 20L,
+                        null, null, null));
 
         ArgumentCaptor<AiCapabilityClient> captor = ArgumentCaptor.forClass(AiCapabilityClient.class);
         verify(mapper).insert(captor.capture());
@@ -50,49 +53,83 @@ class CapabilityClientServiceTest {
         assertThat(stored.getKeyId()).isEqualTo("key-id-12345678901234");
         assertThat(stored.getKeyPrefix()).isEqualTo("fcp_key-id-12345678901234");
         assertThat(stored.getKeyHash()).isEqualTo(keyHash);
+        assertThat(stored.getOauthEnabled()).isEqualTo(1);
+        assertThat(stored.getAuthModes()).isEqualTo("OAUTH");
+        assertThat(stored.getActorMode()).isEqualTo("HYBRID");
         assertThat(stored.toString()).doesNotContain(rawSecret);
         assertThat(response.clientSecret()).isEqualTo(rawSecret);
         assertThat(response.clientId()).isEqualTo(99L);
     }
 
     @Test
+    void shouldKeepOauthDisabledForSignatureOnlyClient() {
+        AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
+        CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
+        Clock clock = Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC);
+        CapabilityClientService service = service(mapper, codec, clock);
+        when(codec.issue("client_signature")).thenReturn(new IssuedClientSecret(
+                "fcp_signature_secret", "key-id-signature-0001",
+                "fcp_key-id-signature-0001", "b".repeat(64)));
+
+        service.create(1L, new CapabilityClientCreateDTO(
+                "client_signature", "签名客户端", "SERVICE", 10L, 20L,
+                "SIGNATURE", null, null));
+
+        ArgumentCaptor<AiCapabilityClient> captor = ArgumentCaptor.forClass(AiCapabilityClient.class);
+        verify(mapper).insert(captor.capture());
+        assertThat(captor.getValue().getOauthEnabled()).isZero();
+        assertThat(captor.getValue().getAuthModes()).isEqualTo("SIGNATURE");
+        assertThat(captor.getValue().getSigningKeyVersion()).isEqualTo(1);
+    }
+
+    @Test
     void shouldRejectInvalidServiceIdentityBeforeIssuingSecret() {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
-        CapabilityClientService service = new CapabilityClientService(
-                mapper, codec, Clock.systemUTC());
+        CapabilityClientService service = service(mapper, codec, Clock.systemUTC());
 
         assertThatThrownBy(() -> service.create(
                 1L,
-                new CapabilityClientCreateDTO("client_a", "测试客户端", 0L, 20L, null, null)))
+                new CapabilityClientCreateDTO(
+                        "client_a", "测试客户端", "SERVICE", 0L, 20L,
+                        null, null, null)))
                 .isInstanceOf(com.mdframe.forge.starter.core.exception.BusinessException.class)
                 .hasMessageContaining("服务账号");
         verify(codec, org.mockito.Mockito.never()).issue("client_a");
     }
 
     @Test
-    void shouldRejectPersistedClientWithInvalidServiceIdentity() {
+    void shouldCreateUserDelegationClientWithoutBoundAccount() {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
-        CapabilityClientService service = new CapabilityClientService(
-                mapper, codec, Clock.systemUTC());
-        AiCapabilityClient client = new AiCapabilityClient();
-        client.setId(99L);
-        client.setTenantId(1L);
-        client.setClientCode("client_a");
-        client.setKeyHash("a".repeat(64));
-        client.setStatus("ENABLED");
-        client.setServiceUserId(0L);
-        client.setActiveOrgId(20L);
-        when(codec.extractKeyId("raw-secret")).thenReturn("key-id-12345678901234");
-        when(mapper.selectCredentialByKeyId("key-id-12345678901234")).thenReturn(client);
-        when(codec.matches("raw-secret", client.getKeyHash())).thenReturn(true);
+        CapabilityClientService service = service(mapper, codec, Clock.systemUTC());
+        when(codec.issue("user_delegate")).thenReturn(new IssuedClientSecret(
+                "fcp_user_delegate_secret", "key-id-user-delegate01",
+                "fcp_key-id-user-delegate01", "c".repeat(64)));
 
-        assertThatThrownBy(() -> service.authenticate("raw-secret"))
+        service.create(1L, new CapabilityClientCreateDTO(
+                "user_delegate", "用户委托客户端", null,
+                null, null, "OAUTH", null, null));
+
+        ArgumentCaptor<AiCapabilityClient> captor = ArgumentCaptor.forClass(AiCapabilityClient.class);
+        verify(mapper).insert(captor.capture());
+        assertThat(captor.getValue().getActorMode()).isEqualTo("USER_DELEGATION");
+        assertThat(captor.getValue().getServiceUserId()).isNull();
+        assertThat(captor.getValue().getActiveOrgId()).isNull();
+    }
+
+    @Test
+    void shouldRejectSignatureForUserDelegationClient() {
+        CapabilityClientService service = service(
+                mock(AiCapabilityClientMapper.class),
+                mock(CapabilityClientSecretCodec.class),
+                Clock.systemUTC());
+
+        assertThatThrownBy(() -> service.create(1L, new CapabilityClientCreateDTO(
+                "user_delegate", "用户委托客户端", "USER_DELEGATION",
+                null, null, "OAUTH,SIGNATURE", null, null)))
                 .isInstanceOf(com.mdframe.forge.starter.core.exception.BusinessException.class)
-                .hasMessageContaining("凭据无效");
-        verify(mapper, org.mockito.Mockito.never())
-                .updateById(org.mockito.ArgumentMatchers.any(AiCapabilityClient.class));
+                .hasMessageContaining("只支持 OAUTH");
     }
 
     @Test
@@ -100,7 +137,7 @@ class CapabilityClientServiceTest {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
         Clock clock = Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC);
-        CapabilityClientService service = new CapabilityClientService(mapper, codec, clock);
+        CapabilityClientService service = service(mapper, codec, clock);
         AiCapabilityClient client = enabledClient();
         when(codec.extractKeyId("raw-secret")).thenReturn("key-id-12345678901234");
         when(mapper.selectCredentialByKeyId("key-id-12345678901234")).thenReturn(client);
@@ -122,7 +159,7 @@ class CapabilityClientServiceTest {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
         Clock clock = Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC);
-        CapabilityClientService service = new CapabilityClientService(mapper, codec, clock);
+        CapabilityClientService service = service(mapper, codec, clock);
         AiCapabilityClient client = enabledClient();
         when(codec.extractKeyId("raw-secret")).thenReturn("key-id-12345678901234");
         when(mapper.selectCredentialByKeyId("key-id-12345678901234")).thenReturn(client);
@@ -142,7 +179,7 @@ class CapabilityClientServiceTest {
     void shouldRotateCredentialWithCompareAndSet() {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
         CapabilityClientSecretCodec codec = mock(CapabilityClientSecretCodec.class);
-        CapabilityClientService service = new CapabilityClientService(mapper, codec, Clock.systemUTC());
+        CapabilityClientService service = service(mapper, codec, Clock.systemUTC());
         AiCapabilityClient client = enabledClient();
         String rotatedSecret = "fcp_new-key-12345678901234_rotated-secret";
         when(mapper.selectTenantById(7L, 99L)).thenReturn(client);
@@ -163,7 +200,7 @@ class CapabilityClientServiceTest {
     @Test
     void shouldRevokeCredentialWithCompareAndSet() {
         AiCapabilityClientMapper mapper = mock(AiCapabilityClientMapper.class);
-        CapabilityClientService service = new CapabilityClientService(
+        CapabilityClientService service = service(
                 mapper, mock(CapabilityClientSecretCodec.class), Clock.systemUTC());
         AiCapabilityClient client = enabledClient();
         when(mapper.selectTenantById(7L, 99L)).thenReturn(client);
@@ -184,9 +221,18 @@ class CapabilityClientServiceTest {
         client.setKeyId("key-id-12345678901234");
         client.setKeyHash("a".repeat(64));
         client.setCredentialVersion(3);
+        client.setActorMode("HYBRID");
         client.setStatus("ENABLED");
         client.setServiceUserId(10L);
         client.setActiveOrgId(20L);
         return client;
+    }
+
+    private CapabilityClientService service(
+            AiCapabilityClientMapper mapper,
+            CapabilityClientSecretCodec codec,
+            Clock clock) {
+        return new CapabilityClientService(
+                mapper, codec, mock(PersistentCryptoService.class), clock);
     }
 }

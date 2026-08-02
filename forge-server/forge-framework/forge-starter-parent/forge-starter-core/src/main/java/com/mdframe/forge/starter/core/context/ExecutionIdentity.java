@@ -23,7 +23,15 @@ public record ExecutionIdentity(
         loginUser = snapshot(Objects.requireNonNull(loginUser, "loginUser 不能为空"));
         actorType = requireText(actorType, "actorType");
         actorUserId = requirePositive(actorUserId, "actorUserId");
-        serviceUserId = requirePositive(serviceUserId, "serviceUserId");
+        if ("SERVICE".equals(actorType)) {
+            serviceUserId = requirePositive(serviceUserId, "serviceUserId");
+            if (!actorUserId.equals(serviceUserId)) {
+                throw new IllegalArgumentException("SERVICE 主体必须与 serviceUserId 一致");
+            }
+        }
+        else if (serviceUserId != null) {
+            serviceUserId = requirePositive(serviceUserId, "serviceUserId");
+        }
         clientId = requirePositive(clientId, "clientId");
         clientCode = requireText(clientCode, "clientCode");
         tokenId = requireText(tokenId, "tokenId");

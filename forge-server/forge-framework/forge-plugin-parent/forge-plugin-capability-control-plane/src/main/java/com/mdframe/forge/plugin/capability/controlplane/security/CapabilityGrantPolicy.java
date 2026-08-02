@@ -30,12 +30,18 @@ public final class CapabilityGrantPolicy {
                 || !Objects.equals(capability.getId(), grant.getCapabilityId())) {
             return CapabilityGrantDecision.deny("GRANT_SCOPE_VIOLATION");
         }
-        if (!Objects.equals(callerActiveOrgId, client.getActiveOrgId())) {
-            return CapabilityGrantDecision.deny("ORG_SCOPE_VIOLATION");
-        }
-        if (client.getServiceUserId() == null || client.getServiceUserId() <= 0
-                || client.getActiveOrgId() == null || client.getActiveOrgId() <= 0) {
+        CapabilityClientActorMode actorMode = actorMode(client.getActorMode());
+        if (actorMode == null || callerActiveOrgId == null || callerActiveOrgId <= 0) {
             return CapabilityGrantDecision.deny("CLIENT_IDENTITY_INVALID");
+        }
+        if (actorMode.requiresServiceIdentity()) {
+            if (!Objects.equals(callerActiveOrgId, client.getActiveOrgId())) {
+                return CapabilityGrantDecision.deny("ORG_SCOPE_VIOLATION");
+            }
+            if (client.getServiceUserId() == null || client.getServiceUserId() <= 0
+                    || client.getActiveOrgId() == null || client.getActiveOrgId() <= 0) {
+                return CapabilityGrantDecision.deny("CLIENT_IDENTITY_INVALID");
+            }
         }
         if (!"ENABLED".equals(client.getStatus())) {
             return CapabilityGrantDecision.deny("CLIENT_DISABLED");
@@ -47,9 +53,8 @@ public final class CapabilityGrantPolicy {
                 || !Integer.valueOf(1).equals(capability.getEnabled())) {
             return CapabilityGrantDecision.deny("CAPABILITY_DISABLED");
         }
-        if (!"READ_ONLY".equals(capability.getBehavior())
-                || "HIGH".equals(capability.getRiskLevel())) {
-            return CapabilityGrantDecision.deny("CAPABILITY_NOT_READ_ONLY");
+        if ("HIGH".equals(capability.getRiskLevel())) {
+            return CapabilityGrantDecision.deny("CAPABILITY_HIGH_RISK");
         }
         if (!"ENABLED".equals(grant.getStatus())) {
             return CapabilityGrantDecision.deny("GRANT_DISABLED");
@@ -73,6 +78,17 @@ public final class CapabilityGrantPolicy {
                     : CapabilityGrantDecision.deny("VERSION_NOT_GRANTED");
         }
         return CapabilityGrantDecision.deny("VERSION_STRATEGY_UNSUPPORTED");
+    }
+
+    private CapabilityClientActorMode actorMode(String value) {
+        try {
+            return value == null || value.isBlank()
+                    ? CapabilityClientActorMode.HYBRID
+                    : CapabilityClientActorMode.valueOf(value);
+        }
+        catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private boolean expired(LocalDateTime expiresAt, LocalDateTime now) {

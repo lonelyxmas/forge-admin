@@ -16,6 +16,7 @@ public record CapabilityPublishDTO(
         @NotBlank String behavior,
         @NotBlank String riskLevel,
         @NotBlank String visibility,
+        String requiredActorType,
         @NotNull JsonNode inputSchema,
         @NotNull JsonNode outputSchema,
         JsonNode policySnapshot) {

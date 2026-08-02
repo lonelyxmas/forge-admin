@@ -1,10 +1,11 @@
 package com.mdframe.forge.plugin.capability.identity.oauth;
 
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,7 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class McpOAuthMetadataController {
 
     private static final List<String> SCOPES = List.of(
@@ -43,8 +44,12 @@ public class McpOAuthMetadataController {
                 Map.entry("authorization_endpoint", issuer + "/mcp-authorize"),
                 Map.entry("token_endpoint", issuer + "/oauth2/token"),
                 Map.entry("revocation_endpoint", issuer + "/oauth2/revoke"),
+                Map.entry("userinfo_endpoint", issuer + "/oauth2/userinfo"),
                 Map.entry("response_types_supported", List.of("code")),
-                Map.entry("grant_types_supported", List.of("authorization_code", "client_credentials")),
+                Map.entry("grant_types_supported", List.of(
+                        "authorization_code",
+                        "client_credentials",
+                        "urn:ietf:params:oauth:grant-type:token-exchange")),
                 Map.entry("code_challenge_methods_supported", List.of("S256")),
                 Map.entry("token_endpoint_auth_methods_supported",
                         List.of("client_secret_basic", "client_secret_post", "none")),

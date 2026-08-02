@@ -39,7 +39,7 @@ class FlowActionExecutionAdapterTest {
     private final BusinessFlowService flowService = mock(BusinessFlowService.class);
     private final FlowActionExecutionLogService logService = mock(FlowActionExecutionLogService.class);
     private final FlowActionExecutionAdapter adapter = new FlowActionExecutionAdapter(
-            sourceService, flowService, logService);
+            sourceService, flowService, logService, objectMapper);
 
     @AfterEach
     void clearIdentity() {

@@ -83,6 +83,59 @@ class CapabilityAccessTokenServiceTest {
     }
 
     @Test
+    void shouldIssuePureUserDelegationTokenWithoutServiceIdentity() {
+        client.setActorMode("USER_DELEGATION");
+        client.setServiceUserId(null);
+        client.setActiveOrgId(null);
+        CapabilityTokenIssueCommand command = new CapabilityTokenIssueCommand(
+                301L, 1, CapabilityActorType.USER, 101L, null, 1L, 201L,
+                "http://localhost:8580/mcp", Set.of("capability:invoke"));
+
+        CapabilityTokenResponse response = tokenService.issue(command);
+
+        ArgumentCaptor<AiCapabilityAccessToken> captor =
+                ArgumentCaptor.forClass(AiCapabilityAccessToken.class);
+        verify(tokenMapper).insert(captor.capture());
+        AiCapabilityAccessToken persisted = captor.getValue();
+        persisted.setId(402L);
+        assertThat(persisted.getServiceUserId()).isNull();
+        when(tokenMapper.selectActiveByTokenKeyId(persisted.getTokenKeyId())).thenReturn(persisted);
+        when(tokenMapper.touchLastUsed(any(), any(), any())).thenReturn(1);
+
+        AuthenticatedCapabilityIdentity authenticated = tokenService.authenticate(
+                response.accessToken(), "http://localhost:8580/mcp", Set.of());
+
+        assertThat(authenticated.principal().actorType()).isEqualTo(CapabilityActorType.USER);
+        assertThat(authenticated.principal().serviceUserId()).isNull();
+        assertThat(authenticated.loginUser().getActiveOrgId()).isEqualTo(201L);
+    }
+
+    @Test
+    void shouldKeepMcpAndOpenApiTokenAudiencesStrictlySeparated() {
+        CapabilityTokenIssueCommand command = new CapabilityTokenIssueCommand(
+                301L, 1, CapabilityActorType.USER, 101L, 999L, 1L, 201L,
+                "http://localhost:8580/openapi", Set.of("capability:invoke"));
+        CapabilityTokenResponse response = tokenService.issue(command);
+        ArgumentCaptor<AiCapabilityAccessToken> captor =
+                ArgumentCaptor.forClass(AiCapabilityAccessToken.class);
+        verify(tokenMapper).insert(captor.capture());
+        AiCapabilityAccessToken persisted = captor.getValue();
+        persisted.setId(403L);
+        when(tokenMapper.selectActiveByTokenKeyId(persisted.getTokenKeyId())).thenReturn(persisted);
+        when(tokenMapper.touchLastUsed(any(), any(), any())).thenReturn(1);
+
+        assertThatThrownBy(() -> tokenService.authenticate(
+                response.accessToken(), "http://localhost:8580/mcp", Set.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("invalid_token");
+        AuthenticatedCapabilityIdentity authenticated = tokenService.authenticate(
+                response.accessToken(), "http://localhost:8580/openapi", Set.of());
+
+        assertThat(authenticated.principal().audience())
+                .isEqualTo("http://localhost:8580/openapi");
+    }
+
+    @Test
     void shouldRejectCredentialVersionChangeOnNextRequest() {
         CapabilityTokenResponse response = tokenService.issue(command(CapabilityActorType.USER, 101L));
         ArgumentCaptor<AiCapabilityAccessToken> captor =

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.capability.flowaction.mapper.FlowProcessSystemServiceMapper">
+
+    <sql id="PublishedModelColumns">
+        m.id AS model_id,
+        m.model_key,
+        m.model_name,
+        m.description,
+        v.version AS model_version,
+        v.deployment_id,
+        v.process_definition_id
+    </sql>
+
+    <sql id="PublishedModelConditions">
+        m.tenant_id = #{tenantId}
+        AND m.status = 1
+        AND m.del_flag = 0
+        AND v.del_flag = 0
+        AND v.publish_time IS NOT NULL
+        AND v.deployment_id IS NOT NULL
+        AND v.deployment_id &lt;&gt; ''
+        AND v.process_definition_id IS NOT NULL
+        AND v.process_definition_id &lt;&gt; ''
+    </sql>
+
+    <select id="selectPublishedModels"
+            resultType="com.mdframe.forge.plugin.capability.flowaction.system.FlowProcessModelSource">
+        SELECT <include refid="PublishedModelColumns"/>
+        FROM sys_flow_model m
+        INNER JOIN sys_flow_model_version v
+          ON v.model_id = m.id
+         AND v.tenant_id = m.tenant_id
+         AND v.version = m.version
+        WHERE <include refid="PublishedModelConditions"/>
+        ORDER BY m.model_name ASC, m.model_key ASC
+    </select>
+
+    <select id="selectPublishedModel"
+            resultType="com.mdframe.forge.plugin.capability.flowaction.system.FlowProcessModelSource">
+        SELECT <include refid="PublishedModelColumns"/>
+        FROM sys_flow_model m
+        INNER JOIN sys_flow_model_version v
+          ON v.model_id = m.id
+         AND v.tenant_id = m.tenant_id
+         AND v.version = m.version
+        WHERE <include refid="PublishedModelConditions"/>
+          AND m.id = #{modelId}
+        LIMIT 1
+    </select>
+</mapper>

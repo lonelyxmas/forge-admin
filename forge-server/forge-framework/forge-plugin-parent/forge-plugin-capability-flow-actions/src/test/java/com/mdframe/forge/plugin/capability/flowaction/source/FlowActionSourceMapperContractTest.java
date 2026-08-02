@@ -1,5 +1,6 @@
 package com.mdframe.forge.plugin.capability.flowaction.source;
 
+import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionSourceMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -10,6 +11,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FlowActionSourceMapperContractTest {
 
     @Test
+    void shouldRemainInApplicationMapperScanPackage() {
+        assertThat(FlowActionSourceMapper.class.getPackageName())
+                .isEqualTo("com.mdframe.forge.plugin.capability.flowaction.mapper");
+    }
+
+    @Test
     void shouldAnchorSourceVersionToExactPublishedDesignVersionFact() throws Exception {
         try (InputStream stream = getClass().getClassLoader()
                 .getResourceAsStream("mapper/FlowActionSourceMapper.xml")) {
@@ -17,6 +24,7 @@ class FlowActionSourceMapperContractTest {
             String xml = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
 
             assertThat(xml)
+                    .contains("namespace=\"" + FlowActionSourceMapper.class.getName() + "\"")
                     .contains("INNER JOIN ai_business_object_design_version v")
                     .contains("b.target_id = o.id")
                     .contains("v.object_id = o.id")

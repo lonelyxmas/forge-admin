@@ -62,8 +62,13 @@ public class CapabilityGrantService {
         if (version == null) {
             throw new BusinessException("授权基准版本不存在");
         }
-        if ("ACTION".equals(capability.getBehavior())) {
+        if ("ACTION".equals(capability.getBehavior())
+                && "BUSINESS_ACTION".equals(capability.getSourceType())) {
             validateActionFieldPolicy(version.getPolicySnapshot(), dto.fieldPolicy());
+        }
+        else if ("ACTION".equals(capability.getBehavior())
+                && "SYSTEM_SERVICE".equals(capability.getSourceType())) {
+            validateSystemServicePolicy(dto.fieldPolicy());
         }
         else if ("FLOW".equals(capability.getBehavior())) {
             validateFlowOperationPolicy(version.getPolicySnapshot(), dto.fieldPolicy());
@@ -132,6 +137,11 @@ public class CapabilityGrantService {
         if ("READ_ONLY".equals(capability.getBehavior())) {
             return;
         }
+        if ("ACTION".equals(capability.getBehavior())
+                && "MEDIUM".equals(capability.getRiskLevel())
+                && "SYSTEM_SERVICE".equals(capability.getSourceType())) {
+            return;
+        }
         if (!"ACTION".equals(capability.getBehavior())
                 || !"MEDIUM".equals(capability.getRiskLevel())
                 || !"BUSINESS_ACTION".equals(capability.getSourceType())
@@ -175,6 +185,12 @@ public class CapabilityGrantService {
         }
         if (!"MCP_ELICITATION".equals(versionPolicy.path("confirmationMode").asText())) {
             throw new BusinessException("受控流程动作缺少 MCP elicitation 确认策略");
+        }
+    }
+
+    private void validateSystemServicePolicy(JsonNode grantPolicy) {
+        if (grantPolicy != null && (!grantPolicy.isObject() || !grantPolicy.isEmpty())) {
+            throw new BusinessException("系统服务不接受客户端自定义字段或操作策略");
         }
     }
 

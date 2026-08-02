@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.capability.identity.token;
 import com.mdframe.forge.plugin.capability.controlplane.audit.CapabilityActorType;
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityClient;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityClientMapper;
+import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientActorMode;
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
 import com.mdframe.forge.plugin.capability.identity.domain.AiCapabilityAccessToken;
 import com.mdframe.forge.plugin.capability.identity.mapper.AiCapabilityAccessTokenMapper;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -86,8 +88,8 @@ public class CapabilityAccessTokenService {
         LocalDateTime now = LocalDateTime.now(clock);
         if (token == null || !tokenMatches || !"ACTIVE".equals(token.getStatus())
                 || token.getExpiresAt() == null || !token.getExpiresAt().isAfter(now)
-                || !properties.getResource().equals(expectedAudience)
-                || !properties.getResource().equals(token.getAudience())) {
+                || !properties.supportsResource(expectedAudience)
+                || !expectedAudience.equals(token.getAudience())) {
             throw unauthorized();
         }
 
@@ -194,13 +196,31 @@ public class CapabilityAccessTokenService {
             AiCapabilityClient client,
             AiCapabilityAccessToken token,
             LocalDateTime now) {
-        return client != null
-                && "ENABLED".equals(client.getStatus())
-                && Integer.valueOf(1).equals(client.getOauthEnabled())
-                && token.getCredentialVersion().equals(client.getCredentialVersion())
-                && token.getServiceUserId().equals(client.getServiceUserId())
-                && token.getActiveOrgId().equals(client.getActiveOrgId())
-                && (client.getExpiresAt() == null || client.getExpiresAt().isAfter(now));
+        CapabilityClientActorMode actorMode = actorMode(client == null ? null : client.getActorMode());
+        CapabilityActorType actorType = actorType(token.getActorType());
+        if (client == null || actorMode == null || actorType == null
+                || !"ENABLED".equals(client.getStatus())
+                || !Integer.valueOf(1).equals(client.getOauthEnabled())
+                || !Objects.equals(token.getCredentialVersion(), client.getCredentialVersion())
+                || (client.getExpiresAt() != null && !client.getExpiresAt().isAfter(now))) {
+            return false;
+        }
+        if (actorType == CapabilityActorType.SERVICE) {
+            return actorMode.requiresServiceIdentity()
+                    && Objects.equals(token.getActorUserId(), client.getServiceUserId())
+                    && Objects.equals(token.getServiceUserId(), client.getServiceUserId())
+                    && Objects.equals(token.getActiveOrgId(), client.getActiveOrgId());
+        }
+        if (!actorMode.allowsUserDelegation()) {
+            return false;
+        }
+        if (actorMode == CapabilityClientActorMode.USER_DELEGATION) {
+            return client.getServiceUserId() == null
+                    && client.getActiveOrgId() == null
+                    && token.getServiceUserId() == null;
+        }
+        return Objects.equals(token.getServiceUserId(), client.getServiceUserId())
+                && Objects.equals(token.getActiveOrgId(), client.getActiveOrgId());
     }
 
     private void validateIssueCommand(CapabilityTokenIssueCommand command) {
@@ -209,16 +229,40 @@ public class CapabilityAccessTokenService {
                 || command.credentialVersion() == null || command.credentialVersion() <= 0
                 || command.actorType() == null
                 || command.actorUserId() == null || command.actorUserId() <= 0
-                || command.serviceUserId() == null || command.serviceUserId() <= 0
                 || command.tenantId() == null || command.tenantId() <= 0
                 || command.activeOrgId() == null || command.activeOrgId() <= 0
-                || !properties.getResource().equals(command.audience())
+                || !properties.supportsResource(command.audience())
                 || command.scopes() == null || command.scopes().isEmpty()) {
             throw new BusinessException("短期令牌身份参数无效");
         }
-        if (command.actorType() == CapabilityActorType.SERVICE
-                && !command.actorUserId().equals(command.serviceUserId())) {
-            throw new BusinessException("SERVICE Token 的 actor 必须是绑定服务账号");
+        if (command.actorType() == CapabilityActorType.SERVICE) {
+            if (command.serviceUserId() == null || command.serviceUserId() <= 0
+                    || !command.actorUserId().equals(command.serviceUserId())) {
+                throw new BusinessException("SERVICE Token 的 actor 必须是绑定服务账号");
+            }
+        }
+        else if (command.serviceUserId() != null && command.serviceUserId() <= 0) {
+            throw new BusinessException("USER Token 的服务账号参数无效");
+        }
+    }
+
+    private CapabilityClientActorMode actorMode(String value) {
+        try {
+            return value == null || value.isBlank()
+                    ? CapabilityClientActorMode.HYBRID
+                    : CapabilityClientActorMode.valueOf(value);
+        }
+        catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private CapabilityActorType actorType(String value) {
+        try {
+            return CapabilityActorType.valueOf(value);
+        }
+        catch (RuntimeException exception) {
+            return null;
         }
     }
 

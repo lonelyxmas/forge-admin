@@ -45,6 +45,9 @@ public class BusinessObjectTableMappingService {
             "id", "tenant_id", "del_flag", "create_by", "create_time",
             "create_dept", "update_by", "update_time"
     );
+    private static final Set<String> LOGIC_DELETE_STORAGE_TYPES = Set.of(
+            "char", "varchar", "tinyint", "int", "bigint"
+    );
 
     private final BusinessObjectDesignContextProvider contextProvider;
     private final LowcodeDdlService ddlService;
@@ -58,6 +61,7 @@ public class BusinessObjectTableMappingService {
         applyLastSync(mapping, context.getObject());
         try {
             LowcodeDdlPreviewVO preview = ddlService.previewCreateTable(modelSchema);
+            mapping.setPendingDdlCount(ddlCount(preview));
             boolean tableExists = Boolean.TRUE.equals(preview.getTableExists());
             mapping.setTableExists(tableExists);
             Map<String, ColumnMetadata> columns = tableExists
@@ -66,7 +70,7 @@ public class BusinessObjectTableMappingService {
                     ? safeSet(ddlService.listIndexes(modelSchema)) : Set.of();
             mapping.setFields(buildFieldMappings(modelSchema, columns, indexes));
             int unsyncedCount = (int) mapping.getFields().stream()
-                    .filter(field -> !"IN_SYNC".equals(field.getSyncStatus()))
+                    .filter(field -> Boolean.TRUE.equals(field.getBlockingDifference()))
                     .count();
             mapping.setUnsyncedChangeCount(unsyncedCount);
             if (!tableExists) {
@@ -82,6 +86,7 @@ public class BusinessObjectTableMappingService {
             mapping.setLastSyncMessage(safeMessage(e));
             mapping.setFields(buildFieldMappings(modelSchema, Map.of(), Set.of()));
             mapping.setUnsyncedChangeCount(mapping.getFields().size());
+            mapping.setPendingDdlCount(0);
         }
         return mapping;
     }
@@ -211,10 +216,12 @@ public class BusinessObjectTableMappingService {
             BusinessObjectTableFieldMappingVO field = new BusinessObjectTableFieldMappingVO();
             field.setBusinessName(StringUtils.defaultIfBlank(metadata.columnComment(), metadata.columnName()));
             field.setColumnName(metadata.columnName());
-            field.setSystemField(SYSTEM_COLUMNS.contains(normalizeIdentifier(metadata.columnName())));
+            boolean systemColumn = SYSTEM_COLUMNS.contains(normalizeIdentifier(metadata.columnName()));
+            field.setSystemField(systemColumn);
             field.setReadonly(true);
             applyDatabaseMetadata(field, metadata, indexes);
-            field.setSyncStatus("UNMAPPED_DATABASE_COLUMN");
+            field.setSyncStatus(systemColumn ? "IN_SYNC" : "UNMAPPED_DATABASE_COLUMN");
+            field.setBlockingDifference(!systemColumn && isUnmappedColumnBlocking(metadata));
             fields.add(field);
         }
         return fields;
@@ -240,10 +247,13 @@ public class BusinessObjectTableMappingService {
         if (metadata == null) {
             field.setDatabaseIndexed(false);
             field.setSyncStatus("MISSING_DATABASE_COLUMN");
+            field.setBlockingDifference(true);
             return field;
         }
         applyDatabaseMetadata(field, metadata, indexes);
-        field.setSyncStatus(sameType(source, metadata) ? "IN_SYNC" : "TYPE_MISMATCH");
+        boolean sameType = sameType(source, metadata);
+        field.setSyncStatus(sameType ? "IN_SYNC" : "TYPE_MISMATCH");
+        field.setBlockingDifference(!sameType);
         return field;
     }
 
@@ -258,6 +268,11 @@ public class BusinessObjectTableMappingService {
     private boolean sameType(LowcodeFieldSchema field, ColumnMetadata metadata) {
         String configuredType = normalizeType(field.getDataType());
         String databaseType = normalizeType(metadata.columnType());
+        if (isLogicDeleteField(field)
+                && LOGIC_DELETE_STORAGE_TYPES.contains(baseType(configuredType))
+                && LOGIC_DELETE_STORAGE_TYPES.contains(baseType(databaseType))) {
+            return true;
+        }
         if (!baseType(configuredType).equals(baseType(databaseType))) {
             return false;
         }
@@ -269,6 +284,27 @@ public class BusinessObjectTableMappingService {
             return databaseType.startsWith("decimal(" + field.getLength() + "," + scale + ")");
         }
         return true;
+    }
+
+    private boolean isLogicDeleteField(LowcodeFieldSchema field) {
+        if (!Boolean.TRUE.equals(field.getSystemField())) {
+            return false;
+        }
+        String fieldCode = normalizeIdentifier(field.getField());
+        String columnName = normalizeIdentifier(field.getColumnName());
+        return "del_flag".equals(columnName)
+                || "delflag".equals(fieldCode)
+                || "del_flag".equals(fieldCode);
+    }
+
+    private boolean isUnmappedColumnBlocking(ColumnMetadata metadata) {
+        if (!"NO".equalsIgnoreCase(metadata.isNullable()) || metadata.columnDefault() != null) {
+            return false;
+        }
+        String extra = StringUtils.defaultString(metadata.extra()).toLowerCase(Locale.ROOT);
+        return !extra.contains("auto_increment")
+                && !extra.contains("generated")
+                && StringUtils.isBlank(metadata.generationExpression());
     }
 
     private boolean isConfiguredIndex(LowcodeModelSchema modelSchema, LowcodeFieldSchema field) {
@@ -421,6 +457,11 @@ public class BusinessObjectTableMappingService {
 
     private boolean hasDdl(LowcodeDdlPreviewVO preview) {
         return preview != null && preview.getDdlStatements() != null && !preview.getDdlStatements().isEmpty();
+    }
+
+    private int ddlCount(LowcodeDdlPreviewVO preview) {
+        return preview == null || preview.getDdlStatements() == null
+                ? 0 : preview.getDdlStatements().size();
     }
 
     private String firstNotBlank(String... values) {

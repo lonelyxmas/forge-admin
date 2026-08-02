@@ -5,17 +5,18 @@ import com.mdframe.forge.plugin.capability.controlplane.audit.CapabilityInvocati
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapability;
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityCatalogService;
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityInvocationAuditService;
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import com.mdframe.forge.plugin.capability.model.CapabilityInvocation;
 import com.mdframe.forge.plugin.capability.model.CapabilityResult;
 import com.mdframe.forge.plugin.capability.spi.CapabilityInvocationObserver;
 import com.mdframe.forge.starter.core.context.ExecutionIdentity;
 import com.mdframe.forge.starter.core.context.ExecutionIdentityContextHolder;
 import org.slf4j.MDC;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class CapabilityInvocationAuditObserver implements CapabilityInvocationObserver {
 
     private final CapabilityCatalogService catalogService;

@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.capability.controlplane.dto.CapabilityClientCrea
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityClientService;
 import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilityClientSecretVO;
 import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilityClientVO;
+import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilitySigningKeyVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
@@ -64,6 +65,18 @@ public class CapabilityClientController {
     @ApiEncrypt
     public RespInfo<CapabilityClientSecretVO> rotate(@PathVariable Long id) {
         return RespInfo.success(clientService.rotate(SessionHelper.getTenantId(), id));
+    }
+
+    @PostMapping("/signing-key/rotate/{id}")
+    @SaCheckPermission("ai:capability:client:edit")
+    @OperationLog(
+            module = "AI中枢客户端",
+            type = OperationType.UPDATE,
+            desc = "轮换机器客户端签名密钥",
+            saveResponseResult = false)
+    @ApiEncrypt
+    public RespInfo<CapabilitySigningKeyVO> rotateSigningKey(@PathVariable Long id) {
+        return RespInfo.success(clientService.rotateSigningKey(SessionHelper.getTenantId(), id));
     }
 
     @PostMapping("/revoke/{id}")

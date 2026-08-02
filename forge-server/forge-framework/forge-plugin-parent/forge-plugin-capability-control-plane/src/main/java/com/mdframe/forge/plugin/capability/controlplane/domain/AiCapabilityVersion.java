@@ -28,6 +28,7 @@ public class AiCapabilityVersion extends TenantEntity {
     private String sourceVersion;
     private String behavior;
     private String riskLevel;
+    private String requiredActorType;
     private String visibility;
     private String policySnapshot;
     private String schemaChecksum;

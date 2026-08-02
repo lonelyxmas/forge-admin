@@ -1,5 +1,6 @@
 package com.mdframe.forge.plugin.capability.identity.mcp;
 
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import com.mdframe.forge.plugin.capability.identity.security.AuthenticatedCapabilityIdentity;
 import com.mdframe.forge.plugin.capability.identity.security.CapabilitySecurityPrincipal;
 import com.mdframe.forge.plugin.capability.model.CapabilityCallerContext;
@@ -10,13 +11,13 @@ import com.mdframe.forge.starter.core.context.ExecutionIdentityContextHolder;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
 @Component
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class McpExecutionContextLifecycle implements McpRequestLifecycle {
 
     private static final String ACTOR_TYPE_MDC = "actorType";

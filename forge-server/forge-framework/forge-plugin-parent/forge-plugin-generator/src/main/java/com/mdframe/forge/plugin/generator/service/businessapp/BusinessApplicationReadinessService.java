@@ -11,6 +11,8 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPubl
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessIssueVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableFieldMappingVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableMappingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPermissionSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckItemVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckVO;
@@ -44,6 +46,7 @@ public class BusinessApplicationReadinessService {
     private final BusinessPermissionService permissionService;
     private final BusinessBindingMapper bindingMapper;
     private final BusinessApplicationPageDependencyInspector pageDependencyInspector;
+    private final BusinessObjectTableMappingService tableMappingService;
 
     public BusinessApplicationReadinessVO check(Long applicationId) {
         BusinessApplicationVO application = applicationService.publishContext(applicationId);
@@ -182,16 +185,7 @@ public class BusinessApplicationReadinessService {
                     objectName + " 尚未绑定可发布的物理表。", "objects", "objects", "OBJECT",
                     object.getObjectId(), object.getObjectCode()));
         }
-        String syncStatus = StringUtils.defaultString(object.getSyncStatus()).toUpperCase();
-        if (Set.of("OUT_OF_SYNC", "TABLE_MISSING", "CHECK_FAILED", "FAILED").contains(syncStatus)) {
-            issues.add(issue("OBJECT_DATABASE_OUT_OF_SYNC", BLOCK, "数据库结构未同步",
-                    objectName + " 的数据库映射状态为 " + syncStatus + "。",
-                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
-        } else if ("UNKNOWN".equals(syncStatus)) {
-            issues.add(issue("OBJECT_DATABASE_UNKNOWN", WARN, "数据库同步状态未知",
-                    objectName + " 尚无最近同步证据，请在发布前复核。",
-                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
-        }
+        checkDatabaseMapping(object, objectName, issues);
         BusinessObjectPublishService.ResolvedObjectCheck resolvedObjectCheck = objectPublishService
                 .publishCheckResolved(object.getObjectId(), permissionSummary);
         objectContexts.put(object.getObjectId(), resolvedObjectCheck.context());
@@ -220,6 +214,98 @@ public class BusinessApplicationReadinessService {
                             + " 个应用复用，本次发布不会因此阻断，请按需评估其他应用的影响。",
                     "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
         }
+    }
+
+    private void checkDatabaseMapping(
+            BusinessApplicationObjectVO object,
+            String objectName,
+            List<BusinessApplicationReadinessIssueVO> issues) {
+        BusinessObjectTableMappingVO mapping;
+        try {
+            mapping = tableMappingService.getTableMapping(object.getObjectId());
+        } catch (RuntimeException e) {
+            issues.add(issue("OBJECT_DATABASE_CHECK_FAILED", BLOCK, "数据库结构检查失败",
+                    objectName + "：" + safeMessage(e),
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        String syncStatus = StringUtils.defaultString(mapping.getSyncStatus(), "UNKNOWN").toUpperCase();
+        if ("IN_SYNC".equals(syncStatus)) {
+            return;
+        }
+        if ("UNKNOWN".equals(syncStatus)) {
+            issues.add(issue("OBJECT_DATABASE_UNKNOWN", WARN, "数据库同步状态未知",
+                    objectName + " 尚无可用的实时结构检查结果，请在发布前复核。",
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        if ("CHECK_FAILED".equals(syncStatus) || "FAILED".equals(syncStatus)) {
+            issues.add(issue("OBJECT_DATABASE_CHECK_FAILED", BLOCK, "数据库结构检查失败",
+                    objectName + "：" + StringUtils.defaultIfBlank(
+                            mapping.getLastSyncMessage(), "无法读取目标数据库结构"),
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        issues.add(issue("OBJECT_DATABASE_OUT_OF_SYNC", BLOCK, "数据库结构未同步",
+                databaseDiffMessage(objectName, mapping),
+                "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+    }
+
+    private String databaseDiffMessage(String objectName, BusinessObjectTableMappingVO mapping) {
+        if ("TABLE_MISSING".equalsIgnoreCase(mapping.getSyncStatus())
+                || Boolean.FALSE.equals(mapping.getTableExists())) {
+            return objectName + "：目标表 "
+                    + StringUtils.defaultIfBlank(mapping.getTableName(), "未配置") + " 不存在。";
+        }
+        List<String> details = new ArrayList<>();
+        for (BusinessObjectTableFieldMappingVO field : safeFields(mapping)) {
+            if (!Boolean.TRUE.equals(field.getBlockingDifference())) {
+                continue;
+            }
+            if (details.size() >= 3) {
+                break;
+            }
+            String columnName = StringUtils.defaultIfBlank(field.getColumnName(), field.getFieldCode());
+            String fieldName = StringUtils.defaultIfBlank(field.getBusinessName(), columnName);
+            if ("MISSING_DATABASE_COLUMN".equals(field.getSyncStatus())) {
+                details.add("缺少数据库列 " + columnName);
+            } else if ("TYPE_MISMATCH".equals(field.getSyncStatus())) {
+                details.add(fieldName + "类型不一致（设计 " + configuredType(field)
+                        + "，数据库 " + StringUtils.defaultIfBlank(field.getDatabaseType(), "未知") + "）");
+            } else if ("UNMAPPED_DATABASE_COLUMN".equals(field.getSyncStatus())) {
+                details.add("存在未映射业务列 " + columnName
+                        + "（数据库为必填且无默认值，请添加字段映射或调整数据库默认值）");
+            }
+        }
+        int pendingDdlCount = mapping.getPendingDdlCount() == null ? 0 : mapping.getPendingDdlCount();
+        if (details.size() < 3 && pendingDdlCount > 0) {
+            details.add("待执行 " + pendingDdlCount + " 条数据库变更");
+        }
+        if (details.isEmpty()) {
+            details.add("实时检查发现未同步的数据库结构差异");
+        }
+        return objectName + "：" + String.join("；", details) + "。";
+    }
+
+    private List<BusinessObjectTableFieldMappingVO> safeFields(BusinessObjectTableMappingVO mapping) {
+        return mapping.getFields() == null ? List.of() : mapping.getFields();
+    }
+
+    private String configuredType(BusinessObjectTableFieldMappingVO field) {
+        String dataType = StringUtils.defaultIfBlank(field.getDataType(), "未知");
+        if (field.getLength() == null) {
+            return dataType;
+        }
+        if ("decimal".equalsIgnoreCase(dataType)) {
+            int precision = field.getPrecision() == null ? 2 : field.getPrecision();
+            return dataType + "(" + field.getLength() + "," + precision + ")";
+        }
+        return dataType + "(" + field.getLength() + ")";
+    }
+
+    private String safeMessage(Throwable error) {
+        return StringUtils.abbreviate(
+                StringUtils.defaultIfBlank(error.getMessage(), "无法读取目标数据库结构"), 300);
     }
 
     private BusinessApplicationReadinessVO buildReadiness(List<BusinessApplicationReadinessIssueVO> issues) {

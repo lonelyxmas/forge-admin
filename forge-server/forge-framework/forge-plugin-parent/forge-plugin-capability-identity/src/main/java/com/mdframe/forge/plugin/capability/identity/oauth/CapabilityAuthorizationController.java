@@ -2,6 +2,8 @@ package com.mdframe.forge.plugin.capability.identity.oauth;
 
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityClient;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityClientMapper;
+import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientActorMode;
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
 import com.mdframe.forge.plugin.capability.identity.token.CapabilityAccessTokenService;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
@@ -13,7 +15,7 @@ import com.mdframe.forge.starter.core.session.SessionHelper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,7 +28,7 @@ import java.util.Objects;
 @RestController
 @RequestMapping("/ai/capability/oauth")
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class CapabilityAuthorizationController {
 
     private final AiCapabilityClientMapper clientMapper;
@@ -53,10 +55,10 @@ public class CapabilityAuthorizationController {
             @RequestParam(required = false) String state) {
         LoginUser user = requireCurrentUser();
         AiCapabilityClient client = requireClient(user.getTenantId(), clientId);
-        requireSameActiveOrganization(user, client);
         ValidatedAuthorizationRequest request = requestValidator.validateAuthorizationRequest(
                 client, responseType, redirectUri, resource, scope,
                 codeChallenge, codeChallengeMethod, state);
+        requireCompatibleActiveOrganization(user, client);
         return RespInfo.success(new AuthorizationRequestView(
                 client.getId().toString(), client.getClientName(), request.scopes(),
                 user.getTenantId(), user.getTenantName(), user.getActiveOrgId(),
@@ -74,11 +76,11 @@ public class CapabilityAuthorizationController {
             @Valid @RequestBody AuthorizationDecisionRequest decision) {
         LoginUser user = requireCurrentUser();
         AiCapabilityClient client = requireClient(user.getTenantId(), decision.clientId());
-        requireSameActiveOrganization(user, client);
         ValidatedAuthorizationRequest request = requestValidator.validateAuthorizationRequest(
                 client, decision.responseType(), decision.redirectUri(), decision.resource(),
                 decision.scope(), decision.codeChallenge(), decision.codeChallengeMethod(),
                 decision.state());
+        requireCompatibleActiveOrganization(user, client);
 
         if (!decision.approved()) {
             return RespInfo.success(new AuthorizationRedirectResponse(buildRedirect(
@@ -87,7 +89,7 @@ public class CapabilityAuthorizationController {
 
         String code = authorizationCodeStore.issue(new DelegationAuthorizationCode(
                 client.getId(), client.getClientCode(), client.getCredentialVersion(),
-                user.getUserId(), client.getServiceUserId(), user.getTenantId(),
+                user.getUserId(), serviceUserId(client), user.getTenantId(),
                 user.getActiveOrgId(), request.redirectUri(), request.resource(),
                 request.scopes(), request.codeChallenge()));
         return RespInfo.success(new AuthorizationRedirectResponse(buildRedirect(
@@ -148,9 +150,27 @@ public class CapabilityAuthorizationController {
         return client;
     }
 
-    private void requireSameActiveOrganization(LoginUser user, AiCapabilityClient client) {
-        if (!Objects.equals(user.getActiveOrgId(), client.getActiveOrgId())) {
+    private void requireCompatibleActiveOrganization(LoginUser user, AiCapabilityClient client) {
+        CapabilityClientActorMode actorMode = actorMode(client);
+        if (actorMode == CapabilityClientActorMode.HYBRID
+                && !Objects.equals(user.getActiveOrgId(), client.getActiveOrgId())) {
             throw new BusinessException(403, "当前组织与 MCP 客户端绑定组织不一致");
+        }
+    }
+
+    private Long serviceUserId(AiCapabilityClient client) {
+        return actorMode(client) == CapabilityClientActorMode.USER_DELEGATION
+                ? null : client.getServiceUserId();
+    }
+
+    private CapabilityClientActorMode actorMode(AiCapabilityClient client) {
+        try {
+            return client.getActorMode() == null || client.getActorMode().isBlank()
+                    ? CapabilityClientActorMode.HYBRID
+                    : CapabilityClientActorMode.valueOf(client.getActorMode());
+        }
+        catch (IllegalArgumentException exception) {
+            throw new BusinessException(400, "invalid_client");
         }
     }
 

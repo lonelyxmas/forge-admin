@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.context.ExecutionIdentity;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
@@ -59,6 +60,23 @@ class FlowActionExecutionLogServiceTest {
         assertThat(result.get("executeStatus")).isEqualTo("SUCCESS");
         verify(mapper).insert(any(AiCapabilityFlowActionLog.class));
         verify(mapper).updateResultByIdentity(any(AiCapabilityFlowActionLog.class));
+    }
+
+    @Test
+    void shouldPersistPureUserDelegationWithoutServiceAccount() {
+        when(mapper.updateResultByIdentity(any())).thenReturn(1);
+
+        service.execute(
+                descriptor(), identity(null), input("同意"), "req-user-delegation",
+                () -> Map.of("executeStatus", "SUCCESS", "message", "完成"));
+
+        ArgumentCaptor<AiCapabilityFlowActionLog> reservation =
+                ArgumentCaptor.forClass(AiCapabilityFlowActionLog.class);
+        verify(mapper).insert(reservation.capture());
+        assertThat(reservation.getValue().getActorType()).isEqualTo("USER");
+        assertThat(reservation.getValue().getActorUserId()).isEqualTo(101L);
+        assertThat(reservation.getValue().getServiceUserId()).isNull();
+        assertThat(reservation.getValue().getActiveOrgId()).isEqualTo(201L);
     }
 
     @Test
@@ -289,11 +307,15 @@ class FlowActionExecutionLogServiceTest {
     }
 
     private ExecutionIdentity identity() {
+        return identity(999L);
+    }
+
+    private ExecutionIdentity identity(Long serviceUserId) {
         LoginUser user = new LoginUser();
         user.setUserId(101L);
         user.setTenantId(1L);
         user.setActiveOrgId(201L);
-        return new ExecutionIdentity(user, "USER", 101L, 999L,
+        return new ExecutionIdentity(user, "USER", 101L, serviceUserId,
                 301L, "agent_client", "token-1", Set.of("capability:invoke"));
     }
 

@@ -1,5 +1,6 @@
-package com.mdframe.forge.plugin.capability.flowaction.source;
+package com.mdframe.forge.plugin.capability.flowaction.mapper;
 
+import com.mdframe.forge.plugin.capability.flowaction.source.FlowActionSourceRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

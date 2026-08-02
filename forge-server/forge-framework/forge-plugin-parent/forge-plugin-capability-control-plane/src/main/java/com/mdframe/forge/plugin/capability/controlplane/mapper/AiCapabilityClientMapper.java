@@ -7,6 +7,8 @@ import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityClien
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 @Mapper
 public interface AiCapabilityClientMapper extends BaseMapper<AiCapabilityClient> {
 
@@ -18,6 +20,8 @@ public interface AiCapabilityClientMapper extends BaseMapper<AiCapabilityClient>
     AiCapabilityClient selectTenantById(@Param("tenantId") Long tenantId, @Param("id") Long id);
 
     AiCapabilityClient selectByCode(@Param("tenantId") Long tenantId, @Param("clientCode") String clientCode);
+
+    List<AiCapabilityClient> selectGrantOptions(@Param("tenantId") Long tenantId);
 
     @InterceptorIgnore(tenantLine = "true")
     AiCapabilityClient selectCredentialByKeyId(@Param("keyId") String keyId);
@@ -38,6 +42,25 @@ public interface AiCapabilityClientMapper extends BaseMapper<AiCapabilityClient>
                          @Param("keyId") String keyId,
                          @Param("keyPrefix") String keyPrefix,
                          @Param("keyHash") String keyHash);
+
+    int rotateSigningKey(@Param("tenantId") Long tenantId,
+                         @Param("id") Long id,
+                         @Param("signingKeyVersion") Integer signingKeyVersion,
+                         @Param("signingKeyCipher") String signingKeyCipher);
+
+    int rotateUserAssertionKey(
+            @Param("tenantId") Long tenantId,
+            @Param("id") Long id,
+            @Param("credentialVersion") Integer credentialVersion,
+            @Param("expectedKeyVersion") Integer expectedKeyVersion,
+            @Param("keyId") String keyId,
+            @Param("publicKeyPem") String publicKeyPem);
+
+    int disableUserAssertion(
+            @Param("tenantId") Long tenantId,
+            @Param("id") Long id,
+            @Param("credentialVersion") Integer credentialVersion,
+            @Param("expectedKeyVersion") Integer expectedKeyVersion);
 
     int revokeCredential(@Param("tenantId") Long tenantId,
                          @Param("id") Long id,

@@ -150,7 +150,9 @@ public class BusinessApplicationObjectService
                 Integer syncVersion = databaseSync.getInteger("designVersion");
                 if (syncVersion != null && object.getDesignVersion() != null
                         && !syncVersion.equals(object.getDesignVersion())) {
-                    object.setSyncStatus("OUT_OF_SYNC");
+                    String lastStatus = databaseSync.getString("status");
+                    object.setSyncStatus("IN_SYNC".equalsIgnoreCase(lastStatus)
+                            ? "UNKNOWN" : lastStatus);
                 } else {
                     object.setSyncStatus(databaseSync.getString("status"));
                 }

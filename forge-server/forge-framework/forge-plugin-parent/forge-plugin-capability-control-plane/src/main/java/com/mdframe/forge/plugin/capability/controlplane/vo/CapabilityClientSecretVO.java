@@ -5,5 +5,7 @@ public record CapabilityClientSecretVO(
         String clientCode,
         String keyPrefix,
         String clientSecret,
-        Integer credentialVersion) {
+        Integer credentialVersion,
+        String signingKey,
+        Integer signingKeyVersion) {
 }

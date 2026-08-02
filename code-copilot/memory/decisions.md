@@ -479,3 +479,39 @@ DDL 失败不删除已提交的表单设计和托管对象，下一次保存按�
 页面可以局部配置查询字段、查询组件、查询方式和映射字段，但不反向修改共享业务对象的查询设计。用户输入继续使用平铺业务参数；查询方式通过保留控制参数 `_searchTypes` 随列表和导出请求传输，Controller 必须将其与业务字段隔离。
 
 服务端只允许动态配置已经公开在 `searchSchema`、`columnsSchema`、`editSchema` 的字段以及 `id` 进入页面查询，并继续通过真实列映射生成命名参数 SQL。页面只能从固定操作符集合覆盖当前字段的默认查询方式；非法字段、非法操作符和损坏元数据不进入 SQL。没有页面级配置的传统动态页面继续使用对象原始 `searchSchema` 协议。
+
+## 52. 能力发布控制面与外部执行开关解耦
+
+**记录日期**: 2026-08-01
+
+能力来源校验、发布和目录管理属于管理控制面，只要 Admin 引入对应插件就应装配，由权限、租户和发布模型校验限制。`forge.capability.secure-actions.enabled` 和 `forge.capability.flow-actions.enabled` 只控制 MCP/REST 真实执行目录、Handler 与执行适配器；关闭时仍必须失败关闭，但不得删除控制面路由。
+
+## 53. 外围用户调用采用受信 Token Exchange，不绑定客户端服务账号
+
+**记录日期**: 2026-08-01
+
+`USER_DELEGATION` 客户端不绑定 Forge 服务账号或固定组织，只允许机密 OAuth 客户端提交受信 OIDC/JWT 做 RFC 8693 Token Exchange。首次认证按已验签 JWT 手机号唯一匹配现有 Forge 用户并固化 `issuer + sub` 映射，后续每次实时校验用户、租户、组织、角色和权限；平台不自动创建用户。`SERVICE/HYBRID` 保留原有绑定语义，HMAC 签名仅用于服务身份。
+
+## 54. Capability Pepper 纳入外部稳定密钥自动引导
+
+**记录日期**: 2026-08-01
+
+Capability Client、Access Token 和 Authorization Code 三个 Pepper 复用 Starter Crypto 的启动前密钥引导。首次生成三个独立 32 字节随机 Base64Url 值并写入外部 `crypto.properties`，后续稳定复用；已有旧密钥文件在文件锁内原子补齐缺失项，不改动既有 Crypto 密钥。
+
+非空环境变量/JVM 参数对每个 Pepper 独立优先，仓库不提交真实值。生产多实例必须通过共享 Secret Manager 或共享安全卷保持节点一致；显式关闭 Crypto Bootstrap 后不提供 Pepper 时，Capability 启动校验继续失败关闭。
+
+## 55. 应用发布以实时物理表映射作为数据库门禁事实
+
+**记录日期**: 2026-08-01
+
+应用对象列表中的数据库同步状态只用于轻量展示，整体设计版本变化时不得据此断言物理表失步。应用发布检查必须通过 `BusinessObjectTableMappingService` 读取目标数据源的实时表、列、类型、索引与 DDL 预览，并以该结果作为数据库门禁事实。
+
+Forge 标准系统列属于框架管理列：未在业务字段模型中重复声明时仍可在结构视图只读展示，但不算未映射业务列。自定义额外列、缺失业务列、类型不一致、表不存在、结构检查失败和待执行 DDL 继续失败关闭；发布问题消息必须给出可操作的具体差异，不能只返回 `OUT_OF_SYNC` 状态码。
+
+## 56. 无统一 OIDC 的外围系统采用客户端签名用户断言与预绑定
+
+**记录日期**: 2026-08-02
+
+没有统一 OIDC 的外围系统不允许通过“加密 Forge userId”直接冒充真实用户。每个 USER_DELEGATION/HYBRID OAuth 客户端使用独立 RSA-2048 密钥对，Forge 只保存公钥、`kid` 和版本，私钥只在生成/轮换时通过加密响应展示一次。
+
+管理员预先把外围稳定 `sub` 绑定到当前租户 Forge 普通用户，数据库只保存 `issuer/sub` SHA-256 和脱敏提示。外围系统签发最长两分钟的 RS256 JWT，通过专用 `urn:forge:params:oauth:token-type:user-assertion+jwt` 做 Token Exchange；Forge 固定校验签名、claims、Redis `jti` 防重放和预绑定关系，并每次重新加载用户组织、角色和权限。受信 OIDC JWT 保留原标准 token type，两种验签路径禁止模糊回退。

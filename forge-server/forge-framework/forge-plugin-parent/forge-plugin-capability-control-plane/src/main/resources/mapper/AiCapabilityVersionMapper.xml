@@ -3,7 +3,7 @@
 <mapper namespace="com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityVersionMapper">
     <sql id="BaseColumns">
         id, tenant_id, capability_id, version, input_schema, output_schema,
-        source_type, source_key, source_version, behavior, risk_level, visibility,
+        source_type, source_key, source_version, behavior, risk_level, required_actor_type, visibility,
         policy_snapshot, schema_checksum, status, del_flag,
         create_by, create_time, create_dept, update_by, update_time
     </sql>

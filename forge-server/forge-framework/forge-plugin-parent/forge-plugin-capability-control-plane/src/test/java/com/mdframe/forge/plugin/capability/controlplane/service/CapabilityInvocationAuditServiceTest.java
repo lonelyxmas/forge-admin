@@ -52,6 +52,23 @@ class CapabilityInvocationAuditServiceTest {
     }
 
     @Test
+    void shouldAcceptUserAuditWithoutBoundServiceAccount() {
+        AiCapabilityInvocationLogMapper mapper = mock(AiCapabilityInvocationLogMapper.class);
+        CapabilityInvocationAuditService service = new CapabilityInvocationAuditService(mapper);
+        CapabilityInvocationAuditEvent event = new CapabilityInvocationAuditEvent(
+                "request-user", 1L, "client_a", 2L, "flow.order.start", "1.0.0",
+                CapabilityActorType.USER, 8L, null, 4L,
+                CapabilityResultStatus.SUCCESS, "SUCCESS", null, null, null, 10L);
+
+        assertThatCode(() -> service.record(1L, event)).doesNotThrowAnyException();
+
+        ArgumentCaptor<AiCapabilityInvocationLog> captor =
+                ArgumentCaptor.forClass(AiCapabilityInvocationLog.class);
+        verify(mapper).insertIdempotent(captor.capture());
+        assertThat(captor.getValue().getServiceUserId()).isNull();
+    }
+
+    @Test
     void shouldRejectRawExceptionOrSecretInStableErrorCode() {
         AiCapabilityInvocationLogMapper mapper = mock(AiCapabilityInvocationLogMapper.class);
         CapabilityInvocationAuditService service = new CapabilityInvocationAuditService(mapper);

@@ -7,13 +7,16 @@ import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityVersi
 import com.mdframe.forge.plugin.capability.controlplane.dto.CapabilityPublishDTO;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityMapper;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityVersionMapper;
+import com.mdframe.forge.plugin.capability.controlplane.mapper.model.CapabilityGrantOptionRow;
 import com.mdframe.forge.plugin.capability.naming.CapabilityToolNameMapper;
 import com.mdframe.forge.plugin.capability.schema.CapabilitySchemaValidator;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -31,6 +34,32 @@ class CapabilityCatalogServiceTest {
             new CapabilityToolNameMapper(),
             new CapabilitySchemaValidator(),
             objectMapper);
+
+    @Test
+    void shouldExposeOnlyGrantablePolicySummaryInOptions() {
+        CapabilityGrantOptionRow row = new CapabilityGrantOptionRow();
+        row.setId(10L);
+        row.setCapabilityCode("business.order.submit");
+        row.setCapabilityName("提交订单");
+        row.setCurrentVersion("1.0.0");
+        row.setSourceType("BUSINESS_ACTION");
+        row.setBehavior("ACTION");
+        row.setRiskLevel("MEDIUM");
+        row.setRequiredActorType("SERVICE");
+        row.setPublishStatus("PUBLISHED");
+        row.setEnabled(1);
+        row.setPolicySnapshot("{\"allowedFields\":[\"status\",\"remark\"],"
+                + "\"permission\":\"secret:permission\"}");
+        when(capabilityMapper.selectGrantOptions(1L)).thenReturn(List.of(row));
+
+        var options = service.listGrantOptions(1L);
+
+        assertThat(options).singleElement().satisfies(option -> {
+            assertThat(option.capabilityCode()).isEqualTo("business.order.submit");
+            assertThat(option.allowedFields()).containsExactly("status", "remark");
+            assertThat(option.allowedOperations()).isEmpty();
+        });
+    }
 
     @Test
     void shouldRejectChangingSourceSnapshotOfPublishedVersion() throws Exception {
@@ -67,6 +96,7 @@ class CapabilityCatalogServiceTest {
                 "READ_ONLY",
                 "LOW",
                 "PRIVATE",
+                "SERVICE",
                 inputSchema,
                 outputSchema,
                 null);
@@ -116,7 +146,7 @@ class CapabilityCatalogServiceTest {
         return new CapabilityPublishDTO(
                 "system.user.search", "system.user.search", "用户查询", "安全只读用户查询",
                 "LOW_CODE_CRUD", sourceKey, sourceVersion, "1.0.0",
-                "READ_ONLY", "LOW", "PRIVATE", inputSchema, outputSchema, null);
+                "READ_ONLY", "LOW", "PRIVATE", "SERVICE", inputSchema, outputSchema, null);
     }
 
     private CapabilityVersionFingerprint fingerprint(String sourceKey) {

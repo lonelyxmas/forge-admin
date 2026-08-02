@@ -42,4 +42,7 @@ public class BusinessObjectTableFieldMappingVO {
 
     /** IN_SYNC/MISSING_DATABASE_COLUMN/TYPE_MISMATCH/UNMAPPED_DATABASE_COLUMN。 */
     private String syncStatus;
+
+    /** 当前差异是否会影响动态 CRUD 运行并阻断应用发布。 */
+    private Boolean blockingDifference;
 }

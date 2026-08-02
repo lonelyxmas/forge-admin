@@ -30,6 +30,14 @@ public class AiCapabilityClient extends TenantEntity {
     private Long activeOrgId;
     private Integer oauthEnabled;
     private String oauthClientType;
+    private String authModes;
+    private String actorMode;
+    private String signingKeyCipher;
+    private Integer signingKeyVersion;
+    private Integer userAssertionEnabled;
+    private String userAssertionKeyId;
+    private String userAssertionPublicKey;
+    private Integer userAssertionKeyVersion;
     private String status;
     private LocalDateTime expiresAt;
     private LocalDateTime lastUsedAt;

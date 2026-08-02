@@ -40,7 +40,7 @@
           AND operation = #{log.operation}
           AND actor_type = #{log.actorType}
           AND actor_user_id = #{log.actorUserId}
-          AND service_user_id = #{log.serviceUserId}
+          AND service_user_id &lt;=&gt; #{log.serviceUserId}
           AND active_org_id = #{log.activeOrgId}
           AND request_digest = #{log.requestDigest}
           AND del_flag = 0

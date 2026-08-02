@@ -1,5 +1,6 @@
 package com.mdframe.forge.plugin.capability.identity.mcp;
 
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
 import com.mdframe.forge.plugin.capability.identity.security.AuthenticatedCapabilityIdentity;
 import com.mdframe.forge.plugin.capability.identity.security.CapabilitySecurityPrincipal;
@@ -10,7 +11,7 @@ import com.mdframe.forge.plugin.mcp.security.McpAccessDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -19,7 +20,7 @@ import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class CapabilityMcpAccessTokenResolver implements McpCallerContextResolver {
 
     public static final String AUTHENTICATED_IDENTITY_ATTRIBUTE =

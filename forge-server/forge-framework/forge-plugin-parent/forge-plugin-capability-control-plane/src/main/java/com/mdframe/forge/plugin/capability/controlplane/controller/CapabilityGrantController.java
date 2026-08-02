@@ -4,7 +4,10 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityGrant;
 import com.mdframe.forge.plugin.capability.controlplane.dto.CapabilityGrantCreateDTO;
+import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityCatalogService;
+import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityClientService;
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityGrantService;
+import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilityGrantOptionsVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
@@ -27,6 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class CapabilityGrantController {
 
     private final CapabilityGrantService grantService;
+    private final CapabilityClientService clientService;
+    private final CapabilityCatalogService catalogService;
 
     @GetMapping("/page")
     @SaCheckPermission("ai:capability:grant:query")
@@ -38,6 +43,16 @@ public class CapabilityGrantController {
             @RequestParam(required = false) String status) {
         return RespInfo.success(grantService.page(
                 SessionHelper.getTenantId(), pageQuery, clientId, capabilityId, status));
+    }
+
+    @GetMapping("/options")
+    @SaCheckPermission("ai:capability:grant:query")
+    @OperationLog(module = "AI中枢授权", type = OperationType.QUERY, desc = "查询能力授权候选项")
+    public RespInfo<CapabilityGrantOptionsVO> options() {
+        Long tenantId = SessionHelper.getTenantId();
+        return RespInfo.success(new CapabilityGrantOptionsVO(
+                clientService.listGrantOptions(tenantId),
+                catalogService.listGrantOptions(tenantId)));
     }
 
     @PostMapping("/add")

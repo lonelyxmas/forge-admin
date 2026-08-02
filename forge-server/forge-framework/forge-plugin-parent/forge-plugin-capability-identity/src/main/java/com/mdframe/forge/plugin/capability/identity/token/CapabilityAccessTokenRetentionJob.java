@@ -1,11 +1,12 @@
 package com.mdframe.forge.plugin.capability.identity.token;
 
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
 import com.mdframe.forge.plugin.capability.identity.mapper.AiCapabilityAccessTokenMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +19,7 @@ import java.time.LocalDateTime;
  * 降低 HMAC 元数据长期堆积风险；业务审计由独立调用审计表保留。
  */
 @Component
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class CapabilityAccessTokenRetentionJob {
 
     private static final Logger log = LoggerFactory.getLogger(CapabilityAccessTokenRetentionJob.class);

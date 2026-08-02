@@ -1,0 +1,172 @@
+package com.mdframe.forge.plugin.generator.service.businessapp;
+
+import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableFieldMappingVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableMappingVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckVO;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("BusinessApplicationReadinessService")
+class BusinessApplicationReadinessServiceTest {
+
+    @Mock
+    private BusinessApplicationService applicationService;
+    @Mock
+    private BusinessApplicationAssetSelectionService selectionService;
+    @Mock
+    private BusinessObjectPublishService objectPublishService;
+    @Mock
+    private BusinessPermissionService permissionService;
+    @Mock
+    private BusinessBindingMapper bindingMapper;
+    @Mock
+    private BusinessApplicationPageDependencyInspector pageDependencyInspector;
+    @Mock
+    private BusinessObjectTableMappingService tableMappingService;
+
+    private BusinessApplicationReadinessService service;
+    private BusinessApplicationObjectVO object;
+
+    @BeforeEach
+    void setUp() {
+        service = new BusinessApplicationReadinessService(
+                applicationService, selectionService, objectPublishService, permissionService,
+                bindingMapper, pageDependencyInspector, tableMappingService);
+        object = object();
+        BusinessApplicationVO application = application();
+        BusinessApplicationAssetSelectionVO selection = new BusinessApplicationAssetSelectionVO();
+        selection.setObjectIds(List.of(object.getObjectId()));
+        selection.setIncludeAutomation(false);
+        BusinessApplicationAssetSelectionService.ResolvedSelection resolved
+                = new BusinessApplicationAssetSelectionService.ResolvedSelection(
+                        selection, List.of(object), List.of(), List.of());
+        BusinessPublishCheckVO objectCheck = new BusinessPublishCheckVO();
+        objectCheck.setPublishable(true);
+
+        when(applicationService.publishContext(101L)).thenReturn(application);
+        when(selectionService.resolveContext(101L, null)).thenReturn(resolved);
+        when(pageDependencyInspector.inspect(application, List.of(object)))
+                .thenReturn(new BusinessApplicationPageDependencyInspector.InspectionResult(false, List.of()));
+        when(permissionService.documentActionSummaries(anyList())).thenReturn(List.of());
+        when(objectPublishService.publishCheckResolved(object.getObjectId(), null))
+                .thenReturn(new BusinessObjectPublishService.ResolvedObjectCheck(
+                        objectCheck, new BusinessObjectDesignerService.DesignerContext()));
+    }
+
+    @Test
+    @DisplayName("live table mapping overrides stale object summary")
+    void liveTableMappingOverridesStaleObjectSummary() {
+        object.setSyncStatus("OUT_OF_SYNC");
+        when(tableMappingService.getTableMapping(object.getObjectId()))
+                .thenReturn(mapping("IN_SYNC", List.of(), 0));
+
+        BusinessApplicationReadinessVO readiness = service.check(101L);
+
+        assertFalse(readiness.getIssues().stream()
+                .anyMatch(issue -> "OBJECT_DATABASE_OUT_OF_SYNC".equals(issue.getIssueCode())));
+    }
+
+    @Test
+    @DisplayName("database blocker explains concrete live differences")
+    void databaseBlockerExplainsConcreteDifferences() {
+        BusinessObjectTableFieldMappingVO missing = field(
+                "leave_reason", "离职原因", "varchar", null, "MISSING_DATABASE_COLUMN", true);
+        BusinessObjectTableFieldMappingVO mismatch = field(
+                "leave_date", "离职日期", "date", "datetime", "TYPE_MISMATCH", true);
+        when(tableMappingService.getTableMapping(object.getObjectId()))
+                .thenReturn(mapping("OUT_OF_SYNC", List.of(missing, mismatch), 2));
+
+        BusinessApplicationReadinessVO readiness = service.check(101L);
+
+        assertTrue(readiness.getIssues().stream()
+                .filter(issue -> "OBJECT_DATABASE_OUT_OF_SYNC".equals(issue.getIssueCode()))
+                .map(issue -> issue.getMessage())
+                .anyMatch(message -> message.contains("缺少数据库列 leave_reason")
+                        && message.contains("离职日期类型不一致")
+                        && message.contains("设计 date，数据库 datetime")));
+    }
+
+    @Test
+    @DisplayName("database blocker message excludes non-blocking retained columns")
+    void databaseBlockerMessageExcludesNonBlockingRetainedColumns() {
+        BusinessObjectTableFieldMappingVO retained = field(
+                "department_name", "部门名称", null, "varchar(128)",
+                "UNMAPPED_DATABASE_COLUMN", false);
+        BusinessObjectTableFieldMappingVO blocking = field(
+                "approval_code", "审批编码", null, "varchar(64)",
+                "UNMAPPED_DATABASE_COLUMN", true);
+        when(tableMappingService.getTableMapping(object.getObjectId()))
+                .thenReturn(mapping("OUT_OF_SYNC", List.of(retained, blocking), 0));
+
+        BusinessApplicationReadinessVO readiness = service.check(101L);
+
+        assertTrue(readiness.getIssues().stream()
+                .filter(issue -> "OBJECT_DATABASE_OUT_OF_SYNC".equals(issue.getIssueCode()))
+                .map(issue -> issue.getMessage())
+                .anyMatch(message -> message.contains("存在未映射业务列 approval_code")
+                        && !message.contains("department_name")));
+    }
+
+    private static BusinessApplicationVO application() {
+        BusinessApplicationVO application = new BusinessApplicationVO();
+        application.setId(101L);
+        application.setApplicationCode("leave_center");
+        application.setApplicationName("离职管理");
+        application.setSuiteName("人力资源");
+        application.setStatus(1);
+        application.setOptions("{}");
+        return application;
+    }
+
+    private static BusinessApplicationObjectVO object() {
+        BusinessApplicationObjectVO object = new BusinessApplicationObjectVO();
+        object.setObjectId(201L);
+        object.setObjectCode("leave_application");
+        object.setObjectName("离职申请");
+        object.setObjectStatus(1);
+        object.setTableName("biz_leave_application");
+        object.setDesignStatus("PUBLISHED");
+        return object;
+    }
+
+    private static BusinessObjectTableMappingVO mapping(
+            String status, List<BusinessObjectTableFieldMappingVO> fields, int pendingDdlCount) {
+        BusinessObjectTableMappingVO mapping = new BusinessObjectTableMappingVO();
+        mapping.setTableName("biz_leave_application");
+        mapping.setTableExists(true);
+        mapping.setSyncStatus(status);
+        mapping.setFields(fields);
+        mapping.setPendingDdlCount(pendingDdlCount);
+        return mapping;
+    }
+
+    private static BusinessObjectTableFieldMappingVO field(
+            String columnName, String businessName, String dataType,
+            String databaseType, String syncStatus, boolean blockingDifference) {
+        BusinessObjectTableFieldMappingVO field = new BusinessObjectTableFieldMappingVO();
+        field.setColumnName(columnName);
+        field.setBusinessName(businessName);
+        field.setDataType(dataType);
+        field.setDatabaseType(databaseType);
+        field.setSyncStatus(syncStatus);
+        field.setBlockingDifference(blockingDifference);
+        return field;
+    }
+}

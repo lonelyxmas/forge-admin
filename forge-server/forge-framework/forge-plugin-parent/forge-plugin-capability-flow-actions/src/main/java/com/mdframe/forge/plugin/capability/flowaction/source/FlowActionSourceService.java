@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.capability.flowaction.source;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionSourceMapper;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.plugin.capability.secureaction.exception.SecureActionUnavailableException;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,22 @@ public class FlowActionSourceService {
             throw new BusinessException("业务对象主流程绑定缺少 flowModelKey");
         }
         return new ResolvedFlowActionSource(row, flowModelKey);
+    }
+
+    public FlowActionRegistrationSource resolveRegistrationSource(
+            Long tenantId,
+            String suiteCode,
+            String objectCode) {
+        ResolvedFlowActionSource source = requirePublished(tenantId, suiteCode, objectCode);
+        FlowActionSourceRow row = source.row();
+        return new FlowActionRegistrationSource(
+                row.getObjectId(),
+                row.getSuiteCode(),
+                row.getObjectCode(),
+                row.getObjectName(),
+                source.flowModelKey(),
+                row.getPublishedObjectVersion(),
+                StringUtils.isNotBlank(row.getConfigKey()));
     }
 
     public ResolvedFlowActionSource requireMatching(

@@ -2,6 +2,7 @@ import { nextTick } from 'vue'
 import { attachRequestGlobalLoading, finishRequestGlobalLoading } from '@/composables/useGlobalLoading'
 import { useAuthStore, usePermissionStore, useTabStore, useTenantStore } from '@/store'
 import { cryptoConfig, decryptResponse, encryptRequest, matchPath, shouldEncrypt } from '@/utils/crypto'
+import { loadRuntimeCryptoConfig } from '@/utils/crypto/crypto-config'
 import { getSessionKey, initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
 import { getTenantPageBaseTitle } from '@/utils/page-title'
 import { isAuthErrorCode, resolveResError, shouldSilenceAuthError } from './helpers'
@@ -265,6 +266,8 @@ function buildErrorDetail(config, payload = {}, fallbackError) {
 
 async function parseBlobJsonResponse(response) {
   const { data, headers } = response
+  if (response?.config?.preserveBlob)
+    return response
   const contentType = getContentType(headers, data)
   if (!isBlobData(data) || !contentType.includes('json')) {
     return response
@@ -446,6 +449,26 @@ function shouldEnsureEncryptionSession(config) {
     && !getSessionKey()
 }
 
+function createRuntimeCryptoConfigError(config) {
+  const message = '无法确认服务端安全配置，已阻止本次敏感请求，请稍后重试'
+  const error = new Error(message)
+  error.code = 'CRYPTO_CONFIG_UNAVAILABLE'
+  error.config = config
+  return error
+}
+
+async function syncRuntimeCryptoConfigForExplicitRequest(config) {
+  if (config?.encrypt !== true)
+    return
+
+  const runtimeConfig = await loadRuntimeCryptoConfig()
+  if (!runtimeConfig)
+    throw createRuntimeCryptoConfigError(config)
+
+  if ((!runtimeConfig.enabled || !runtimeConfig.enableApiCrypto) && getSessionKey())
+    resetKeyExchange()
+}
+
 function createEncryptSessionError(config) {
   const message = '安全会话初始化失败，已阻止明文请求，请重试'
   const error = new Error(message)
@@ -520,6 +543,10 @@ async function reqResolve(config, axiosInstance) {
     if (config.pageAudit !== false)
       Object.assign(config.headers, resolvePageAuditHeaders())
 
+    // 后端重启或配置中心切换加密开关后，页面可能仍保留旧配置。
+    // 显式加密的敏感请求在提交前重新同步，避免把加密信封绑定成空业务 DTO。
+    await syncRuntimeCryptoConfigForExplicitRequest(config)
+
     // 添加防重放参数
     const enableReplay = cryptoConfig.enabled !== false && cryptoConfig?.enableReplay !== false
     if (enableReplay && config.replay !== false) {
@@ -553,7 +580,7 @@ async function reqResolve(config, axiosInstance) {
   }
   catch (error) {
     finishRequestGlobalLoading(config)
-    if (error?.code === 'ENCRYPT_KEY_MISSING') {
+    if (['ENCRYPT_KEY_MISSING', 'CRYPTO_CONFIG_UNAVAILABLE'].includes(error?.code)) {
       await nextTick()
       window.$message?.error(error.message)
     }

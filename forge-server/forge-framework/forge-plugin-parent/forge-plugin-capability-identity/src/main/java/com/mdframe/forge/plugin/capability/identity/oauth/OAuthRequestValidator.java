@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.capability.identity.oauth;
 
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityClient;
+import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientActorMode;
 import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityProperties;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 
@@ -50,6 +51,9 @@ public final class OAuthRequestValidator {
             String codeChallengeMethod,
             String state) {
         requireUsableOAuthClient(client);
+        if (!actorMode(client).allowsUserDelegation()) {
+            throw oauthError("unauthorized_client", "客户端未启用用户委托主体模式");
+        }
         requireLength(redirectUri, MAX_REDIRECT_URI_LENGTH, "redirect_uri");
         requireLength(resource, MAX_RESOURCE_LENGTH, "resource");
         requireLength(scope, MAX_SCOPE_LENGTH, "scope");
@@ -57,9 +61,7 @@ public final class OAuthRequestValidator {
         if (!"code".equals(responseType)) {
             throw oauthError("unsupported_response_type", "只支持 authorization code");
         }
-        if (!properties.getResource().equals(resource)) {
-            throw oauthError("invalid_target", "resource 与 MCP 资源不匹配");
-        }
+        requireSupportedResource(resource);
         if (!redirectUriRegistry.contains(client.getTenantId(), client.getId(), redirectUri)) {
             throw oauthError("invalid_request", "redirect_uri 未精确登记");
         }
@@ -109,11 +111,32 @@ public final class OAuthRequestValidator {
         if (!"CONFIDENTIAL".equals(client.getOauthClientType())) {
             throw oauthError("unauthorized_client", "PUBLIC 客户端不能使用 client_credentials");
         }
-        if (!properties.getResource().equals(resource)) {
-            throw oauthError("invalid_target", "resource 与 MCP 资源不匹配");
+        if (!actorMode(client).requiresServiceIdentity()) {
+            throw oauthError("unauthorized_client", "用户委托客户端不能使用 client_credentials");
         }
+        requireSupportedResource(resource);
         Set<String> scopes = parseScopes(scope);
         if (scopes.isEmpty() || scopes.stream().anyMatch(value -> !CAPABILITY_SCOPE.matcher(value).matches())) {
+            throw oauthError("invalid_scope", "请求 scope 未获支持");
+        }
+        return scopes;
+    }
+
+    public Set<String> validateExternalTokenExchange(
+            AiCapabilityClient client,
+            String resource,
+            String scope) {
+        requireUsableOAuthClient(client);
+        if (!"CONFIDENTIAL".equals(client.getOauthClientType())
+                || !actorMode(client).allowsUserDelegation()) {
+            throw oauthError("unauthorized_client", "客户端未启用外部用户委托");
+        }
+        requireLength(resource, MAX_RESOURCE_LENGTH, "resource");
+        requireLength(scope, MAX_SCOPE_LENGTH, "scope");
+        requireSupportedResource(resource);
+        Set<String> scopes = parseScopes(scope);
+        if (scopes.isEmpty()
+                || scopes.stream().anyMatch(value -> !CAPABILITY_SCOPE.matcher(value).matches())) {
             throw oauthError("invalid_scope", "请求 scope 未获支持");
         }
         return scopes;
@@ -136,15 +159,28 @@ public final class OAuthRequestValidator {
                 || !"ENABLED".equals(client.getStatus())
                 || client.getCredentialVersion() == null
                 || client.getCredentialVersion() <= 0
-                || client.getServiceUserId() == null
-                || client.getServiceUserId() <= 0
-                || client.getActiveOrgId() == null
-                || client.getActiveOrgId() <= 0
                 || (client.getExpiresAt() != null && !client.getExpiresAt().isAfter(now))) {
             throw oauthError("unauthorized_client", "客户端未启用 OAuth 或已失效");
         }
         if (!Set.of("PUBLIC", "CONFIDENTIAL").contains(client.getOauthClientType())) {
             throw oauthError("unauthorized_client", "OAuth 客户端类型无效");
+        }
+        CapabilityClientActorMode actorMode = actorMode(client);
+        if (actorMode.requiresServiceIdentity()
+                && (client.getServiceUserId() == null || client.getServiceUserId() <= 0
+                || client.getActiveOrgId() == null || client.getActiveOrgId() <= 0)) {
+            throw oauthError("unauthorized_client", "客户端服务身份无效");
+        }
+    }
+
+    private CapabilityClientActorMode actorMode(AiCapabilityClient client) {
+        try {
+            return client.getActorMode() == null || client.getActorMode().isBlank()
+                    ? CapabilityClientActorMode.HYBRID
+                    : CapabilityClientActorMode.valueOf(client.getActorMode());
+        }
+        catch (IllegalArgumentException exception) {
+            throw oauthError("unauthorized_client", "客户端主体模式无效");
         }
     }
 
@@ -159,6 +195,12 @@ public final class OAuthRequestValidator {
             }
         }
         return Set.copyOf(result);
+    }
+
+    private void requireSupportedResource(String resource) {
+        if (!properties.supportsResource(resource)) {
+            throw oauthError("invalid_target", "resource 不是已登记的 Forge 能力资源");
+        }
     }
 
     public void requireLength(String value, int maxLength, String parameterName) {

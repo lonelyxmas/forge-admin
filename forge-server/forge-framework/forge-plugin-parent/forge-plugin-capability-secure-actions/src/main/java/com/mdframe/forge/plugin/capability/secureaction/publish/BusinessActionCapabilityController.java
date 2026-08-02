@@ -8,7 +8,6 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,10 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/ai/capability/business-action")
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-        prefix = "forge.capability.secure-actions",
-        name = "enabled",
-        havingValue = "true")
 public class BusinessActionCapabilityController {
 
     private final BusinessActionCapabilityPublisher publisher;

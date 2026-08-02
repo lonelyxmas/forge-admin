@@ -9,6 +9,8 @@ import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityVersi
 import com.mdframe.forge.plugin.capability.controlplane.dto.CapabilityPublishDTO;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityMapper;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityVersionMapper;
+import com.mdframe.forge.plugin.capability.controlplane.mapper.model.CapabilityGrantOptionRow;
+import com.mdframe.forge.plugin.capability.controlplane.vo.CapabilityGrantCapabilityVO;
 import com.mdframe.forge.plugin.capability.naming.CapabilityToolNameMapper;
 import com.mdframe.forge.plugin.capability.schema.CapabilitySchemaValidator;
 import com.mdframe.forge.starter.core.domain.PageQuery;
@@ -17,7 +19,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
+import java.util.stream.StreamSupport;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class CapabilityCatalogService {
             "READ_ONLY", "ACTION", "FLOW", "MESSAGE", "EXTERNAL");
     private static final Set<String> RISK_LEVELS = Set.of("LOW", "MEDIUM", "HIGH");
     private static final Set<String> VISIBILITIES = Set.of("PRIVATE", "DISCOVERABLE");
+    private static final Set<String> ACTOR_TYPES = Set.of("SERVICE", "USER", "BOTH");
 
     private final AiCapabilityMapper capabilityMapper;
     private final AiCapabilityVersionMapper versionMapper;
@@ -55,9 +60,16 @@ public class CapabilityCatalogService {
         return capabilityMapper.selectByCode(requireTenant(tenantId), capabilityCode);
     }
 
+    public List<CapabilityGrantCapabilityVO> listGrantOptions(Long tenantId) {
+        return capabilityMapper.selectGrantOptions(requireTenant(tenantId)).stream()
+                .map(this::toGrantOption)
+                .toList();
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public Long publish(Long tenantId, CapabilityPublishDTO dto) {
-        if ("BUSINESS_ACTION".equals(dto.sourceType()) || "FLOW_ACTION".equals(dto.sourceType())) {
+        if ("BUSINESS_ACTION".equals(dto.sourceType()) || "FLOW_ACTION".equals(dto.sourceType())
+                || "SYSTEM_SERVICE".equals(dto.sourceType())) {
             throw new BusinessException(dto.sourceType() + " 必须通过对应的受控能力发布接口创建");
         }
         return publishInternal(tenantId, dto);
@@ -93,9 +105,20 @@ public class CapabilityCatalogService {
         return publishInternal(tenantId, dto);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Long publishSystemService(Long tenantId, CapabilityPublishDTO dto) {
+        if (!"SYSTEM_SERVICE".equals(dto.sourceType())
+                || !"ACTION".equals(dto.behavior())
+                || !"MEDIUM".equals(dto.riskLevel())) {
+            throw new BusinessException("受控系统服务能力元数据无效");
+        }
+        return publishInternal(tenantId, dto);
+    }
+
     private Long publishInternal(Long tenantId, CapabilityPublishDTO dto) {
         Long safeTenantId = requireTenant(tenantId);
         validateEnums(dto);
+        String requiredActorType = resolveRequiredActorType(dto);
         String expectedToolName = toolNameMapper.toProtocolToolName(dto.capabilityCode());
         if (!expectedToolName.equals(dto.protocolToolName())) {
             throw new BusinessException("阶段 1 protocolToolName 必须与 capabilityCode 保持一致");
@@ -119,16 +142,19 @@ public class CapabilityCatalogService {
             capability.setDelFlag(0L);
         }
         applyMetadata(capability, dto, checksum);
+        capability.setRequiredActorType(requiredActorType);
         if (capability.getId() == null) {
             capabilityMapper.insert(capability);
         }
 
         AiCapabilityVersion existingVersion = versionMapper.selectVersion(
                 safeTenantId, capability.getId(), dto.version());
-        assertImmutableVersion(existingVersion, dto, checksum);
+        assertImmutableVersion(existingVersion, dto, checksum, requiredActorType);
         if (existingVersion == null) {
-            versionMapper.insert(buildVersion(
-                    safeTenantId, capability.getId(), dto, checksum, inputSchema, outputSchema));
+            AiCapabilityVersion version = buildVersion(
+                    safeTenantId, capability.getId(), dto, checksum, inputSchema, outputSchema);
+            version.setRequiredActorType(requiredActorType);
+            versionMapper.insert(version);
         }
         capabilityMapper.updateById(capability);
         return capability.getId();
@@ -138,6 +164,23 @@ public class CapabilityCatalogService {
         AiCapability capability = getById(tenantId, id);
         capability.setEnabled(0);
         capability.setPublishStatus("DISABLED");
+        capabilityMapper.updateById(capability);
+    }
+
+    public void enable(Long tenantId, Long id) {
+        Long safeTenantId = requireTenant(tenantId);
+        AiCapability capability = getById(safeTenantId, id);
+        String currentVersion = capability.getCurrentVersion();
+        if (currentVersion == null || currentVersion.isBlank()) {
+            throw new BusinessException("能力没有可启用的当前版本，请先发布能力版本");
+        }
+        AiCapabilityVersion version = versionMapper.selectVersion(
+                safeTenantId, capability.getId(), currentVersion);
+        if (version == null || !"PUBLISHED".equals(version.getStatus())) {
+            throw new BusinessException("当前能力版本不存在或未发布，无法重新启用");
+        }
+        capability.setEnabled(1);
+        capability.setPublishStatus("PUBLISHED");
         capabilityMapper.updateById(capability);
     }
 
@@ -191,6 +234,42 @@ public class CapabilityCatalogService {
         }
     }
 
+    private CapabilityGrantCapabilityVO toGrantOption(CapabilityGrantOptionRow row) {
+        JsonNode policy = readPolicy(row.getPolicySnapshot());
+        return new CapabilityGrantCapabilityVO(
+                row.getId(), row.getCapabilityCode(), row.getCapabilityName(),
+                row.getCurrentVersion(), row.getSourceType(), row.getBehavior(),
+                row.getRiskLevel(), row.getRequiredActorType(), row.getPublishStatus(),
+                row.getEnabled(), textValues(policy.path("allowedFields")),
+                textValues(policy.path("allowedOperations")));
+    }
+
+    private JsonNode readPolicy(String policySnapshot) {
+        if (policySnapshot == null || policySnapshot.isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+        try {
+            JsonNode policy = objectMapper.readTree(policySnapshot);
+            return policy != null && policy.isObject()
+                    ? policy : objectMapper.createObjectNode();
+        }
+        catch (JsonProcessingException exception) {
+            return objectMapper.createObjectNode();
+        }
+    }
+
+    private List<String> textValues(JsonNode values) {
+        if (values == null || !values.isArray()) {
+            return List.of();
+        }
+        return StreamSupport.stream(values.spliterator(), false)
+                .filter(JsonNode::isTextual)
+                .map(JsonNode::asText)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
     private void validateEnums(CapabilityPublishDTO dto) {
         if (!BEHAVIORS.contains(dto.behavior())) {
             throw new BusinessException("不支持的能力行为");
@@ -206,10 +285,27 @@ public class CapabilityCatalogService {
         }
     }
 
+    private String resolveRequiredActorType(CapabilityPublishDTO dto) {
+        boolean flowAction = "FLOW_ACTION".equals(dto.sourceType());
+        String actorType = dto.requiredActorType();
+        if (actorType == null || actorType.isBlank()) {
+            return flowAction ? "USER" : "SERVICE";
+        }
+        String normalized = actorType.trim().toUpperCase();
+        if (!ACTOR_TYPES.contains(normalized)) {
+            throw new BusinessException("不支持的能力调用身份类型");
+        }
+        if (flowAction && !"USER".equals(normalized)) {
+            throw new BusinessException("受控流程动作能力仅支持用户委托身份调用");
+        }
+        return normalized;
+    }
+
     private void assertImmutableVersion(
             AiCapabilityVersion existingVersion,
             CapabilityPublishDTO dto,
-            String checksum) {
+            String checksum,
+            String requiredActorType) {
         if (existingVersion == null) {
             return;
         }
@@ -219,6 +315,7 @@ public class CapabilityCatalogService {
                 || !dto.sourceVersion().equals(existingVersion.getSourceVersion())
                 || !dto.behavior().equals(existingVersion.getBehavior())
                 || !dto.riskLevel().equals(existingVersion.getRiskLevel())
+                || !requiredActorType.equals(existingVersion.getRequiredActorType())
                 || !dto.visibility().equals(existingVersion.getVisibility())) {
             throw new BusinessException("已发布能力版本不可修改，请创建新版本");
         }

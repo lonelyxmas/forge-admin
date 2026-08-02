@@ -30,6 +30,7 @@ public class AiCapability extends TenantEntity {
     private String schemaChecksum;
     private String behavior;
     private String riskLevel;
+    private String requiredActorType;
     private String visibility;
     private String publishStatus;
     private Integer enabled;

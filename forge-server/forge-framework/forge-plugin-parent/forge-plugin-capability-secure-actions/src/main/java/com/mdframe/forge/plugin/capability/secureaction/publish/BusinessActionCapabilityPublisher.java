@@ -80,7 +80,7 @@ public class BusinessActionCapabilityPublisher {
                 suiteCode + "/" + resolved.object().getObjectCode() + "/" + action.getActionCode(),
                 String.valueOf(resolved.version().getPublishVersion()),
                 StringUtils.defaultIfBlank(dto.getVersion(), "1.0.0"),
-                "ACTION", riskLevel, "DISCOVERABLE",
+                "ACTION", riskLevel, "DISCOVERABLE", "SERVICE",
                 inputSchema, outputSchema, policy);
         return command;
     }
@@ -125,9 +125,8 @@ public class BusinessActionCapabilityPublisher {
         root.put("additionalProperties", false);
         ObjectNode properties = root.putObject("properties");
         properties.putObject("recordId").put("type", "string").put("minLength", 1).put("maxLength", 128);
-        properties.putObject("idempotencyKey").put("type", "string").put("minLength", 16).put("maxLength", 128);
         properties.set("arguments", arguments);
-        root.set("required", toArray(Set.of("idempotencyKey", "arguments")));
+        root.set("required", toArray(Set.of("arguments")));
         return root;
     }
 

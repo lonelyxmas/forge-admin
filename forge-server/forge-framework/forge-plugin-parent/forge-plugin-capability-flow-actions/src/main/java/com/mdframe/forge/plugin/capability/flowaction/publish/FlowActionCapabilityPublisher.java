@@ -61,7 +61,7 @@ public class FlowActionCapabilityPublisher {
                 "FLOW_ACTION",
                 source.row().getSuiteCode() + "/" + source.row().getObjectCode() + "/" + operation,
                 String.valueOf(source.row().getPublishedObjectVersion()),
-                dto.getVersion(), "FLOW", "MEDIUM", "DISCOVERABLE",
+                dto.getVersion(), "FLOW", "MEDIUM", "DISCOVERABLE", "USER",
                 inputSchema(operation), outputSchema(), policy);
         return catalogService.publishFlowAction(tenantId, command);
     }
@@ -92,10 +92,8 @@ public class FlowActionCapabilityPublisher {
         ObjectNode properties = root.putObject("properties");
         properties.putObject("recordId")
                 .put("type", "string").put("minLength", 1).put("maxLength", 128);
-        properties.putObject("idempotencyKey")
-                .put("type", "string").put("minLength", 16).put("maxLength", 128);
         properties.set("arguments", arguments);
-        root.set("required", array("recordId", "idempotencyKey", "arguments"));
+        root.set("required", array("recordId", "arguments"));
         return root;
     }
 

@@ -16,6 +16,8 @@ public final class CapabilityIdentityStartupGuard {
         identityProperties.validatedAuthorizationCodeTtl();
         identityProperties.validatedAccessTokenRetention();
         identityProperties.validatedLastUsedTouchInterval();
+        identityProperties.validatedUserAssertionMaxTtl();
+        identityProperties.validatedUserAssertionClockSkew();
 
         String clientPepper = controlPlaneProperties.getClientPepper();
         String tokenPepper = identityProperties.getTokenPepper();

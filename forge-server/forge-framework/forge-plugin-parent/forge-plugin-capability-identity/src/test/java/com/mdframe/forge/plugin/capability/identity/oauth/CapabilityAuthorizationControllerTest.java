@@ -15,7 +15,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -63,14 +62,14 @@ class CapabilityAuthorizationControllerTest {
     }
 
     @Test
-    void shouldRejectAuthorizationRequestBeforeValidationWhenActiveOrgDiffers() {
+    void shouldRejectHybridAuthorizationRequestWhenActiveOrgDiffers() {
         assertThatThrownBy(() -> controller.authorizationRequest(
                 "301", "code", "http://127.0.0.1/callback",
                 "http://localhost:8580/mcp", "capability:invoke:capability.ping",
                 "c".repeat(43), "S256", "state"))
                 .hasMessageContaining("组织");
 
-        verify(validator, never()).validateAuthorizationRequest(
+        verify(validator).validateAuthorizationRequest(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
@@ -85,7 +84,7 @@ class CapabilityAuthorizationControllerTest {
                 "c".repeat(43), "S256", "state", true);
 
         assertThatThrownBy(() -> controller.authorize(decision)).hasMessageContaining("组织");
-        verify(codeStore, never()).issue(org.mockito.ArgumentMatchers.any());
+        verify(codeStore, org.mockito.Mockito.never()).issue(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

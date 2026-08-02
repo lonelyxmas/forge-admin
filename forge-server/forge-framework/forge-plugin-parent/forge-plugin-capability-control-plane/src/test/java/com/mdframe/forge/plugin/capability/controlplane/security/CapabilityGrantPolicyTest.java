@@ -27,7 +27,7 @@ class CapabilityGrantPolicyTest {
     }
 
     @Test
-    void shouldRejectCrossTenantOrganizationExpiryAndWriteBehavior() {
+    void shouldRejectCrossTenantOrganizationExpiryAndHighRiskCapability() {
         AiCapabilityClient client = client(1L, 100L, "ENABLED", now.plusMinutes(10));
         AiCapability capability = capability(1L, "READ_ONLY", "PUBLISHED", 1);
         AiCapabilityGrant grant = grant(1L, "PINNED", "1.2.0", "ENABLED", now.plusMinutes(10));
@@ -41,8 +41,38 @@ class CapabilityGrantPolicyTest {
                 .isEqualTo("CLIENT_EXPIRED");
         client.setExpiresAt(now.plusMinutes(10));
         capability.setBehavior("ACTION");
-        assertThat(policy.evaluate(client, capability, grant, 1L, 100L, "1.2.0", now).errorCode())
-                .isEqualTo("CAPABILITY_NOT_READ_ONLY");
+        capability.setRiskLevel("HIGH");
+        assertThat(policy.evaluate(
+                client, capability, grant, 1L, 100L, "1.2.0", now).errorCode())
+                .isEqualTo("CAPABILITY_HIGH_RISK");
+    }
+
+    @Test
+    void shouldAllowControlledActionAndFlowGrants() {
+        AiCapabilityClient client = client(1L, 100L, "ENABLED", null);
+        AiCapabilityGrant grant = grant(1L, "PINNED", "1.2.0", "ENABLED", null);
+
+        assertThat(policy.evaluate(
+                client, capability(1L, "ACTION", "PUBLISHED", 1),
+                grant, 1L, 100L, "1.2.0", now).allowed()).isTrue();
+        assertThat(policy.evaluate(
+                client, capability(1L, "FLOW", "PUBLISHED", 1),
+                grant, 1L, 100L, "1.2.0", now).allowed()).isTrue();
+    }
+
+    @Test
+    void shouldAllowUserDelegationClientToUseAuthenticatedUsersOrganization() {
+        AiCapabilityClient client = client(1L, null, "ENABLED", null);
+        client.setActorMode("USER_DELEGATION");
+        client.setServiceUserId(null);
+
+        CapabilityGrantDecision decision = policy.evaluate(
+                client,
+                capability(1L, "FLOW", "PUBLISHED", 1),
+                grant(1L, "PINNED", "1.2.0", "ENABLED", null),
+                1L, 300L, "1.2.0", now);
+
+        assertThat(decision.allowed()).isTrue();
     }
 
     @Test
@@ -77,6 +107,7 @@ class CapabilityGrantPolicyTest {
         client.setTenantId(tenantId);
         client.setActiveOrgId(orgId);
         client.setServiceUserId(10L);
+        client.setActorMode("HYBRID");
         client.setStatus(status);
         client.setExpiresAt(expiresAt);
         return client;

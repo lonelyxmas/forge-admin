@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -15,13 +17,29 @@ public class CapabilityIdentityProperties {
     private boolean enabled = true;
     private String issuer = "http://localhost:8580";
     private String resource = "http://localhost:8580/mcp";
+    private String openapiResource = "http://localhost:8580/openapi";
     private String tokenPepper;
     private String authorizationCodePepper;
     private Duration accessTokenTtl = Duration.ofMinutes(10);
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
     private Duration accessTokenRetention = Duration.ofDays(30);
     private Duration lastUsedTouchInterval = Duration.ofMinutes(1);
+    private Duration userAssertionMaxTtl = Duration.ofMinutes(2);
+    private Duration userAssertionClockSkew = Duration.ofSeconds(30);
     private Set<String> allowedOrigins = new LinkedHashSet<>();
+    private Map<String, ExternalProvider> externalProviders = new LinkedHashMap<>();
+
+    @Data
+    public static class ExternalProvider {
+        private boolean enabled = true;
+        private String issuer;
+        private String jwkSetUri;
+        private String audience;
+        private Long tenantId;
+        private String phoneClaim = "phone_number";
+        private String nameClaim = "name";
+        private String organizationClaim = "forge_org_id";
+    }
 
     public Duration validatedAccessTokenTtl() {
         if (accessTokenTtl == null || accessTokenTtl.isZero() || accessTokenTtl.isNegative()
@@ -61,8 +79,34 @@ public class CapabilityIdentityProperties {
         return lastUsedTouchInterval;
     }
 
+    public Duration validatedUserAssertionMaxTtl() {
+        if (userAssertionMaxTtl == null
+                || userAssertionMaxTtl.compareTo(Duration.ofSeconds(30)) < 0
+                || userAssertionMaxTtl.compareTo(Duration.ofMinutes(2)) > 0) {
+            throw new IllegalStateException("客户端用户断言最大有效期必须为 30 秒到 2 分钟");
+        }
+        return userAssertionMaxTtl;
+    }
+
+    public Duration validatedUserAssertionClockSkew() {
+        if (userAssertionClockSkew == null || userAssertionClockSkew.isNegative()
+                || userAssertionClockSkew.compareTo(Duration.ofMinutes(1)) > 0) {
+            throw new IllegalStateException("客户端用户断言时钟偏差必须为 0 到 60 秒");
+        }
+        return userAssertionClockSkew;
+    }
+
     public String validatedResource() {
         return validateExternalUri(resource, true, "resource");
+    }
+
+    public String validatedOpenapiResource() {
+        return validateExternalUri(openapiResource, true, "openapi-resource");
+    }
+
+    public boolean supportsResource(String candidate) {
+        return validatedResource().equals(candidate)
+                || validatedOpenapiResource().equals(candidate);
     }
 
     private String validateExternalUri(String value, boolean allowPath, String name) {

@@ -3,8 +3,15 @@ package com.mdframe.forge.plugin.capability.identity.token;
 import com.mdframe.forge.plugin.capability.controlplane.audit.CapabilityActorType;
 import com.mdframe.forge.plugin.capability.controlplane.domain.AiCapabilityClient;
 import com.mdframe.forge.plugin.capability.controlplane.mapper.AiCapabilityClientMapper;
+import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientActorMode;
 import com.mdframe.forge.plugin.capability.controlplane.security.CapabilityClientPrincipal;
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityClientService;
+import com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityRequiredCondition;
+import com.mdframe.forge.plugin.capability.identity.external.ClientUserAssertionProtocol;
+import com.mdframe.forge.plugin.capability.identity.external.ClientUserAssertionVerifier;
+import com.mdframe.forge.plugin.capability.identity.external.ExternalIdentityClaims;
+import com.mdframe.forge.plugin.capability.identity.external.ExternalIdentityMappingService;
+import com.mdframe.forge.plugin.capability.identity.external.ResolvedExternalIdentity;
 import com.mdframe.forge.plugin.capability.identity.oauth.DelegationAuthorizationCode;
 import com.mdframe.forge.plugin.capability.identity.oauth.DelegationAuthorizationCodeStore;
 import com.mdframe.forge.plugin.capability.identity.oauth.OAuthRequestValidator;
@@ -21,7 +28,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,8 +42,15 @@ import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "forge.capability.identity", name = "enabled", havingValue = "true")
+@Conditional(CapabilityIdentityRequiredCondition.class)
 public class CapabilityTokenController {
+
+    static final String TOKEN_EXCHANGE_GRANT_TYPE =
+            "urn:ietf:params:oauth:grant-type:token-exchange";
+    static final String JWT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
+    static final String ACCESS_TOKEN_TYPE =
+            "urn:ietf:params:oauth:token-type:access_token";
+    static final int MAX_SUBJECT_TOKEN_LENGTH = 16384;
 
     private static final Logger log = LoggerFactory.getLogger(CapabilityTokenController.class);
 
@@ -45,6 +59,8 @@ public class CapabilityTokenController {
     private final DelegationAuthorizationCodeStore authorizationCodeStore;
     private final OAuthRequestValidator requestValidator;
     private final CapabilityAccessTokenService accessTokenService;
+    private final ExternalIdentityMappingService externalIdentityMappingService;
+    private final ClientUserAssertionVerifier clientUserAssertionVerifier;
 
     @PostMapping(value = "/oauth2/token", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     @OperationLog(
@@ -62,11 +78,15 @@ public class CapabilityTokenController {
             @RequestParam(value = "redirect_uri", required = false) String redirectUri,
             @RequestParam(value = "code_verifier", required = false) String codeVerifier,
             @RequestParam(value = "resource", required = false) String resource,
-            @RequestParam(value = "scope", required = false) String scope) {
+            @RequestParam(value = "scope", required = false) String scope,
+            @RequestParam(value = "subject_token", required = false) String subjectToken,
+            @RequestParam(value = "subject_token_type", required = false) String subjectTokenType,
+            @RequestParam(value = "requested_token_type", required = false) String requestedTokenType) {
         String requestId = requestId(request);
         try {
             validateTokenParameters(
-                    grantType, clientId, clientSecret, code, redirectUri, codeVerifier, resource, scope);
+                    grantType, clientId, clientSecret, code, redirectUri, codeVerifier,
+                    resource, scope, subjectToken, subjectTokenType, requestedTokenType);
             ClientCredentials credentials = resolveCredentials(request, clientId, clientSecret);
             AiCapabilityClient client = requireClient(credentials.clientId());
             CapabilityTokenResponse response;
@@ -81,10 +101,16 @@ public class CapabilityTokenController {
                         client.getId(), client.getCredentialVersion(), CapabilityActorType.SERVICE,
                         client.getServiceUserId(), client.getServiceUserId(), client.getTenantId(),
                         client.getActiveOrgId(), resource, scopes));
+            } else if (TOKEN_EXCHANGE_GRANT_TYPE.equals(grantType)) {
+                authenticateConfidentialClient(client, credentials.clientSecret());
+                Set<String> scopes = requestValidator.validateExternalTokenExchange(
+                        client, resource, scope);
+                response = exchangeExternalIdentity(
+                        client, subjectToken, subjectTokenType, resource, scopes);
             } else {
                 throw oauthError("unsupported_grant_type");
             }
-            return tokenSuccess(response);
+            return tokenSuccess(response, TOKEN_EXCHANGE_GRANT_TYPE.equals(grantType));
         } catch (BusinessException exception) {
             return tokenError(exception, requestId);
         } catch (RuntimeException exception) {
@@ -144,6 +170,40 @@ public class CapabilityTokenController {
                 code.clientId(), code.credentialVersion(), CapabilityActorType.USER,
                 code.actorUserId(), code.serviceUserId(), code.tenantId(),
                 code.activeOrgId(), code.resource(), code.scopes()));
+    }
+
+    private CapabilityTokenResponse exchangeExternalIdentity(
+            AiCapabilityClient client,
+            String subjectToken,
+            String subjectTokenType,
+            String resource,
+            Set<String> scopes) {
+        ResolvedExternalIdentity resolved;
+        if (ClientUserAssertionProtocol.SUBJECT_TOKEN_TYPE.equals(subjectTokenType)) {
+            ExternalIdentityClaims claims = clientUserAssertionVerifier.verify(client, subjectToken);
+            resolved = externalIdentityMappingService.authenticatePreBound(claims);
+        }
+        else if (JWT_TOKEN_TYPE.equals(subjectTokenType)) {
+            resolved = externalIdentityMappingService.authenticate(subjectToken);
+        }
+        else {
+            throw oauthError("invalid_request");
+        }
+        if (resolved == null || resolved.loginUser() == null
+                || !client.getTenantId().equals(resolved.loginUser().getTenantId())) {
+            throw oauthError("invalid_grant");
+        }
+        CapabilityClientActorMode actorMode = actorMode(client);
+        if (actorMode == CapabilityClientActorMode.HYBRID
+                && !client.getActiveOrgId().equals(resolved.loginUser().getActiveOrgId())) {
+            throw oauthError("invalid_grant");
+        }
+        Long serviceUserId = actorMode == CapabilityClientActorMode.USER_DELEGATION
+                ? null : client.getServiceUserId();
+        return accessTokenService.issue(new CapabilityTokenIssueCommand(
+                client.getId(), client.getCredentialVersion(), CapabilityActorType.USER,
+                resolved.loginUser().getUserId(), serviceUserId, client.getTenantId(),
+                resolved.loginUser().getActiveOrgId(), resource, scopes));
     }
 
     private void authenticateForAuthorizationCode(
@@ -226,13 +286,18 @@ public class CapabilityTokenController {
         return new ClientCredentials(basicClientId, basicSecret);
     }
 
-    private ResponseEntity<Map<String, Object>> tokenSuccess(CapabilityTokenResponse response) {
+    private ResponseEntity<Map<String, Object>> tokenSuccess(
+            CapabilityTokenResponse response,
+            boolean tokenExchange) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("access_token", response.accessToken());
         body.put("token_type", response.tokenType());
         body.put("expires_in", response.expiresIn());
         body.put("scope", response.scope());
         body.put("resource", response.resource());
+        if (tokenExchange) {
+            body.put("issued_token_type", ACCESS_TOKEN_TYPE);
+        }
         return noStore(ResponseEntity.ok()).body(body);
     }
 
@@ -277,7 +342,10 @@ public class CapabilityTokenController {
             String redirectUri,
             String codeVerifier,
             String resource,
-            String scope) {
+            String scope,
+            String subjectToken,
+            String subjectTokenType,
+            String requestedTokenType) {
         requestValidator.requireLength(grantType, 64, "grant_type");
         requestValidator.requireOptionalLength(
                 clientId, OAuthRequestValidator.MAX_CLIENT_ID_LENGTH, "client_id");
@@ -292,6 +360,10 @@ public class CapabilityTokenController {
                 resource, OAuthRequestValidator.MAX_RESOURCE_LENGTH, "resource");
         requestValidator.requireOptionalLength(
                 scope, OAuthRequestValidator.MAX_SCOPE_LENGTH, "scope");
+        requestValidator.requireOptionalLength(
+                subjectToken, MAX_SUBJECT_TOKEN_LENGTH, "subject_token");
+        requestValidator.requireOptionalLength(subjectTokenType, 128, "subject_token_type");
+        requestValidator.requireOptionalLength(requestedTokenType, 128, "requested_token_type");
         if ("authorization_code".equals(grantType)) {
             requestValidator.requireLength(code, OAuthRequestValidator.MAX_TOKEN_VALUE_LENGTH, "code");
             requestValidator.requireLength(
@@ -304,6 +376,30 @@ public class CapabilityTokenController {
             requestValidator.requireLength(
                     resource, OAuthRequestValidator.MAX_RESOURCE_LENGTH, "resource");
             requestValidator.requireLength(scope, OAuthRequestValidator.MAX_SCOPE_LENGTH, "scope");
+        }
+        if (TOKEN_EXCHANGE_GRANT_TYPE.equals(grantType)) {
+            requestValidator.requireLength(subjectToken, MAX_SUBJECT_TOKEN_LENGTH, "subject_token");
+            requestValidator.requireLength(subjectTokenType, 128, "subject_token_type");
+            requestValidator.requireLength(requestedTokenType, 128, "requested_token_type");
+            requestValidator.requireLength(
+                    resource, OAuthRequestValidator.MAX_RESOURCE_LENGTH, "resource");
+            requestValidator.requireLength(scope, OAuthRequestValidator.MAX_SCOPE_LENGTH, "scope");
+            if (!(JWT_TOKEN_TYPE.equals(subjectTokenType)
+                    || ClientUserAssertionProtocol.SUBJECT_TOKEN_TYPE.equals(subjectTokenType))
+                    || !ACCESS_TOKEN_TYPE.equals(requestedTokenType)) {
+                throw oauthError("invalid_request");
+            }
+        }
+    }
+
+    private CapabilityClientActorMode actorMode(AiCapabilityClient client) {
+        try {
+            return client.getActorMode() == null || client.getActorMode().isBlank()
+                    ? CapabilityClientActorMode.HYBRID
+                    : CapabilityClientActorMode.valueOf(client.getActorMode());
+        }
+        catch (IllegalArgumentException exception) {
+            throw oauthError("invalid_client");
         }
     }
 

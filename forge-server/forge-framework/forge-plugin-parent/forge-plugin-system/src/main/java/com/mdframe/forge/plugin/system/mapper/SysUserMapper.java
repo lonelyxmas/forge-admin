@@ -37,6 +37,12 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
     SysUser selectByPhoneForLogin(@Param("phone") String phone, @Param("tenantId") Long tenantId);
 
     /**
+     * 外部身份首次映射时按已验证手机号查询有效候选，最多返回两条用于冲突检测。
+     */
+    List<SysUser> selectEligibleUsersByVerifiedPhone(@Param("phone") String phone,
+                                                      @Param("tenantId") Long tenantId);
+
+    /**
      * 登录时按邮箱和当前租户查询用户
      */
     SysUser selectByEmailForLogin(@Param("email") String email, @Param("tenantId") Long tenantId);
