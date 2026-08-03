@@ -3409,9 +3409,11 @@ CREATE TABLE `pw_warehouse` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1950000000000009225 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='采购仓储-仓库';
 
 
--- forge_admin_new.qrtz_calendars definition
+-- forge_admin_new.QRTZ_CALENDARS definition
 
-CREATE TABLE `qrtz_calendars` (
+DROP TABLE IF EXISTS `QRTZ_CALENDARS`;
+
+CREATE TABLE `QRTZ_CALENDARS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `calendar_name` varchar(200) NOT NULL COMMENT '日历名称',
   `calendar` blob NOT NULL COMMENT '存放持久化calendar对象',
@@ -3419,13 +3421,15 @@ CREATE TABLE `qrtz_calendars` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='日历信息表';
 
 
--- forge_admin_new.qrtz_fired_triggers definition
+-- forge_admin_new.QRTZ_FIRED_TRIGGERS definition
 
-CREATE TABLE `qrtz_fired_triggers` (
+DROP TABLE IF EXISTS `QRTZ_FIRED_TRIGGERS`;
+
+CREATE TABLE `QRTZ_FIRED_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `entry_id` varchar(95) NOT NULL COMMENT '调度器实例id',
-  `trigger_name` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_name的外键',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_name` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_name的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   `instance_name` varchar(200) NOT NULL COMMENT '调度器实例名',
   `fired_time` bigint NOT NULL COMMENT '触发的时间',
   `sched_time` bigint NOT NULL COMMENT '定时器制定的时间',
@@ -3439,9 +3443,11 @@ CREATE TABLE `qrtz_fired_triggers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='已触发的触发器表';
 
 
--- forge_admin_new.qrtz_job_details definition
+-- forge_admin_new.QRTZ_JOB_DETAILS definition
 
-CREATE TABLE `qrtz_job_details` (
+DROP TABLE IF EXISTS `QRTZ_JOB_DETAILS`;
+
+CREATE TABLE `QRTZ_JOB_DETAILS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `job_name` varchar(200) NOT NULL COMMENT '任务名称',
   `job_group` varchar(200) NOT NULL COMMENT '任务组名',
@@ -3456,27 +3462,33 @@ CREATE TABLE `qrtz_job_details` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='任务详细信息表';
 
 
--- forge_admin_new.qrtz_locks definition
+-- forge_admin_new.QRTZ_LOCKS definition
 
-CREATE TABLE `qrtz_locks` (
+DROP TABLE IF EXISTS `QRTZ_LOCKS`;
+
+CREATE TABLE `QRTZ_LOCKS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `lock_name` varchar(40) NOT NULL COMMENT '悲观锁名称',
   PRIMARY KEY (`sched_name`,`lock_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='存储的悲观锁信息表';
 
 
--- forge_admin_new.qrtz_paused_trigger_grps definition
+-- forge_admin_new.QRTZ_PAUSED_TRIGGER_GRPS definition
 
-CREATE TABLE `qrtz_paused_trigger_grps` (
+DROP TABLE IF EXISTS `QRTZ_PAUSED_TRIGGER_GRPS`;
+
+CREATE TABLE `QRTZ_PAUSED_TRIGGER_GRPS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   PRIMARY KEY (`sched_name`,`trigger_group`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='暂停的触发器表';
 
 
--- forge_admin_new.qrtz_scheduler_state definition
+-- forge_admin_new.QRTZ_SCHEDULER_STATE definition
 
-CREATE TABLE `qrtz_scheduler_state` (
+DROP TABLE IF EXISTS `QRTZ_SCHEDULER_STATE`;
+
+CREATE TABLE `QRTZ_SCHEDULER_STATE` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `instance_name` varchar(200) NOT NULL COMMENT '实例名称',
   `last_checkin_time` bigint NOT NULL COMMENT '上次检查时间',
@@ -6116,14 +6128,16 @@ CREATE TABLE `worker_node` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2273 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='DB WorkerID Assigner for UID Generator';
 
 
--- forge_admin_new.qrtz_triggers definition
+-- forge_admin_new.QRTZ_TRIGGERS definition
 
-CREATE TABLE `qrtz_triggers` (
+DROP TABLE IF EXISTS `QRTZ_TRIGGERS`;
+
+CREATE TABLE `QRTZ_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
   `trigger_name` varchar(200) NOT NULL COMMENT '触发器的名字',
   `trigger_group` varchar(200) NOT NULL COMMENT '触发器所属组的名字',
-  `job_name` varchar(200) NOT NULL COMMENT 'qrtz_job_details表job_name的外键',
-  `job_group` varchar(200) NOT NULL COMMENT 'qrtz_job_details表job_group的外键',
+  `job_name` varchar(200) NOT NULL COMMENT 'QRTZ_JOB_DETAILS表job_name的外键',
+  `job_group` varchar(200) NOT NULL COMMENT 'QRTZ_JOB_DETAILS表job_group的外键',
   `description` varchar(250) DEFAULT NULL COMMENT '相关介绍',
   `next_fire_time` bigint DEFAULT NULL COMMENT '上一次触发时间（毫秒）',
   `prev_fire_time` bigint DEFAULT NULL COMMENT '下一次触发时间（默认为-1表示不触发）',
@@ -6140,35 +6154,41 @@ CREATE TABLE `qrtz_triggers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='触发器详细信息表';
 
 
--- forge_admin_new.qrtz_blob_triggers definition
+-- forge_admin_new.QRTZ_BLOB_TRIGGERS definition
 
-CREATE TABLE `qrtz_blob_triggers` (
+DROP TABLE IF EXISTS `QRTZ_BLOB_TRIGGERS`;
+
+CREATE TABLE `QRTZ_BLOB_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
-  `trigger_name` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_name的外键',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_name` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_name的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   `blob_data` blob COMMENT '存放持久化Trigger对象',
   PRIMARY KEY (`sched_name`,`trigger_name`,`trigger_group`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='Blob类型的触发器表';
 
 
--- forge_admin_new.qrtz_cron_triggers definition
+-- forge_admin_new.QRTZ_CRON_TRIGGERS definition
 
-CREATE TABLE `qrtz_cron_triggers` (
+DROP TABLE IF EXISTS `QRTZ_CRON_TRIGGERS`;
+
+CREATE TABLE `QRTZ_CRON_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
-  `trigger_name` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_name的外键',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_name` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_name的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   `cron_expression` varchar(200) NOT NULL COMMENT 'cron表达式',
   `time_zone_id` varchar(80) DEFAULT NULL COMMENT '时区',
   PRIMARY KEY (`sched_name`,`trigger_name`,`trigger_group`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='Cron类型的触发器表';
 
 
--- forge_admin_new.qrtz_simple_triggers definition
+-- forge_admin_new.QRTZ_SIMPLE_TRIGGERS definition
 
-CREATE TABLE `qrtz_simple_triggers` (
+DROP TABLE IF EXISTS `QRTZ_SIMPLE_TRIGGERS`;
+
+CREATE TABLE `QRTZ_SIMPLE_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
-  `trigger_name` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_name的外键',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_name` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_name的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   `repeat_count` bigint NOT NULL COMMENT '重复的次数统计',
   `repeat_interval` bigint NOT NULL COMMENT '重复的间隔时间',
   `times_triggered` bigint NOT NULL COMMENT '已经触发的次数',
@@ -6176,12 +6196,14 @@ CREATE TABLE `qrtz_simple_triggers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COMMENT='简单触发器的信息表';
 
 
--- forge_admin_new.qrtz_simprop_triggers definition
+-- forge_admin_new.QRTZ_SIMPROP_TRIGGERS definition
 
-CREATE TABLE `qrtz_simprop_triggers` (
+DROP TABLE IF EXISTS `QRTZ_SIMPROP_TRIGGERS`;
+
+CREATE TABLE `QRTZ_SIMPROP_TRIGGERS` (
   `sched_name` varchar(120) NOT NULL COMMENT '调度名称',
-  `trigger_name` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_name的外键',
-  `trigger_group` varchar(200) NOT NULL COMMENT 'qrtz_triggers表trigger_group的外键',
+  `trigger_name` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_name的外键',
+  `trigger_group` varchar(200) NOT NULL COMMENT 'QRTZ_TRIGGERS表trigger_group的外键',
   `str_prop_1` varchar(512) DEFAULT NULL COMMENT 'String类型的trigger的第一个参数',
   `str_prop_2` varchar(512) DEFAULT NULL COMMENT 'String类型的trigger的第二个参数',
   `str_prop_3` varchar(512) DEFAULT NULL COMMENT 'String类型的trigger的第三个参数',
@@ -10630,21 +10652,21 @@ INSERT INTO pw_warehouse (id,tenant_id,warehouse_code,warehouse_name,warehouse_t
 	 (1950000000000009222,1,'WH-002','城东项目现场仓','SITE','城东安置房项目','城东安置房项目施工现场','HT-2026-XM-018','ENABLED','项目现场领用仓',1,'2026-07-03 14:25:26',1,1,'2026-07-03 14:25:26','0'),
 	 (1950000000000009223,1,'DOC202607060001','23421341234','CENTER','23423','234234','4234234','ENABLED',NULL,1,'2026-07-06 10:22:28',6,1,'2026-07-06 10:22:28','0'),
 	 (1950000000000009224,1,'DOC202607230001','2342','CENTER','323423','2342342','3244','ENABLED','234234',1,'2026-07-23 00:29:49',6,1,'2026-07-23 00:29:49','0');
-INSERT INTO qrtz_cron_triggers (sched_name,trigger_name,trigger_group,cron_expression,time_zone_id) VALUES
+INSERT IGNORE INTO QRTZ_CRON_TRIGGERS (sched_name,trigger_name,trigger_group,cron_expression,time_zone_id) VALUES
 	 ('ForgeScheduler_','aiInvocationLogRetention','AI','0 20 2 * * ?','Asia/Shanghai'),
 	 ('ForgeScheduler_','lowcodeBusinessTriggerScanJob','LOWCODE','0 0/5 * * * ?','Asia/Shanghai');
-INSERT INTO qrtz_job_details (sched_name,job_name,job_group,description,job_class_name,is_durable,is_nonconcurrent,is_update_data,requests_recovery,job_data) VALUES
+INSERT IGNORE INTO QRTZ_JOB_DETAILS (sched_name,job_name,job_group,description,job_class_name,is_durable,is_nonconcurrent,is_update_data,requests_recovery,job_data) VALUES
 	 ('ForgeScheduler_','aiInvocationLogRetention','AI','清理超期AI模型调用治理日志','com.mdframe.forge.plugin.job.scheduler.QuartzJobExecutor','1','0','0','0',0xACED0005737200156F72672E71756172747A2E4A6F62446174614D61709FB083E8BFA9B0CB020000787200266F72672E71756172747A2E7574696C732E537472696E674B65794469727479466C61674D61708208E8C3FBC55D280200015A0013616C6C6F77735472616E7369656E74446174617872001D6F72672E71756172747A2E7574696C732E4469727479466C61674D617013E62EAD28760ACE0200025A000564697274794C00036D617074000F4C6A6176612F7574696C2F4D61703B787001737200116A6176612E7574696C2E486173684D61700507DAC1C31660D103000246000A6C6F6164466163746F724900097468726573686F6C6478703F4000000000000C7708000000100000000B74000B657865637574654D6F64657400044245414E74000A696E766F6B654D6F646574000653494E474C4574000C7363686564756C655479706574000443524F4E74000E6964656D706F74656E74466C6167737200116A6176612E6C616E672E496E746567657212E2A0A4F781873802000149000576616C7565787200106A6176612E6C616E672E4E756D62657286AC951D0B94E08B02000078700000000074000C6578656375746F724265616E74001B6169496E766F636174696F6E4C6F67526574656E74696F6E4A6F6274000A7265747279436F756E7471007E001074000B6A6F62436F6E66696749647372000E6A6176612E6C616E672E4C6F6E673B8BE490CC8F23DF0200014A000576616C75657871007E000F000000000000000B74000D6D697366697265506F6C69637974000A444F5F4E4F5448494E4774000B74726967676572547970657400095343484544554C454474000E6578656375746F724D6574686F6474001A636C65616E45787069726564496E766F636174696F6E4C6F6773740010636F6E63757272656E74506F6C696379740005414C4C4F577800),
 	 ('ForgeScheduler_','lowcodeBusinessTriggerScanJob','LOWCODE','低代码定时触发器扫描任务，默认每5分钟执行一次','com.mdframe.forge.plugin.job.scheduler.QuartzJobExecutor','1','0','0','0',0xACED0005737200156F72672E71756172747A2E4A6F62446174614D61709FB083E8BFA9B0CB020000787200266F72672E71756172747A2E7574696C732E537472696E674B65794469727479466C61674D61708208E8C3FBC55D280200015A0013616C6C6F77735472616E7369656E74446174617872001D6F72672E71756172747A2E7574696C732E4469727479466C61674D617013E62EAD28760ACE0200025A000564697274794C00036D617074000F4C6A6176612F7574696C2F4D61703B787001737200116A6176612E7574696C2E486173684D61700507DAC1C31660D103000246000A6C6F6164466163746F724900097468726573686F6C6478703F4000000000000C7708000000100000000B74000B657865637574654D6F64657400044245414E74000A696E766F6B654D6F646574000653494E474C4574000C7363686564756C655479706574000443524F4E74000E6964656D706F74656E74466C6167737200116A6176612E6C616E672E496E746567657212E2A0A4F781873802000149000576616C7565787200106A6176612E6C616E672E4E756D62657286AC951D0B94E08B02000078700000000074000C6578656375746F724265616E74001F627573696E657373547269676765725363686564756C65725365727669636574000A7265747279436F756E7471007E001074000B6A6F62436F6E66696749647372000E6A6176612E6C616E672E4C6F6E673B8BE490CC8F23DF0200014A000576616C75657871007E000F000000000000000674000D6D697366697265506F6C69637974000A444F5F4E4F5448494E4774000B74726967676572547970657400095343484544554C454474000E6578656375746F724D6574686F647400157363616E5363686564756C65645472696767657273740010636F6E63757272656E74506F6C696379740005414C4C4F577800);
-INSERT INTO qrtz_locks (sched_name,lock_name) VALUES
+INSERT IGNORE INTO QRTZ_LOCKS (sched_name,lock_name) VALUES
 	 ('ForgeScheduler_','STATE_ACCESS'),
 	 ('ForgeScheduler_','TRIGGER_ACCESS');
-INSERT INTO qrtz_scheduler_state (sched_name,instance_name,last_checkin_time,checkin_interval) VALUES
+INSERT IGNORE INTO QRTZ_SCHEDULER_STATE (sched_name,instance_name,last_checkin_time,checkin_interval) VALUES
 	 ('ForgeScheduler_','VM-0-14-opencloudos1784682889644',1784770435657,15000),
 	 ('ForgeScheduler_','yaominliangdeMacBook-Pro.local1784683980004',1784770434240,15000);
-INSERT INTO qrtz_triggers (sched_name,trigger_name,trigger_group,job_name,job_group,description,next_fire_time,prev_fire_time,priority,trigger_state,trigger_type,start_time,end_time,calendar_name,misfire_instr,job_data) VALUES
-	 ('ForgeScheduler_','aiInvocationLogRetention','AI','aiInvocationLogRetention','AI',NULL,1784830800000,-1,5,'WAITING','CRON',1784769870000,0,NULL,2,0x),
-	 ('ForgeScheduler_','lowcodeBusinessTriggerScanJob','LOWCODE','lowcodeBusinessTriggerScanJob','LOWCODE',NULL,1784770500000,1784770200000,5,'WAITING','CRON',1784769869000,0,NULL,2,0x);
+INSERT IGNORE INTO QRTZ_TRIGGERS (sched_name,trigger_name,trigger_group,job_name,job_group,description,next_fire_time,prev_fire_time,priority,trigger_state,trigger_type,start_time,end_time,calendar_name,misfire_instr,job_data) VALUES
+	 ('ForgeScheduler_','aiInvocationLogRetention','AI','aiInvocationLogRetention','AI',NULL,1784830800000,-1,5,'WAITING','CRON',1784769870000,0,NULL,2,X''),
+	 ('ForgeScheduler_','lowcodeBusinessTriggerScanJob','LOWCODE','lowcodeBusinessTriggerScanJob','LOWCODE',NULL,1784770500000,1784770200000,5,'WAITING','CRON',1784769869000,0,NULL,2,X'');
 INSERT INTO sample_purchase_order (id,tenant_id,order_no,title,supplier_name,amount_cent,purchase_items,need_date,status,del_flag,applicant_id,applicant_name,applicant_dept_id,applicant_dept_name,business_key,process_instance_id,dept_leader_id,engineering_manager_id,countersign_user_ids,cc_role_keys,arrival_list_file_ids,applicant_modify_remark,dept_leader_remark,engineering_manager_remark,countersign_remark,reject_reason,remark,create_by,create_time,create_dept,update_by,update_time) VALUES
 	 (2071146427202940929,1,'PO20260628161922940929','12','12',1200,'1212','2026-06-28','IN_PROCESS',0,1,'admin',6,NULL,'sample_purchase_order:2071146427202940929','2209e4dc-72ca-11f1-8153-621de96571e7',1,1,'1,25','admin',NULL,NULL,NULL,NULL,NULL,NULL,'1212',1,'2026-06-28 16:19:23',6,1,'2026-06-28 16:19:52'),
 	 (2071150613982375938,1,'PO20260628163601375938','12','12',3300,'12','2026-06-28','APPROVED',0,1,'admin',6,NULL,'sample_purchase_order:2071150613982375938','8e8a0247-72cc-11f1-8153-621de96571e7',1,1,'1,25','admin','','12','1231','12','12',NULL,'12',1,'2026-06-28 16:36:01',6,25,'2026-06-28 16:41:16'),
