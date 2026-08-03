@@ -50,6 +50,78 @@
         update_time
     </sql>
 
+    <sql id="Timeline_Columns">
+        id,
+        tenant_id,
+        run_id,
+        node_id,
+        node_type,
+        attempt_no,
+        status,
+        correlation_id,
+        input_summary,
+        output_summary,
+        error_code,
+        error_summary,
+        next_retry_time,
+        start_time,
+        end_time,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectTimeline" resultMap="BaseResultMap">
+        SELECT <include refid="Timeline_Columns"/>
+        FROM ai_business_process_node_run
+        WHERE tenant_id = #{tenantId}
+          AND run_id = #{runId}
+        ORDER BY create_time ASC, node_id ASC, attempt_no ASC, id ASC
+    </select>
+
+    <select id="selectLatestAttempt" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_node_run
+        WHERE tenant_id = #{tenantId}
+          AND run_id = #{runId}
+          AND node_id = #{nodeId}
+        ORDER BY attempt_no DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectWaitingByCorrelation" resultMap="BaseResultMap">
+        SELECT <include refid="Timeline_Columns"/>
+        FROM ai_business_process_node_run
+        WHERE tenant_id = #{tenantId}
+          AND run_id = #{runId}
+          AND node_id = #{nodeId}
+          AND correlation_id = #{correlationId}
+          AND status = 'WAITING'
+        LIMIT 1
+    </select>
+
+    <select id="selectRetryableAttempts" resultMap="BaseResultMap">
+        SELECT <include refid="Timeline_Columns"/>
+        FROM ai_business_process_node_run
+        WHERE tenant_id = #{tenantId}
+          AND run_id = #{runId}
+          AND status = 'FAILED'
+          AND next_retry_time IS NOT NULL
+          AND next_retry_time &lt;= #{before}
+        ORDER BY next_retry_time ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectMaxAttemptNo" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(attempt_no), 0)
+        FROM ai_business_process_node_run
+        WHERE tenant_id = #{tenantId}
+          AND run_id = #{runId}
+          AND node_id = #{nodeId}
+    </select>
+
     <insert id="insertAttempt">
         INSERT INTO ai_business_process_node_run (
           id, tenant_id, run_id, node_id, node_type, attempt_no, status,

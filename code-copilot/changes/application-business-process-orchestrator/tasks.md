@@ -145,6 +145,8 @@
 
 ## Task 5：节点运行 XML 与安全日志查询
 
+**状态：completed（2026-08-03）**。已实现运行分页、节点时间线/最后尝试/可重试/审批关联查询和安全摘要 VO；对外 ID 全部为字符串。
+
 - **目标**：补齐节点时间线、可重试节点、审批关联和安全摘要查询，不让 Controller 或 Service 拼装 SQL。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/resources/mapper/BusinessProcessNodeRunMapper.xml` — 新增时间线、最后尝试、可重试和关联 ID 查询。

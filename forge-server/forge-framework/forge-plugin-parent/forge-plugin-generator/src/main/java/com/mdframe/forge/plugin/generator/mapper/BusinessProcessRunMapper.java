@@ -1,7 +1,10 @@
 package com.mdframe.forge.plugin.generator.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessRun;
+import com.mdframe.forge.plugin.generator.dto.businessprocess.BusinessProcessRunQueryDTO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessRunVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -10,6 +13,10 @@ import java.util.List;
 
 @Mapper
 public interface BusinessProcessRunMapper extends BaseMapper<AiBusinessProcessRun> {
+
+    Page<BusinessProcessRunVO> selectRunPage(Page<BusinessProcessRunVO> page,
+                                              @Param("tenantId") Long tenantId,
+                                              @Param("query") BusinessProcessRunQueryDTO query);
 
     AiBusinessProcessRun selectRunById(@Param("tenantId") Long tenantId,
                                         @Param("runId") Long runId);

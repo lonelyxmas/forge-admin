@@ -62,3 +62,14 @@
 - 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
 - 结果：主代码编译成功；累计 Mapper 契约测试 `6/6` 通过。仅保留已记录的既有 deprecation/unchecked 编译提示。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 5：运行查询与安全摘要
+
+- 新增 `BusinessProcessRunQueryDTO`：支持应用、流程、业务对象、记录、状态、触发来源和创建时间区间过滤。
+- 新增 `BusinessProcessRunVO/BusinessProcessRunDetailVO`：流程、版本、actor、组织和节点运行 ID 均声明为字符串；详情时间线只暴露 correlation、安全输入/输出摘要、错误码和截断错误摘要。
+- 运行分页 SQL：显式限定 `r.tenant_id`，使用 `CAST(... AS CHAR)` 返回所有长整型 ID，不读取 `context_snapshot/source_event_id/idempotency_key`。
+- 节点查询：时间线使用不含幂等键的 `Timeline_Columns`；最后尝试保留内部幂等恢复字段；可重试与审批 correlation 查询同时限定租户和 run，查询顺序稳定。
+- XML 检查：`xmllint --noout BusinessProcessRunMapper.xml BusinessProcessNodeRunMapper.xml` 通过；目标文件 `git diff --check` 通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `8/8` 通过，新增验证安全列和字符串 ID。仅保留已记录的既有编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

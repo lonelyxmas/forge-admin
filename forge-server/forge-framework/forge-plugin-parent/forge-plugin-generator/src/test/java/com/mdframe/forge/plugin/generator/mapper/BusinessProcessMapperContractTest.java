@@ -3,6 +3,8 @@ package com.mdframe.forge.plugin.generator.mapper;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessVersion;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessRunDetailVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessRunVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -96,10 +98,49 @@ class BusinessProcessMapperContractTest {
         assertFalse(xml.contains("DELETE FROM ai_business_process_node_run"));
     }
 
+    @Test
+    @DisplayName("run list and timeline expose only safe summaries with string ids")
+    void runQueriesExposeSafeSummariesAndStringIds() throws IOException, NoSuchFieldException {
+        String runPage = statement(resource("mapper/BusinessProcessRunMapper.xml"), "select", "selectRunPage");
+        String timeline = statement(resource("mapper/BusinessProcessNodeRunMapper.xml"), "select", "selectTimeline");
+
+        assertEquals(String.class, BusinessProcessRunVO.class.getDeclaredField("id").getType());
+        assertEquals(String.class, BusinessProcessRunVO.class.getDeclaredField("processVersionId").getType());
+        assertEquals(String.class, BusinessProcessRunDetailVO.NodeRunVO.class.getDeclaredField("id").getType());
+        assertTrue(runPage.contains("CAST(r.id AS CHAR)"));
+        assertTrue(runPage.contains("r.tenant_id = #{tenantId}"));
+        assertFalse(runPage.contains("context_snapshot"));
+        assertFalse(runPage.contains("idempotency_key"));
+        assertFalse(runPage.contains("source_event_id"));
+        assertTrue(timeline.contains("Timeline_Columns"));
+        assertFalse(timeline.contains("Base_Columns"));
+    }
+
+    @Test
+    @DisplayName("node timeline retry and approval association remain tenant and run scoped")
+    void nodeTimelineQueriesAreTenantAndRunScoped() throws IOException {
+        String xml = resource("mapper/BusinessProcessNodeRunMapper.xml");
+
+        assertTrue(xml.contains("<select id=\"selectTimeline\""));
+        assertTrue(xml.contains("<select id=\"selectWaitingByCorrelation\""));
+        assertTrue(xml.contains("<select id=\"selectRetryableAttempts\""));
+        assertTrue(xml.contains("tenant_id = #{tenantId}"));
+        assertTrue(xml.contains("run_id = #{runId}"));
+        assertTrue(xml.contains("correlation_id = #{correlationId}"));
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertNotNull(input, "找不到 Mapper XML: " + path);
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
+    }
+
+    private String statement(String xml, String tag, String id) {
+        String opening = "<" + tag + " id=\"" + id + "\"";
+        int start = xml.indexOf(opening);
+        int end = xml.indexOf("</" + tag + ">", start);
+        assertTrue(start >= 0 && end > start, "找不到 Mapper statement: " + id);
+        return xml.substring(start, end);
     }
 }
