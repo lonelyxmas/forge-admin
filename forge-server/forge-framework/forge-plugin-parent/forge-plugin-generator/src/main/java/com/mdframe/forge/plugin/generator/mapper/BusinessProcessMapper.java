@@ -28,8 +28,27 @@ public interface BusinessProcessMapper extends BaseMapper<AiBusinessProcess> {
                           @Param("schemaJson") String schemaJson,
                           @Param("schemaHash") String schemaHash,
                           @Param("expectedSchemaHash") String expectedSchemaHash,
+                          @Param("subjectObjectId") Long subjectObjectId,
+                          @Param("subjectObjectCode") String subjectObjectCode,
                           @Param("designStatus") String designStatus,
                           @Param("updateBy") Long updateBy);
+
+    int updateBasicInfo(@Param("tenantId") Long tenantId,
+                        @Param("id") Long id,
+                        @Param("processName") String processName,
+                        @Param("processDescription") String processDescription,
+                        @Param("updateBy") Long updateBy);
+
+    int updateStatus(@Param("tenantId") Long tenantId,
+                     @Param("id") Long id,
+                     @Param("status") Integer status,
+                     @Param("updateBy") Long updateBy);
+
+    int updateDesignStatus(@Param("tenantId") Long tenantId,
+                           @Param("id") Long id,
+                           @Param("expectedSchemaHash") String expectedSchemaHash,
+                           @Param("designStatus") String designStatus,
+                           @Param("updateBy") Long updateBy);
 
     int logicalDelete(@Param("tenantId") Long tenantId,
                       @Param("id") Long id,

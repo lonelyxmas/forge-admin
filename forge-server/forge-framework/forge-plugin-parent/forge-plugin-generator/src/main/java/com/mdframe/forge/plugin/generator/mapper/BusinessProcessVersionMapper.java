@@ -29,5 +29,12 @@ public interface BusinessProcessVersionMapper extends BaseMapper<AiBusinessProce
     Integer selectMaxVersionNo(@Param("tenantId") Long tenantId,
                                @Param("processId") Long processId);
 
+    Long countActiveReferences(@Param("tenantId") Long tenantId,
+                               @Param("processId") Long processId);
+
+    List<AiBusinessProcessVersion> selectCurrentPublishedByApplication(
+            @Param("tenantId") Long tenantId,
+            @Param("applicationId") Long applicationId);
+
     int insertImmutable(AiBusinessProcessVersion version);
 }

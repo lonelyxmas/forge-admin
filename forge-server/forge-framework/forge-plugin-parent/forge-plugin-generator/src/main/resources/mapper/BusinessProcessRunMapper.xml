@@ -171,6 +171,13 @@
         LIMIT #{limit}
     </select>
 
+    <select id="countByProcessId" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM ai_business_process_run
+        WHERE tenant_id = #{tenantId}
+          AND process_id = #{processId}
+    </select>
+
     <update id="compareAndSetStatus">
         UPDATE ai_business_process_run
         SET status = #{nextStatus},

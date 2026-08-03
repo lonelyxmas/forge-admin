@@ -35,6 +35,7 @@ class BusinessProcessMapperContractTest {
     @DisplayName("definition queries fail closed on tenant application subject and deleted rows")
     void definitionQueriesFailClosed() throws IOException {
         String xml = resource("mapper/BusinessProcessMapper.xml");
+        String page = statement(xml, "select", "selectProcessPage");
 
         assertTrue(xml.contains("p.tenant_id = #{tenantId}"));
         assertTrue(xml.contains("p.application_id = #{applicationId}"));
@@ -42,6 +43,8 @@ class BusinessProcessMapperContractTest {
         assertTrue(xml.contains("ao.object_id = p.subject_object_id"));
         assertTrue(xml.contains("o.object_code = p.subject_object_code"));
         assertTrue(xml.contains("p.del_flag = 0"));
+        assertTrue(page.contains("List_Columns"));
+        assertFalse(page.contains("Base_Columns"));
     }
 
     @Test
@@ -50,8 +53,26 @@ class BusinessProcessMapperContractTest {
         String xml = resource("mapper/BusinessProcessMapper.xml");
 
         assertTrue(xml.contains("draft_schema_hash = #{expectedSchemaHash}"));
+        assertTrue(xml.contains("subject_object_id = #{subjectObjectId}"));
+        assertTrue(xml.contains("<update id=\"updateBasicInfo\">"));
+        assertTrue(xml.contains("<update id=\"updateStatus\">"));
+        assertTrue(xml.contains("<update id=\"updateDesignStatus\">"));
         assertTrue(xml.contains("SET del_flag = id"));
         assertTrue(xml.contains("update_by = #{updateBy}"));
+    }
+
+    @Test
+    @DisplayName("deletion reference checks are explicit and tenant scoped")
+    void deletionReferenceChecksAreExplicitAndTenantScoped() throws IOException {
+        String versionXml = resource("mapper/BusinessProcessVersionMapper.xml");
+        String runXml = resource("mapper/BusinessProcessRunMapper.xml");
+
+        assertTrue(versionXml.contains("<select id=\"countActiveReferences\""));
+        assertTrue(versionXml.contains("status = 1"));
+        assertTrue(versionXml.contains("del_flag = 0"));
+        assertTrue(runXml.contains("<select id=\"countByProcessId\""));
+        assertTrue(runXml.contains("tenant_id = #{tenantId}"));
+        assertTrue(runXml.contains("process_id = #{processId}"));
     }
 
     @Test

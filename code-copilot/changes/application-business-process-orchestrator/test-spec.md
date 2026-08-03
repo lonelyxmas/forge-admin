@@ -252,3 +252,12 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 ## 9. 执行记录约定
 
 每轮结果追加到 `execution-log.md`，写明实际命令、Tests run、构建结果、警告、跳过项和本轮服务 PID。未执行的真实 E2E、数据库迁移或浏览器验收不得标记通过。
+
+## 10. Task 7 增量验证
+
+- 控制面服务：创建默认草稿、编码不可变、结构不完整草稿可保存、跨应用主对象拒绝、草稿 hash 409、复制重建图 ID、运行/发布引用删除门禁。
+- API 合同：独立加解密命名空间、`pageNum/pageSize`、CRUD/设计/校验/启停/删除权限注解。
+- 校验上下文：应用对象和字段、发布动作快照、真实权限资源、已绑定且已部署的 Flowable 模型、表单/消息/同应用已发布子流程；能力桥接继续失败关闭。
+- 数据库静态门禁：`V1.0.85` 使用 `tenant_id=1`、显式列、`NOT EXISTS` 和既有运行权限继承；无 Flyway `${...}` 占位符和 `tenant_id=0`。
+- 必跑命令：Task 6/7 的 5 个定向测试类、三份 Mapper XML `xmllint`、目标差异 `git diff --check`、`forge-admin-server -am compile -DskipTests`。
+- 环境门禁：真实 Flyway、权限继承查询、Flowable 已发布/未发布模型响应和加密 HTTP API 留待 Task 19；未执行前不标记通过。

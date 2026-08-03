@@ -52,6 +52,28 @@
         p.update_time
     </sql>
 
+    <sql id="List_Columns">
+        p.id,
+        p.tenant_id,
+        p.application_id,
+        p.process_code,
+        p.process_name,
+        p.process_description,
+        p.subject_object_id,
+        p.subject_object_code,
+        p.draft_schema_hash,
+        p.design_status,
+        p.current_version,
+        p.published_version,
+        p.status,
+        p.del_flag,
+        p.create_by,
+        p.create_time,
+        p.create_dept,
+        p.update_by,
+        p.update_time
+    </sql>
+
     <sql id="Active_Application_And_Subject">
         INNER JOIN ai_business_application a
           ON a.tenant_id = p.tenant_id
@@ -72,7 +94,7 @@
     </sql>
 
     <select id="selectProcessPage" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Columns"/>
+        SELECT <include refid="List_Columns"/>
         FROM ai_business_process p
         <include refid="Active_Application_And_Subject"/>
         WHERE p.tenant_id = #{tenantId}
@@ -119,7 +141,41 @@
         UPDATE ai_business_process
         SET draft_schema_json = #{schemaJson},
             draft_schema_hash = #{schemaHash},
+            subject_object_id = #{subjectObjectId},
+            subject_object_code = #{subjectObjectCode},
             design_status = #{designStatus},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND del_flag = 0
+          AND draft_schema_hash = #{expectedSchemaHash}
+    </update>
+
+    <update id="updateBasicInfo">
+        UPDATE ai_business_process
+        SET process_name = #{processName},
+            process_description = #{processDescription},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND del_flag = 0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE ai_business_process
+        SET status = #{status},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND del_flag = 0
+    </update>
+
+    <update id="updateDesignStatus">
+        UPDATE ai_business_process
+        SET design_status = #{designStatus},
             update_by = #{updateBy},
             update_time = NOW()
         WHERE tenant_id = #{tenantId}

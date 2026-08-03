@@ -89,3 +89,19 @@
 - 结果：主代码编译成功；本轮 `18/18` 测试通过（Schema 10、Mapper 8）。仅保留已记录的既有 deprecation/unchecked 编译提示。
 - 知识沉淀：新增 `pitfalls.md #160`，明确画布样例必须通过真实图校验，不能以 JSON 语法解析代替合法性验证。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 7：流程定义控制面 Service 与 API
+
+- 新增 `BusinessProcessDTO/BusinessProcessSchemaDTO/BusinessProcessVO`、`BusinessProcessService` 和 `BusinessProcessController`：提供应用内分页、详情、创建、同应用复制、基础信息更新、草稿 hash CAS、校验、启停和逻辑删除；Controller 使用独立 `/ai/business/process` 命名空间、加解密与细粒度权限。
+- 草稿语义：新流程初始化为规范化“手动开始 → 成功结束”；所有 JSON/前端雪花 ID 保持字符串；流程编码创建后不可修改；结构不完整草稿可保存并保持 `DRAFT`，跨应用对象、编码不一致、Secret/自由 URL 等高风险错误禁止保存。
+- 复制与删除：副本生成新编码并重建全部节点/边 ID，清空发布版本、运行状态和旧来源；存在任意 run 或有效发布版本时拒绝逻辑删除。
+- 校验目录：使用当前应用对象/字段、不可变对象发布快照中的动作、表单/消息、同应用已发布子流程和真实 `sys_resource` 权限目录；Flowable 模型必须同时属于当前应用对象绑定且 `status=1/deploymentId` 有效，流程服务不可用时失败关闭。
+- 权限补丁：新增 `V1.0.85__add_business_process_start_permission.sql`，不修改已提交 `V1.0.84`；注册 `ai:businessProcess:start`，仅从既有 `ai:businessApplication:runtime` 角色继承通用 API 门禁，正式运行仍需发布快照动作权限、可见条件、记录状态和数据权限二次校验。
+- Mapper 扩展：基础信息/状态/设计状态更新、Schema CAS 同步主对象、run 引用计数、有效发布引用计数和当前已发布子流程查询全部写在 XML；流程列表不返回完整草稿正文。
+- 定向测试命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessSchemaValidatorTest,BusinessProcessMapperContractTest,BusinessProcessServiceTest,BusinessProcessControllerTest,BusinessProcessValidationContextResolverTest test`。
+- 定向测试结果：`31/31` 通过（Schema 10、Mapper 9、Service 8、Controller 3、Context Resolver 1），Failures/Errors/Skipped 均为 0。
+- 静态检查：`xmllint --noout` 校验三份变更 Mapper XML 通过；`V1.0.85` Flyway placeholder 和 `tenant_id=0` 扫描无输出，`tenant_id=1/NOT EXISTS/ai:businessProcess:start` 命中预期；目标文件 `git diff --check` 通过。
+- 聚合编译命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -pl forge-admin-server -am compile -DskipTests`。
+- 聚合编译结果：47/47 模块 `BUILD SUCCESS`，generator 与 admin 装配链路通过；仅有既有 deprecation、unchecked 和 Lombok `@Builder` warning，无新增阻断。
+- 跳过项：未执行真实 MySQL/Flyway、权限继承数据查询、加密 HTTP API、Flowable 已发布/未发布模型联调和浏览器验证；原因是本轮遵循用户偏好不启动真实服务、不改数据库或 Flowable 运行态，留待 Task 19 环境门禁。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

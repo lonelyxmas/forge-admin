@@ -33,6 +33,9 @@ public interface BusinessProcessRunMapper extends BaseMapper<AiBusinessProcessRu
                                                       @Param("before") LocalDateTime before,
                                                       @Param("limit") Integer limit);
 
+    Long countByProcessId(@Param("tenantId") Long tenantId,
+                          @Param("processId") Long processId);
+
     int compareAndSetStatus(@Param("tenantId") Long tenantId,
                             @Param("runId") Long runId,
                             @Param("expectedStatus") String expectedStatus,

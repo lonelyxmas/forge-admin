@@ -9,7 +9,7 @@
 - [x] 用户明确确认 `spec.md` 第 9 章全部默认决策并完成 HARD-GATE 记录。
 - [x] 进入 `/apply` 前读取根 `AGENTS.md`、当前 `spec.md/tasks.md`、`code-copilot/memory/*` 和相关 Skill。
 - [x] 创建 `test-spec.md` 与 `execution-log.md`，并读取 `code-copilot/rules/automated-testing-standard.md` 形成增量验证基线。
-- [x] 实施前重新扫描 `forge-server/db/migration`；当前最新为并行变更中的 `V1.0.82`，本变更使用连续未占用的 `V1.0.83/V1.0.84`，不修改 `V1.0.82`。
+- [x] 实施前重新扫描 `forge-server/db/migration`；当前最新为并行变更中的 `V1.0.82`，本变更使用连续未占用的 `V1.0.83/V1.0.84`，Task 7 以新增 `V1.0.85` 补齐运行时开始权限，不修改已提交脚本或并行 `V1.0.82`。
 - [x] 已确认节点调用合同：审批复用 `BusinessFlowService/FlowClient`，消息与企业协同复用 `BusinessActionStepExecutor + MessageService/CollaborationMessageChannel`；统一能力平台提供 `CapabilityRegistry`，但 generator 尚无受控桥接，完成 Task 9B 前节点必须标为不可用；不提供自由 URL。
 - [ ] 确认采购审批样例和目标测试应用的当前发布版本、旧触发器、FLOW Binding、业务动作及运行中 Flowable 实例基线。
 - [x] 所有 19 位 ID 在前端和 JSON 中按字符串处理；所有业务数据继续使用 `businessKey=<objectCode>:<recordId>`。
@@ -184,6 +184,8 @@
 
 ## Task 7：流程定义控制面 Service 与 API
 
+**状态：completed（2026-08-03）**。已实现应用级 CRUD、草稿 hash CAS、同应用复制、校验上下文、启停与删除引用门禁；定向测试 31/31、Mapper XML、权限迁移静态检查和 Admin 47 模块聚合编译通过。
+
 - **目标**：提供应用级流程 CRUD、草稿保存、校验、启停和逻辑删除，普通调用不得读取其它应用资产。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/dto/businessprocess/BusinessProcessDTO.java` — 新增创建/修改 DTO。
@@ -191,6 +193,8 @@
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/vo/businessprocess/BusinessProcessVO.java` — 新增列表和设计详情响应。
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessprocess/BusinessProcessService.java` — 新增控制面和乐观并发服务。
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/controller/BusinessProcessController.java` — 新增 `/ai/business/process` 管理接口和权限注解。
+  - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/businessprocess/validation/BusinessProcessValidationContextResolver.java` — 从应用对象、发布快照、权限目录和已发布 Flowable 模型解析失败关闭的校验上下文。
+  - `forge-server/db/migration/V1.0.85__add_business_process_start_permission.sql` — 注册默认手动开始权限并仅继承既有应用运行权限角色。
 - **关键签名**：
   ```java
   public BusinessProcessVO create(BusinessProcessDTO dto);
