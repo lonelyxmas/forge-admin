@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessProcessMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="application_id" property="applicationId"/>
+        <result column="process_code" property="processCode"/>
+        <result column="process_name" property="processName"/>
+        <result column="process_description" property="processDescription"/>
+        <result column="subject_object_id" property="subjectObjectId"/>
+        <result column="subject_object_code" property="subjectObjectCode"/>
+        <result column="draft_schema_json" property="draftSchemaJson"/>
+        <result column="draft_schema_hash" property="draftSchemaHash"/>
+        <result column="design_status" property="designStatus"/>
+        <result column="current_version" property="currentVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="status" property="status"/>
+        <result column="legacy_source_type" property="legacySourceType"/>
+        <result column="legacy_source_id" property="legacySourceId"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        p.id,
+        p.tenant_id,
+        p.application_id,
+        p.process_code,
+        p.process_name,
+        p.process_description,
+        p.subject_object_id,
+        p.subject_object_code,
+        p.draft_schema_json,
+        p.draft_schema_hash,
+        p.design_status,
+        p.current_version,
+        p.published_version,
+        p.status,
+        p.legacy_source_type,
+        p.legacy_source_id,
+        p.del_flag,
+        p.create_by,
+        p.create_time,
+        p.create_dept,
+        p.update_by,
+        p.update_time
+    </sql>
+
+    <sql id="Active_Application_And_Subject">
+        INNER JOIN ai_business_application a
+          ON a.tenant_id = p.tenant_id
+         AND a.id = p.application_id
+         AND a.status = 1
+         AND a.del_flag = 0
+        INNER JOIN ai_business_application_object ao
+          ON ao.tenant_id = p.tenant_id
+         AND ao.application_id = p.application_id
+         AND ao.object_id = p.subject_object_id
+         AND ao.del_flag = 0
+        INNER JOIN ai_business_object o
+          ON o.tenant_id = p.tenant_id
+         AND o.id = p.subject_object_id
+         AND o.object_code = p.subject_object_code
+         AND o.status = 1
+         AND o.del_flag = 0
+    </sql>
+
+    <select id="selectProcessPage" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process p
+        <include refid="Active_Application_And_Subject"/>
+        WHERE p.tenant_id = #{tenantId}
+          AND p.application_id = #{applicationId}
+          AND p.del_flag = 0
+        <if test="keyword != null and keyword != ''">
+          AND (
+            p.process_code LIKE CONCAT('%', #{keyword}, '%')
+            OR p.process_name LIKE CONCAT('%', #{keyword}, '%')
+            OR p.process_description LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="status != null">
+          AND p.status = #{status}
+        </if>
+        <if test="designStatus != null and designStatus != ''">
+          AND p.design_status = #{designStatus}
+        </if>
+        ORDER BY p.update_time DESC, p.id DESC
+    </select>
+
+    <select id="selectActiveById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process p
+        <include refid="Active_Application_And_Subject"/>
+        WHERE p.tenant_id = #{tenantId}
+          AND p.id = #{id}
+          AND p.del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectActiveByCode" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process p
+        <include refid="Active_Application_And_Subject"/>
+        WHERE p.tenant_id = #{tenantId}
+          AND p.application_id = #{applicationId}
+          AND p.process_code = #{processCode}
+          AND p.del_flag = 0
+        LIMIT 1
+    </select>
+
+    <update id="updateDraftSchema">
+        UPDATE ai_business_process
+        SET draft_schema_json = #{schemaJson},
+            draft_schema_hash = #{schemaHash},
+            design_status = #{designStatus},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND del_flag = 0
+          AND draft_schema_hash = #{expectedSchemaHash}
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE ai_business_process
+        SET del_flag = id,
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND del_flag = 0
+    </update>
+
+</mapper>

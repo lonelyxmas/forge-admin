@@ -31,3 +31,14 @@
 - 安全发现：旧 `SendMessageActionStepExecutor#resolveUserId` 在无 Session 时回退 `1L`，违反本变更“无合法普通用户失败关闭”；列入 Task 9B 修复，业务流程运行时不得复用该回退。
 - 跳过项：未连接 MySQL，未执行新库/存量库/重复 Flyway 和 `forge_schema_history` 检查；原因是本轮不自动修改真实数据库，留待 Task 19 目标环境验收。
 - 已启动服务：无。
+
+## 2026-08-03 Task 2：流程定义持久层
+
+- 新增 `AiBusinessProcess`：覆盖流程定义全部字段，`delFlag` 显式使用 `@TableLogic(value = "0", delval = "id")`。
+- 新增 `BusinessProcessMapper/BusinessProcessMapper.xml`：分页和按 ID/编码查询同时限定 `tenant_id`、有效应用、有效应用对象关联、启用业务对象和 `del_flag=0`，共享对象不能绕过应用关联。
+- 并发与删除：草稿保存要求当前 `draft_schema_hash` 命中客户端基线后才更新；逻辑删除原子写入当前行 `id` 并记录更新人。
+- 新增 `BusinessProcessMapperContractTest` 3 项：覆盖主键墓碑、租户/应用/对象失败关闭和草稿 hash CAS。
+- 首次命令：默认 Java 8 执行 Maven 失败，错误为 `无效的目标发行版: 17`，未进入源码编译；确认本机已有 Homebrew JDK 17 后仅对验证命令临时切换。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；测试 `3/3` 通过。现有 `BusinessFlowService` deprecation 与 `BusinessObjectDesignerService` unchecked 编译提示未新增失败。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

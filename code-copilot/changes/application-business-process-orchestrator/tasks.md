@@ -83,6 +83,8 @@
 
 ## Task 2：流程定义持久层
 
+**状态：completed（2026-08-03）**。已实现租户/应用/主对象失败关闭查询、草稿 hash CAS 和主键墓碑逻辑删除，并通过 3 项 Mapper 契约测试。
+
 - **目标**：建立流程定义实体、Mapper XML 和活动记录查询，所有查询显式限定租户与逻辑删除。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/domain/entity/AiBusinessProcess.java` — 新增流程定义实体和显式 `@TableLogic(value="0", delval="id")`。
