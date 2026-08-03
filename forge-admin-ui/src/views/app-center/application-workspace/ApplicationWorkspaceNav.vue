@@ -66,7 +66,7 @@ const sectionDescription = {
   overview: '状态与待办',
   objects: '字段、表单、列表和规则',
   entries: '菜单、访问方式与权限',
-  automation: '流程与触发器',
+  automation: '触发、审批与自动化',
   enhancements: '动作与扩展',
   permissions: '访问与数据权限',
   releases: '检查、版本、历史',
@@ -75,6 +75,7 @@ const sectionDescription = {
 const sectionLabel = {
   objects: '业务对象',
   entries: '页面入口',
+  automation: '业务流程',
 }
 </script>
 

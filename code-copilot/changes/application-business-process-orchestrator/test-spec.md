@@ -280,3 +280,15 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 - 草稿交互：覆盖防抖自动保存、显式检查/保存、dirty 事件、服务端 hash 冲突提示、刷新入口、浏览器离开保护、问题定位及撤销重做；保存成功由容器状态回写基线。
 - 必跑命令：两份业务流程设计器测试、Task 14 的 converter/canvas 回归、`src/components/business-process-designer` ESLint、目标差异 `git diff --check` 和生产构建。
 - 环境门禁：Task 15 仍是独立组件，尚未接入应用工作台路由和真实控制面 API；浏览器页面操作、加密草稿 CAS、目录刷新和路由离开确认留待 Task 16 一并验收。
+
+## 13. Task 16 增量验证
+
+- 控制面 API：分页、详情、创建、复制、更新、设计草稿、Schema CAS、校验、启停和逻辑删除全部走 `/ai/business/process` 加密请求；Schema 保存必须携带服务端 `draftSchemaHash`，前端稳定 hash 只用于判断并发保存期间是否又有本地修改。
+- 应用面板：覆盖应用内分页搜索、新建时选择当前应用对象、复制、全屏设计、启停和逻辑删除；流程筛选写入应用路由 query，设计页 `returnTo` 返回后保留原应用分区和筛选状态。
+- 全屏设计页：覆盖字符串 ID、业务对象字段/动作、已发布 Flowable 模型、表单资产、消息模板和同应用已发布子流程目录；受治理能力桥接与定时服务账号目录未交付时保持空目录并失败关闭。
+- 保存与校验：覆盖防抖/显式保存映射到服务端 CAS、保存期间再次编辑的队列保存、HTTP 409 冲突、脏草稿先保存后服务端校验、关闭真实 Flowable 设计器后刷新模型和表单目录。
+- 离开保护：浏览器刷新继续由 `BusinessProcessDesigner` 的 `beforeunload` 保护；应用路由跳转由全屏页 `onBeforeRouteLeave` 二次确认，返回路径只接受本地绝对路径。
+- 未交付边界：运行记录与迁移预览入口显示为“待接入”并禁用，不定义 Task 13/17 尚未实现的前端 API 地址。
+- 必跑命令：Task 16 API/工作台两份测试、Task 14/15 的业务画布与 BPMN 转换回归、目标 ESLint、目标文件空白检查和生产构建。
+- 浏览器验证：用 Playwright 启动临时 Vite，拦截控制面数据但执行真实应用路由和组件；验证工作台、全屏画布、字符串 ID、服务端 CAS、服务端校验、筛选返回和未保存离开确认，浏览器 console/page error 必须为 0。
+- 环境门禁：浏览器拦截只验证前端真实装配，不等价于加密 HTTP、真实 Flowable 或权限数据联调；Admin/Flow、MySQL/Flyway 和 Flowable 运行态继续留待 Task 19 目标环境验收。

@@ -134,3 +134,19 @@
 - 既有警告：仍为组件命名冲突、动态/静态 import 和 CSS `//` 注释等仓库存量构建警告，本任务未新增阻断。
 - 跳过项：未启动 Vite/浏览器，原因是 Task 15 独立组件尚未接入可访问路由；浏览器与路由离开验收将在 Task 16 完成应用工作台/全屏设计页后执行。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
 - 已启动服务：无。
+
+## 2026-08-03 Task 16：应用工作台业务流程核心面板
+
+- TDD 红灯：新增 Task 16 工作台测试后首次运行因 `ApplicationProcessPanel.vue`、`business-process.[processId].vue` 和 `api/business-process.js` 不存在而在模块解析阶段失败，符合先冻结接口、列表和设计页交互合同再实现的预期。
+- 控制面 API：新增 `api/business-process.js`，分页、详情、创建、复制、更新、设计草稿、Schema CAS、校验、启停和逻辑删除均显式使用加密请求；保存 payload 使用服务端返回的 64 位 `draftSchemaHash`，不把前端 dirty-check hash 当并发基线。
+- 应用工作台：新增克制的流程列表，支持搜索、状态筛选、分页、新建、复制、设计、启停、逻辑删除和进入应用发布；新建流程只选择当前应用对象，流程编码由服务端生成。旧“业务流程/触发器/动作”三按钮组件不再作为应用工作台主入口。
+- 路由与返回：`automation` 分区文案改为“业务流程 / 触发、审批与自动化”，新增 `/app-center/business-process/:processId` 全屏路由；筛选同步到 route query，`returnTo` 返回原应用和筛选状态，且只接受本地路径。
+- 全屏设计页：加载真实 designer 草稿和对象字段、对象动作、Flowable 模型、表单、消息模板、同应用已发布子流程目录；所有 ID 归一为字符串。关闭内嵌 Flowable 设计器后刷新模型和表单目录；受治理能力与服务账号目录未交付时保持空目录并失败关闭。
+- 草稿可靠性：保存期间继续编辑会排队再次 CAS 保存；脏草稿执行检查前先保存；HTTP 409 显示冲突并禁止覆盖；浏览器刷新和路由离开分别由 `beforeunload` 与 `onBeforeRouteLeave` 保护。
+- 未交付边界：运行记录和迁移预览在面板中显示“待接入”禁用态，未创建 Task 13/17 尚不存在的 API。
+- 定向与回归测试：Node `v20.19.0` 下执行 Task 16 API/工作台测试与业务流程设计器、BPMN roundtrip、JSON→BPMN、FlowCanvas、layout-engine 共 8 个测试文件，结果 `62/62` 通过。
+- 静态检查：Task 16 API、页面、路由、测试及 `src/components/business-process-designer` 目标 ESLint 通过；目标文件空白检查通过。
+- 浏览器验证：用 `webapp-testing` Playwright 脚本临时启动 Vite `127.0.0.1:3017`，通过 34 次受控请求装配真实应用工作台和全屏设计路由；验证旧三入口消失、筛选保留、节点新增、CAS 保存使用 `aaaaaaaa...` 服务端 hash、服务端校验和未保存离开取消。workspace/designer 截图保存于 `/tmp/forge-task16-workspace.png`、`/tmp/forge-task16-designer.png`，console error 与 page error 均为 0；脚本结束后 Vite 已停止。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8845` 个模块并成功构建（`built in 1m 58s`）；保留仓库既有组件命名冲突、动态/静态 import 和 CSS `//` 注释警告，无新增阻断。
+- 跳过项：未启动 Admin/Flow，未执行真实加密 HTTP、权限资源查询、MySQL/Flyway、Flowable 模型保存/部署或运行态变更；这些仍由 Task 19 目标环境验收。
+- 已启动服务：浏览器验证仅临时启动 Vite，已由脚本停止；未遗留 `3017` 监听进程。

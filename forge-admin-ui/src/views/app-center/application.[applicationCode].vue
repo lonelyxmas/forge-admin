@@ -82,7 +82,7 @@ import ApplicationWorkspaceNav from './application-workspace/ApplicationWorkspac
 
 const ApplicationObjectsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationObjectsPanel.vue'))
 const ApplicationEntriesPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationEntriesPanel.vue'))
-const ApplicationAutomationPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationAutomationPanel.vue'))
+const ApplicationProcessPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationProcessPanel.vue'))
 const ApplicationExtensionsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationExtensionsPanel.vue'))
 const ApplicationPublishPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationPublishPanel.vue'))
 const ApplicationCapabilityPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationCapabilityPanel.vue'))
@@ -140,7 +140,7 @@ const panelComponents = {
   overview: ApplicationOverviewPanel,
   objects: ApplicationObjectsPanel,
   entries: ApplicationEntriesPanel,
-  automation: ApplicationAutomationPanel,
+  automation: ApplicationProcessPanel,
   enhancements: ApplicationExtensionsPanel,
   permissions: ApplicationCapabilityPanel,
   releases: ApplicationPublishPanel,
@@ -241,6 +241,17 @@ function selectSection(section) {
 }
 
 function openFullScreenDesigner(payload = {}) {
+  if (payload.processId) {
+    router.push({
+      name: 'BusinessProcessDesigner',
+      params: { processId: String(payload.processId) },
+      query: {
+        applicationCode: application.value?.applicationCode || route.params.applicationCode,
+        returnTo: route.fullPath,
+      },
+    })
+    return
+  }
   if (!payload.objectCode && !payload.objectId)
     return
   const matchedObject = (workspace.value?.objects || []).find(item => (
