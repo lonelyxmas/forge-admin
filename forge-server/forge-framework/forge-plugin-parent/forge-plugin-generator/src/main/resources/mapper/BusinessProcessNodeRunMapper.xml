@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessProcessNodeRunMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessNodeRun">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="run_id" property="runId"/>
+        <result column="node_id" property="nodeId"/>
+        <result column="node_type" property="nodeType"/>
+        <result column="attempt_no" property="attemptNo"/>
+        <result column="status" property="status"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="correlation_id" property="correlationId"/>
+        <result column="input_summary" property="inputSummary"/>
+        <result column="output_summary" property="outputSummary"/>
+        <result column="error_code" property="errorCode"/>
+        <result column="error_summary" property="errorSummary"/>
+        <result column="next_retry_time" property="nextRetryTime"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        run_id,
+        node_id,
+        node_type,
+        attempt_no,
+        status,
+        idempotency_key,
+        correlation_id,
+        input_summary,
+        output_summary,
+        error_code,
+        error_summary,
+        next_retry_time,
+        start_time,
+        end_time,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <insert id="insertAttempt">
+        INSERT INTO ai_business_process_node_run (
+          id, tenant_id, run_id, node_id, node_type, attempt_no, status,
+          idempotency_key, correlation_id, input_summary, output_summary,
+          error_code, error_summary, next_retry_time, start_time, end_time,
+          create_by, create_time, create_dept, update_by, update_time
+        ) VALUES (
+          #{id}, #{tenantId}, #{runId}, #{nodeId}, #{nodeType}, #{attemptNo}, 'PENDING',
+          #{idempotencyKey}, #{correlationId}, #{inputSummary}, #{outputSummary},
+          #{errorCode}, #{errorSummary}, #{nextRetryTime}, #{startTime}, #{endTime},
+          #{createBy}, NOW(), #{createDept}, #{updateBy}, NOW()
+        )
+    </insert>
+
+    <update id="claimAttempt">
+        UPDATE ai_business_process_node_run
+        SET status = 'RUNNING',
+            start_time = NOW(),
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="completeAttempt">
+        UPDATE ai_business_process_node_run
+        SET status = #{nextStatus},
+            correlation_id = #{correlationId},
+            output_summary = #{outputSummary},
+            error_code = #{errorCode},
+            error_summary = #{errorSummary},
+            next_retry_time = #{nextRetryTime},
+            end_time = CASE
+              WHEN #{nextStatus} IN ('SUCCESS', 'FAILED', 'CANCELED') THEN NOW()
+              ELSE NULL
+            END,
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND status = #{expectedStatus}
+        <choose>
+          <when test="expectedCorrelationId != null and expectedCorrelationId != ''">
+            AND correlation_id = #{expectedCorrelationId}
+          </when>
+          <otherwise>
+            AND correlation_id IS NULL
+          </otherwise>
+        </choose>
+    </update>
+
+</mapper>

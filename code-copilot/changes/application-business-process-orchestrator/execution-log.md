@@ -51,3 +51,14 @@
 - 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
 - 结果：主代码编译成功；累计 Mapper 契约测试 `4/4` 通过。仅保留 Task 2 已记录的既有 deprecation/unchecked 编译提示。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 4：流程运行与节点运行持久层
+
+- 新增 `AiBusinessProcessRun/AiBusinessProcessNodeRun`：运行记录固定应用、流程版本、业务对象/记录、可信 actor 与组织；节点记录按 `runId + nodeId + attemptNo` 新增尝试，不声明普通删除字段。
+- 新增 `BusinessProcessRunMapper/BusinessProcessRunMapper.xml`：提供运行 ID、幂等键、Flowable 实例等待关联和租户内恢复扫描；恢复范围区分 PENDING、超时 RUNNING/WAITING 和到期 FAILED。
+- 流程强 CAS：更新同时匹配 `tenantId + runId + expectedStatus + expectedCurrentNodeId + expectedProcessInstanceId`；终态记录结束时间，失败重试仅允许 `FAILED -> PENDING` 且原子增加次数。
+- 新增 `BusinessProcessNodeRunMapper/BusinessProcessNodeRunMapper.xml`：插入尝试强制 PENDING，认领只允许 PENDING，完成/等待/回调消费同时匹配旧状态和 correlation；失败尝试不提供复活 SQL。
+- XML 检查：`xmllint --noout BusinessProcessRunMapper.xml BusinessProcessNodeRunMapper.xml` 通过；目标文件 `git diff --check` 通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `6/6` 通过。仅保留已记录的既有 deprecation/unchecked 编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

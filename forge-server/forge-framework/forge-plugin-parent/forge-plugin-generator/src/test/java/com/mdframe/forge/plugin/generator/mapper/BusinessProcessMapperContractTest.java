@@ -70,6 +70,32 @@ class BusinessProcessMapperContractTest {
         assertFalse(xml.contains("UPDATE ai_business_process_version"));
     }
 
+    @Test
+    @DisplayName("process run transitions are tenant state node and correlation guarded")
+    void processRunTransitionsUseStrongCas() throws IOException {
+        String xml = resource("mapper/BusinessProcessRunMapper.xml");
+
+        assertTrue(xml.contains("tenant_id = #{tenantId}"));
+        assertTrue(xml.contains("status = #{expectedStatus}"));
+        assertTrue(xml.contains("current_node_id = #{expectedCurrentNodeId}"));
+        assertTrue(xml.contains("flow_process_instance_id = #{expectedProcessInstanceId}"));
+        assertTrue(xml.contains("status = 'WAITING'"));
+        assertTrue(xml.contains("retry_count &lt; #{maxRetryCount}"));
+        assertFalse(xml.contains("DELETE FROM ai_business_process_run"));
+    }
+
+    @Test
+    @DisplayName("node attempts are claimed once and waiting callbacks match correlation")
+    void nodeAttemptsUseStrongCas() throws IOException {
+        String xml = resource("mapper/BusinessProcessNodeRunMapper.xml");
+
+        assertTrue(xml.contains("<insert id=\"insertAttempt\">"));
+        assertTrue(xml.contains("AND status = 'PENDING'"));
+        assertTrue(xml.contains("AND status = #{expectedStatus}"));
+        assertTrue(xml.contains("correlation_id = #{expectedCorrelationId}"));
+        assertFalse(xml.contains("DELETE FROM ai_business_process_node_run"));
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertNotNull(input, "找不到 Mapper XML: " + path);

@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessProcessRunMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessRun">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="application_id" property="applicationId"/>
+        <result column="process_id" property="processId"/>
+        <result column="process_version_id" property="processVersionId"/>
+        <result column="process_code" property="processCode"/>
+        <result column="subject_object_code" property="subjectObjectCode"/>
+        <result column="subject_record_id" property="subjectRecordId"/>
+        <result column="business_key" property="businessKey"/>
+        <result column="trigger_type" property="triggerType"/>
+        <result column="source_event_id" property="sourceEventId"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="actor_type" property="actorType"/>
+        <result column="actor_user_id" property="actorUserId"/>
+        <result column="active_org_id" property="activeOrgId"/>
+        <result column="status" property="status"/>
+        <result column="current_node_id" property="currentNodeId"/>
+        <result column="flow_process_instance_id" property="flowProcessInstanceId"/>
+        <result column="context_snapshot" property="contextSnapshot"/>
+        <result column="retry_count" property="retryCount"/>
+        <result column="next_retry_time" property="nextRetryTime"/>
+        <result column="error_code" property="errorCode"/>
+        <result column="error_summary" property="errorSummary"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        application_id,
+        process_id,
+        process_version_id,
+        process_code,
+        subject_object_code,
+        subject_record_id,
+        business_key,
+        trigger_type,
+        source_event_id,
+        idempotency_key,
+        actor_type,
+        actor_user_id,
+        active_org_id,
+        status,
+        current_node_id,
+        flow_process_instance_id,
+        context_snapshot,
+        retry_count,
+        next_retry_time,
+        error_code,
+        error_summary,
+        start_time,
+        end_time,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectRunById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_run
+        WHERE tenant_id = #{tenantId}
+          AND id = #{runId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByIdempotencyKey" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_run
+        WHERE tenant_id = #{tenantId}
+          AND process_version_id = #{processVersionId}
+          AND idempotency_key = #{idempotencyKey}
+        LIMIT 1
+    </select>
+
+    <select id="selectWaitingByProcessInstanceId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_run
+        WHERE tenant_id = #{tenantId}
+          AND flow_process_instance_id = #{processInstanceId}
+          AND status = 'WAITING'
+        LIMIT 1
+    </select>
+
+    <select id="selectRecoverableRuns" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_run
+        WHERE tenant_id = #{tenantId}
+          AND (
+            status = 'PENDING'
+            OR (status IN ('RUNNING', 'WAITING') AND update_time &lt;= #{before})
+            OR (status = 'FAILED' AND next_retry_time IS NOT NULL AND next_retry_time &lt;= #{before})
+          )
+        ORDER BY
+          CASE status
+            WHEN 'PENDING' THEN 1
+            WHEN 'RUNNING' THEN 2
+            WHEN 'WAITING' THEN 3
+            ELSE 4
+          END,
+          COALESCE(next_retry_time, update_time) ASC,
+          id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="compareAndSetStatus">
+        UPDATE ai_business_process_run
+        SET status = #{nextStatus},
+            current_node_id = #{currentNodeId},
+            flow_process_instance_id = #{processInstanceId},
+            next_retry_time = #{nextRetryTime},
+            error_code = #{errorCode},
+            error_summary = #{errorSummary},
+            start_time = CASE
+              WHEN #{nextStatus} = 'RUNNING' AND start_time IS NULL THEN NOW()
+              ELSE start_time
+            END,
+            end_time = CASE
+              WHEN #{nextStatus} IN ('SUCCESS', 'FAILED', 'CANCELED') THEN NOW()
+              ELSE NULL
+            END,
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{runId}
+          AND status = #{expectedStatus}
+        <choose>
+          <when test="expectedCurrentNodeId != null and expectedCurrentNodeId != ''">
+            AND current_node_id = #{expectedCurrentNodeId}
+          </when>
+          <otherwise>
+            AND current_node_id IS NULL
+          </otherwise>
+        </choose>
+        <choose>
+          <when test="expectedProcessInstanceId != null and expectedProcessInstanceId != ''">
+            AND flow_process_instance_id = #{expectedProcessInstanceId}
+          </when>
+          <otherwise>
+            AND flow_process_instance_id IS NULL
+          </otherwise>
+        </choose>
+    </update>
+
+    <update id="retryFailed">
+        UPDATE ai_business_process_run
+        SET status = 'PENDING',
+            retry_count = retry_count + 1,
+            next_retry_time = NULL,
+            error_code = NULL,
+            error_summary = NULL,
+            end_time = NULL,
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{runId}
+          AND status = 'FAILED'
+          AND retry_count &lt; #{maxRetryCount}
+    </update>
+
+</mapper>

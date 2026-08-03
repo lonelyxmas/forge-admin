@@ -1,0 +1,45 @@
+package com.mdframe.forge.plugin.generator.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessRun;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Mapper
+public interface BusinessProcessRunMapper extends BaseMapper<AiBusinessProcessRun> {
+
+    AiBusinessProcessRun selectRunById(@Param("tenantId") Long tenantId,
+                                        @Param("runId") Long runId);
+
+    AiBusinessProcessRun selectByIdempotencyKey(@Param("tenantId") Long tenantId,
+                                                 @Param("processVersionId") Long processVersionId,
+                                                 @Param("idempotencyKey") String idempotencyKey);
+
+    AiBusinessProcessRun selectWaitingByProcessInstanceId(
+            @Param("tenantId") Long tenantId,
+            @Param("processInstanceId") String processInstanceId);
+
+    List<AiBusinessProcessRun> selectRecoverableRuns(@Param("tenantId") Long tenantId,
+                                                      @Param("before") LocalDateTime before,
+                                                      @Param("limit") Integer limit);
+
+    int compareAndSetStatus(@Param("tenantId") Long tenantId,
+                            @Param("runId") Long runId,
+                            @Param("expectedStatus") String expectedStatus,
+                            @Param("expectedCurrentNodeId") String expectedCurrentNodeId,
+                            @Param("expectedProcessInstanceId") String expectedProcessInstanceId,
+                            @Param("nextStatus") String nextStatus,
+                            @Param("currentNodeId") String currentNodeId,
+                            @Param("processInstanceId") String processInstanceId,
+                            @Param("nextRetryTime") LocalDateTime nextRetryTime,
+                            @Param("errorCode") String errorCode,
+                            @Param("errorSummary") String errorSummary);
+
+    int retryFailed(@Param("tenantId") Long tenantId,
+                    @Param("runId") Long runId,
+                    @Param("maxRetryCount") Integer maxRetryCount,
+                    @Param("updateBy") Long updateBy);
+}

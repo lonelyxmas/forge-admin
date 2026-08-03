@@ -121,6 +121,8 @@
 
 ## Task 4：流程运行与节点运行持久层
 
+**状态：completed（2026-08-03）**。已实现 run/node 实体、幂等读取、租户内恢复扫描、流程与节点强 CAS、失败重试计数和不可复活节点尝试。
+
 - **目标**：为异步执行、审批等待、回调恢复、重试和时间线提供持久化状态与 CAS。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/domain/entity/AiBusinessProcessRun.java` — 新增流程运行实体。
