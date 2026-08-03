@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessProcessVersionMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessVersion">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="application_id" property="applicationId"/>
+        <result column="process_id" property="processId"/>
+        <result column="process_code" property="processCode"/>
+        <result column="version_no" property="versionNo"/>
+        <result column="application_version" property="applicationVersion"/>
+        <result column="publish_run_id" property="publishRunId"/>
+        <result column="schema_version" property="schemaVersion"/>
+        <result column="schema_json" property="schemaJson"/>
+        <result column="schema_hash" property="schemaHash"/>
+        <result column="dependency_snapshot_json" property="dependencySnapshotJson"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="published_by" property="publishedBy"/>
+        <result column="status" property="status"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        application_id,
+        process_id,
+        process_code,
+        version_no,
+        application_version,
+        publish_run_id,
+        schema_version,
+        schema_json,
+        schema_hash,
+        dependency_snapshot_json,
+        publish_time,
+        published_by,
+        status,
+        del_flag,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <sql id="List_Columns">
+        id,
+        tenant_id,
+        application_id,
+        process_id,
+        process_code,
+        version_no,
+        application_version,
+        publish_run_id,
+        schema_version,
+        schema_hash,
+        publish_time,
+        published_by,
+        status,
+        del_flag,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectPublishedVersion" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND process_id = #{processId}
+          AND version_no = #{versionNo}
+          AND status = 1
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectPublishedVersionById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND id = #{versionId}
+          AND status = 1
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectVersions" resultMap="BaseResultMap">
+        SELECT <include refid="List_Columns"/>
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND process_id = #{processId}
+          AND del_flag = 0
+        ORDER BY version_no DESC, id DESC
+    </select>
+
+    <select id="selectPublishedByApplication" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND application_id = #{applicationId}
+          AND status = 1
+          AND del_flag = 0
+        <choose>
+          <when test="processIds != null and processIds.size() > 0">
+            AND process_id IN
+            <foreach collection="processIds" item="processId" open="(" close=")" separator=",">
+              #{processId}
+            </foreach>
+          </when>
+          <otherwise>
+            AND 1 = 0
+          </otherwise>
+        </choose>
+        ORDER BY process_id ASC, version_no DESC, id DESC
+    </select>
+
+    <select id="selectMaxVersionNo" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(version_no), 0)
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND process_id = #{processId}
+          AND del_flag = 0
+    </select>
+
+    <insert id="insertImmutable">
+        INSERT INTO ai_business_process_version (
+          id, tenant_id, application_id, process_id, process_code,
+          version_no, application_version, publish_run_id, schema_version,
+          schema_json, schema_hash, dependency_snapshot_json, publish_time,
+          published_by, status, del_flag,
+          create_by, create_time, create_dept, update_by, update_time
+        ) VALUES (
+          #{id}, #{tenantId}, #{applicationId}, #{processId}, #{processCode},
+          #{versionNo}, #{applicationVersion}, #{publishRunId}, #{schemaVersion},
+          #{schemaJson}, #{schemaHash}, #{dependencySnapshotJson}, #{publishTime},
+          #{publishedBy}, #{status}, 0,
+          #{createBy}, NOW(), #{createDept}, #{updateBy}, NOW()
+        )
+    </insert>
+
+</mapper>

@@ -42,3 +42,12 @@
 - 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
 - 结果：主代码编译成功；测试 `3/3` 通过。现有 `BusinessFlowService` deprecation 与 `BusinessObjectDesignerService` unchecked 编译提示未新增失败。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 3：流程版本持久层
+
+- 新增 `AiBusinessProcessVersion`：完整承载应用版本、流程版本、规范化协议、依赖快照与发布审计，`delFlag` 使用主键墓碑逻辑删除。
+- 新增 `BusinessProcessVersionMapper/BusinessProcessVersionMapper.xml`：提供固定版本、版本 ID、版本列表、应用选定流程集合和最大版本号查询；全部显式限定租户和未删除记录，正式版本读取额外限定 `status=1`。
+- 不可变合同：只新增 `insertImmutable`，XML 不存在 `<update>` 或 `UPDATE ai_business_process_version`；空 `processIds` 集合使用 `AND 1 = 0` 失败关闭，避免误查全应用版本。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `4/4` 通过。仅保留 Task 2 已记录的既有 deprecation/unchecked 编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

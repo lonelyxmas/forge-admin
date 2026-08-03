@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.generator.mapper;
 
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcessVersion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,6 +50,24 @@ class BusinessProcessMapperContractTest {
         assertTrue(xml.contains("draft_schema_hash = #{expectedSchemaHash}"));
         assertTrue(xml.contains("SET del_flag = id"));
         assertTrue(xml.contains("update_by = #{updateBy}"));
+    }
+
+    @Test
+    @DisplayName("published version uses primary-key tombstone and exposes no update SQL")
+    void publishedVersionIsImmutable() throws IOException, NoSuchFieldException {
+        TableLogic tableLogic = AiBusinessProcessVersion.class.getDeclaredField("delFlag")
+                .getAnnotation(TableLogic.class);
+        String xml = resource("mapper/BusinessProcessVersionMapper.xml");
+
+        assertNotNull(tableLogic);
+        assertEquals("0", tableLogic.value());
+        assertEquals("id", tableLogic.delval());
+        assertTrue(xml.contains("<insert id=\"insertImmutable\">"));
+        assertTrue(xml.contains("tenant_id = #{tenantId}"));
+        assertTrue(xml.contains("del_flag = 0"));
+        assertTrue(xml.contains("AND 1 = 0"));
+        assertFalse(xml.contains("<update"));
+        assertFalse(xml.contains("UPDATE ai_business_process_version"));
     }
 
     private String resource(String path) throws IOException {

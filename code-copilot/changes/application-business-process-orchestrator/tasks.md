@@ -103,6 +103,8 @@
 
 ## Task 3：流程版本持久层
 
+**状态：completed（2026-08-03）**。已实现不可变版本实体、固定版本/应用版本读取和显式插入合同；Mapper XML 不提供任何更新版本正文的路径。
+
 - **目标**：建立不可变流程版本和依赖快照存储，禁止已发布版本原地修改。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/domain/entity/AiBusinessProcessVersion.java` — 新增版本实体并显式声明 `@TableLogic(value="0", delval="id")`。
