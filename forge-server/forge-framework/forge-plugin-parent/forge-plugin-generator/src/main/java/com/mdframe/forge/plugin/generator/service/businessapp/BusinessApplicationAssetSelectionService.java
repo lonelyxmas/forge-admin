@@ -4,9 +4,11 @@ import com.mdframe.forge.plugin.generator.constant.BusinessApplicationObjectRole
 import com.mdframe.forge.plugin.generator.constant.BusinessExtensionStatus;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPublishDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionMapper;
+import com.mdframe.forge.plugin.generator.mapper.BusinessProcessMapper;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -37,17 +39,21 @@ public class BusinessApplicationAssetSelectionService {
     private final BusinessApplicationObjectService applicationObjectService;
     private final BusinessAppMapper businessAppMapper;
     private final BusinessExtensionMapper extensionMapper;
+    private final BusinessProcessMapper processMapper;
 
     ResolvedSelection resolveContext(Long applicationId, BusinessApplicationPublishDTO dto) {
         List<BusinessApplicationObjectVO> objects = applicationObjectService.list(applicationId);
         List<AiBusinessApp> entries = businessAppMapper.selectByApplicationId(resolveTenantId(), applicationId);
         List<AiBusinessExtension> extensions = extensionMapper.selectByApplicationId(resolveTenantId(), applicationId);
+        List<AiBusinessProcess> processes = processMapper.selectByApplicationId(resolveTenantId(), applicationId);
         Map<Long, BusinessApplicationObjectVO> objectMap = objects.stream()
                 .collect(Collectors.toMap(BusinessApplicationObjectVO::getObjectId, Function.identity()));
         Map<Long, AiBusinessApp> entryMap = entries.stream()
                 .collect(Collectors.toMap(AiBusinessApp::getId, Function.identity()));
         Map<Long, AiBusinessExtension> extensionMap = extensions.stream()
                 .collect(Collectors.toMap(AiBusinessExtension::getId, Function.identity()));
+        Map<Long, AiBusinessProcess> processMap = processes.stream()
+                .collect(Collectors.toMap(AiBusinessProcess::getId, Function.identity()));
 
         BusinessApplicationAssetSelectionVO selection = new BusinessApplicationAssetSelectionVO();
         Set<Long> objectIds = initialSelection(dto == null ? null : dto.getSelectedObjectIds(), objectMap.keySet());
@@ -61,9 +67,18 @@ public class BusinessApplicationAssetSelectionService {
                 ? defaultPublishableExtensionIds(extensions)
                 : requestedExtensionIds.stream().filter(java.util.Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        boolean includeAutomation = dto == null || !Boolean.FALSE.equals(dto.getIncludeAutomation());
+        List<Long> requestedProcessIds = dto == null ? null : dto.getSelectedProcessIds();
+        Set<Long> processIds = !includeAutomation
+                ? new LinkedHashSet<>()
+                : requestedProcessIds == null || requestedProcessIds.isEmpty()
+                ? defaultPublishableProcessIds(processes)
+                : requestedProcessIds.stream().filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         validateOwned("业务对象", objectIds, objectMap.keySet());
         validateOwned("访问入口", entryIds, entryMap.keySet());
         validateOwned("业务扩展", extensionIds, extensionMap.keySet());
+        validateOwned("业务流程", processIds, processMap.keySet());
         long skippedDraftCount = extensions.stream()
                 .filter(extension -> BusinessExtensionStatus.DRAFT.equals(extension.getStatus()))
                 .filter(extension -> !extensionIds.contains(extension.getId()))
@@ -104,8 +119,10 @@ public class BusinessApplicationAssetSelectionService {
         selection.setObjectIds(List.copyOf(objectIds));
         selection.setEntryIds(List.copyOf(entryIds));
         selection.setExtensionIds(List.copyOf(extensionIds));
-        selection.setIncludeAutomation(dto == null || !Boolean.FALSE.equals(dto.getIncludeAutomation()));
-        return new ResolvedSelection(selection, List.copyOf(objects), List.copyOf(entries), List.copyOf(extensions));
+        selection.setProcessIds(List.copyOf(processIds));
+        selection.setIncludeAutomation(includeAutomation);
+        return new ResolvedSelection(selection, List.copyOf(objects), List.copyOf(entries),
+                List.copyOf(extensions), List.copyOf(processes));
     }
 
     private Set<Long> initialSelection(List<Long> requested, Set<Long> allIds) {
@@ -140,6 +157,17 @@ public class BusinessApplicationAssetSelectionService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    static Set<Long> defaultPublishableProcessIds(List<AiBusinessProcess> processes) {
+        if (processes == null || processes.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+        return processes.stream()
+                .filter(process -> Integer.valueOf(1).equals(process.getStatus()))
+                .map(AiBusinessProcess::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private void validateOwned(String assetName, Set<Long> selected, Set<Long> owned) {
         if (!owned.containsAll(selected)) {
             throw new BusinessException("发布选择中包含不属于当前应用的" + assetName);
@@ -166,6 +194,7 @@ public class BusinessApplicationAssetSelectionService {
     record ResolvedSelection(BusinessApplicationAssetSelectionVO selection,
                              List<BusinessApplicationObjectVO> objects,
                              List<AiBusinessApp> entries,
-                             List<AiBusinessExtension> extensions) {
+                             List<AiBusinessExtension> extensions,
+                             List<AiBusinessProcess> processes) {
     }
 }

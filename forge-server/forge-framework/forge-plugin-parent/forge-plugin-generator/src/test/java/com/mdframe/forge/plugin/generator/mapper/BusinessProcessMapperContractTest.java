@@ -94,6 +94,24 @@ class BusinessProcessMapperContractTest {
     }
 
     @Test
+    @DisplayName("application publish locks definitions and projects immutable versions")
+    void applicationPublishUsesLockedProjectionContracts() throws IOException {
+        String processXml = resource("mapper/BusinessProcessMapper.xml");
+        String versionXml = resource("mapper/BusinessProcessVersionMapper.xml");
+        String publishLock = statement(processXml, "select", "selectForPublish");
+        String appVersion = statement(
+                versionXml, "select", "selectPublishedForApplicationVersion");
+
+        assertTrue(publishLock.contains("p.status = 1"));
+        assertTrue(publishLock.contains("FOR UPDATE"));
+        assertTrue(processXml.contains("<update id=\"updatePublishedProjection\">"));
+        assertTrue(processXml.contains("draft_schema_hash = #{schemaHash}"));
+        assertTrue(processXml.contains("<update id=\"clearPublishedProjectionExcept\">"));
+        assertTrue(appVersion.contains("application_version = #{applicationVersion}"));
+        assertTrue(appVersion.contains("del_flag = 0"));
+    }
+
+    @Test
     @DisplayName("process run transitions are tenant state node and correlation guarded")
     void processRunTransitionsUseStrongCas() throws IOException {
         String xml = resource("mapper/BusinessProcessRunMapper.xml");

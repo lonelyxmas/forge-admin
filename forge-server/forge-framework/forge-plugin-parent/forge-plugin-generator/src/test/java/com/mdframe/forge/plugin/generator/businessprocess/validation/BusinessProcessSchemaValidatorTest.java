@@ -154,6 +154,7 @@ class BusinessProcessSchemaValidatorTest {
     void staleDependenciesFailClosed() {
         BusinessProcessValidationContext context = validContext()
                 .setObjectIdsByCode(Map.of("other", "9"))
+                .setPublishedObjectVersionIdsByCode(Map.of("other", "90"))
                 .setFieldsByObjectCode(Map.of("order", Set.of("id")));
 
         BusinessProcessValidationVO result = validator.validate(
@@ -186,6 +187,7 @@ class BusinessProcessSchemaValidatorTest {
         return new BusinessProcessValidationContext()
                 .setExpectedProcessCode("order_created_update")
                 .setObjectIdsByCode(Map.of("order", "1900000000000001001"))
+                .setPublishedObjectVersionIdsByCode(Map.of("order", "2900000000000001001"))
                 .setFieldsByObjectCode(Map.of("order", Set.of("id", "status")))
                 .setKnownPermissions(Set.of("ai:businessProcess:start"));
     }
@@ -193,6 +195,8 @@ class BusinessProcessSchemaValidatorTest {
     private BusinessProcessValidationContext frozenExampleContext() {
         return new BusinessProcessValidationContext()
                 .setObjectIdsByCode(Map.of("sample_purchase_order", "1900000000000001001"))
+                .setPublishedObjectVersionIdsByCode(
+                        Map.of("sample_purchase_order", "2900000000000001001"))
                 .setFieldsByObjectCode(Map.of("sample_purchase_order", Set.of(
                         "id", "status", "orderNo", "title", "amountCent", "autoSubmit",
                         "applicantId", "expectedArrivalDate", "ownerId")))

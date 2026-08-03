@@ -1,8 +1,13 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.mdframe.forge.plugin.generator.constant.BusinessExtensionStatus;
+import com.mdframe.forge.plugin.generator.businessprocess.schema.BusinessProcessSchema;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessSchemaValidator;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContext;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContextResolver;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPublishDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
@@ -16,6 +21,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableMapp
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPermissionSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckItemVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -47,6 +53,8 @@ public class BusinessApplicationReadinessService {
     private final BusinessBindingMapper bindingMapper;
     private final BusinessApplicationPageDependencyInspector pageDependencyInspector;
     private final BusinessObjectTableMappingService tableMappingService;
+    private final BusinessProcessSchemaValidator processSchemaValidator;
+    private final BusinessProcessValidationContextResolver processValidationContextResolver;
 
     public BusinessApplicationReadinessVO check(Long applicationId) {
         BusinessApplicationVO application = applicationService.publishContext(applicationId);
@@ -155,18 +163,68 @@ public class BusinessApplicationReadinessService {
             }
         }
 
+        checkProcesses(application, resolved, selection, issues);
+
         List<AiBusinessBinding> bindings = null;
         if (Boolean.TRUE.equals(selection.getIncludeAutomation())) {
             bindings = bindingMapper.selectByApplication(resolveTenantId(), applicationId);
-            boolean hasFlow = bindings.stream().anyMatch(binding -> Integer.valueOf(1).equals(binding.getStatus())
-                    && ("FLOW".equals(binding.getBindingType()) || "APPROVAL".equals(binding.getBindingType())));
-            if (!hasFlow) {
-                issues.add(issue("FLOW_OPTIONAL", WARN, "尚未绑定应用级流程",
-                        "流程不是发布必需项；需要审批或自动流转时可继续配置。",
+            if (selection.getProcessIds().isEmpty()) {
+                issues.add(issue("PROCESS_OPTIONAL", WARN, "尚未配置应用级业务流程",
+                        "业务流程不是发布必需项；需要审批或自动流转时可在业务流程画布中配置。",
                         "automation", "automation", "APPLICATION", applicationId, application.getApplicationCode()));
             }
         }
         return new EvaluationResult(buildReadiness(issues), permissionSummaries, bindings, objectContexts);
+    }
+
+    private void checkProcesses(
+            BusinessApplicationVO application,
+            BusinessApplicationAssetSelectionService.ResolvedSelection resolved,
+            BusinessApplicationAssetSelectionVO selection,
+            List<BusinessApplicationReadinessIssueVO> issues) {
+        if (!Boolean.TRUE.equals(selection.getIncludeAutomation())) {
+            return;
+        }
+        Set<Long> selectedIds = new HashSet<>(selection.getProcessIds());
+        for (AiBusinessProcess process : resolved.processes()) {
+            if (!selectedIds.contains(process.getId())) {
+                continue;
+            }
+            String processName = StringUtils.defaultIfBlank(
+                    process.getProcessName(), process.getProcessCode());
+            if (!Integer.valueOf(1).equals(process.getStatus())) {
+                issues.add(issue("PROCESS_DISABLED", BLOCK, "业务流程已停用",
+                        processName + " 当前处于停用状态。", "automation", "automation", "PROCESS",
+                        process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessSchema schema;
+            try {
+                schema = processSchemaValidator.normalize(process.getDraftSchemaJson());
+            } catch (IllegalArgumentException exception) {
+                issues.add(issue("PROCESS_SCHEMA_INVALID", BLOCK, "业务流程协议无效",
+                        processName + "：" + StringUtils.abbreviate(exception.getMessage(), 300),
+                        "automation", "automation", "PROCESS", process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessValidationContext context;
+            try {
+                context = processValidationContextResolver.resolve(
+                        resolveTenantId(), application.getId(), process.getProcessCode(), schema);
+            } catch (RuntimeException exception) {
+                issues.add(issue("PROCESS_DEPENDENCY_CHECK_FAILED", BLOCK, "业务流程依赖检查失败",
+                        processName + "：无法解析当前应用的受治理依赖。",
+                        "automation", "automation", "PROCESS", process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessValidationVO validation = processSchemaValidator.validate(schema, context);
+            validation.getIssues().stream()
+                    .filter(item -> "ERROR".equals(item.getLevel()))
+                    .forEach(item -> issues.add(issue(
+                            "PROCESS_" + item.getCode(), BLOCK, "业务流程发布检查未通过",
+                            processName + "：" + item.getMessage(),
+                            "automation", "automation", "PROCESS", process.getId(), process.getProcessCode())));
+        }
     }
 
     private void checkObject(BusinessApplicationObjectVO object,

@@ -314,6 +314,7 @@ class BusinessProcessServiceTest {
         return new BusinessProcessValidationContext()
                 .setExpectedProcessCode(processCode)
                 .setObjectIdsByCode(Map.of("order", "20"))
+                .setPublishedObjectVersionIdsByCode(Map.of("order", "120"))
                 .setFieldsByObjectCode(Map.of("order", Set.of("id", "status")))
                 .setKnownPermissions(Set.of("ai:businessProcess:start"));
     }

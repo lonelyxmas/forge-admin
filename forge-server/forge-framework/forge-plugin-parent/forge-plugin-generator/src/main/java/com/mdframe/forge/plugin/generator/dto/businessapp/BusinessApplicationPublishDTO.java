@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 应用协调发布参数。对象和入口空选择表示全部；扩展空选择时自动包含已测试、已启用或已停用扩展，
- * 未测试草稿保留但不阻断当前应用发布。
+ * 应用协调发布参数。对象和入口空选择表示全部；流程空选择时包含全部已启用流程；
+ * 扩展空选择时自动包含已测试、已启用或已停用扩展，未测试草稿保留但不阻断当前应用发布。
  */
 @Data
 public class BusinessApplicationPublishDTO {
@@ -17,6 +17,8 @@ public class BusinessApplicationPublishDTO {
     private List<Long> selectedEntryIds = new ArrayList<>();
 
     private List<Long> selectedExtensionIds = new ArrayList<>();
+
+    private List<Long> selectedProcessIds = new ArrayList<>();
 
     private Boolean includeAutomation = true;
 

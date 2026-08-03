@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.service.businessapp;
 import com.mdframe.forge.plugin.generator.constant.BusinessExtensionStatus;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +39,22 @@ class BusinessApplicationAssetSelectionServiceTest {
         ));
 
         assertEquals(Set.of(3L, 4L), selected);
+    }
+
+    @Test
+    @DisplayName("default process selection includes only enabled application processes")
+    void defaultProcessSelectionOnlyIncludesEnabledProcesses() {
+        AiBusinessProcess disabled = new AiBusinessProcess();
+        disabled.setId(1L);
+        disabled.setStatus(0);
+        AiBusinessProcess enabled = new AiBusinessProcess();
+        enabled.setId(2L);
+        enabled.setStatus(1);
+
+        Set<Long> selected = BusinessApplicationAssetSelectionService.defaultPublishableProcessIds(
+                List.of(disabled, enabled));
+
+        assertEquals(Set.of(2L), selected);
     }
 
     private AiBusinessExtension extension(Long id, String status) {

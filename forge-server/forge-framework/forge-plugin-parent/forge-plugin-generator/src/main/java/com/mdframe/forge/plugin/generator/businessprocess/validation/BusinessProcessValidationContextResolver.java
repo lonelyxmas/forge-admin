@@ -77,15 +77,17 @@ public class BusinessProcessValidationContextResolver {
         Map<Long, AiBusinessObjectDesignVersion> publishedVersions = loadPublishedObjectVersions(
                 tenantId, objectsById.keySet());
         Map<String, Set<String>> fieldsByObjectCode = new LinkedHashMap<>();
+        Map<String, String> publishedObjectVersionIdsByCode = new LinkedHashMap<>();
         Set<String> availableBusinessActionCodes = new LinkedHashSet<>();
         for (BusinessApplicationObjectVO object : objects) {
             AiBusinessObjectDesignVersion published = publishedVersions.get(object.getObjectId());
-            Set<String> fields = extractFields(object.getModelSchema());
-            if (fields.isEmpty() && published != null) {
-                fields = extractFields(published.getModelSnapshot());
-            }
+            String fieldSnapshot = published != null && StringUtils.isNotBlank(published.getModelSnapshot())
+                    ? published.getModelSnapshot() : object.getModelSchema();
+            Set<String> fields = extractFields(fieldSnapshot);
             fieldsByObjectCode.put(object.getObjectCode(), fields);
             if (published != null) {
+                publishedObjectVersionIdsByCode.put(
+                        object.getObjectCode(), String.valueOf(published.getId()));
                 availableBusinessActionCodes.addAll(extractPublishedActionCodes(
                         published.getDesignerOptionsSnapshot()));
             }
@@ -95,6 +97,7 @@ public class BusinessProcessValidationContextResolver {
                 .setExpectedProcessCode(expectedProcessCode)
                 .setObjectIdsByCode(objectIdsByCode)
                 .setFieldsByObjectCode(fieldsByObjectCode)
+                .setPublishedObjectVersionIdsByCode(publishedObjectVersionIdsByCode)
                 .setAvailableBusinessActionCodes(availableBusinessActionCodes)
                 .setKnownPermissions(resolveKnownPermissions(tenantId, schema))
                 .setCapabilityBridgeAvailable(false);
@@ -205,7 +208,11 @@ public class BusinessProcessValidationContextResolver {
             }
             Map<String, Object> model = response.getData();
             Integer status = integer(model.get("status"));
+            Integer version = integer(model.get("version"));
             return Integer.valueOf(1).equals(status)
+                    && version != null
+                    && version > 0
+                    && StringUtils.isNotBlank(text(model.get("processDefinitionId")))
                     && StringUtils.isNotBlank(text(model.get("deploymentId")));
         } catch (Exception exception) {
             log.debug("业务流程校验无法确认流程模型发布状态: modelKey={}", modelKey, exception);

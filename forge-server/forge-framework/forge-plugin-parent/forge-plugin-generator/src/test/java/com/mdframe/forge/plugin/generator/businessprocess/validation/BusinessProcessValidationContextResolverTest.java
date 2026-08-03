@@ -72,6 +72,8 @@ class BusinessProcessValidationContextResolverTest {
         when(flowClientProvider.getIfAvailable()).thenReturn(flowClient);
         when(flowClient.getModelByKey("order_approval")).thenReturn(FlowResult.success(Map.of(
                 "status", 1,
+                "version", 3,
+                "processDefinitionId", "order_approval:3:100",
                 "deploymentId", "deployment-1")));
         when(flowService.getFormAssets("order")).thenReturn(Map.of(
                 "formAssets", List.of(Map.of("formKey", "order_form"))));
@@ -90,6 +92,8 @@ class BusinessProcessValidationContextResolverTest {
 
         assertEquals("20", context.getObjectIdsByCode().get("order"));
         assertEquals(java.util.Set.of("id", "status"), context.getFieldsByObjectCode().get("order"));
+        assertEquals(String.valueOf(objectVersion.getId()),
+                context.getPublishedObjectVersionIdsByCode().get("order"));
         assertTrue(context.getAvailableFlowModelKeys().contains("order_approval"));
         assertTrue(context.getAvailableFormAssetKeys().contains("order_form"));
         assertTrue(context.getAvailableBusinessActionCodes().contains("confirm"));
@@ -105,6 +109,15 @@ class BusinessProcessValidationContextResolverTest {
         BusinessProcessValidationContext unpublishedContext = resolver.resolve(
                 1L, 10L, "order_submit", schema);
         assertFalse(unpublishedContext.getAvailableFlowModelKeys().contains("order_approval"));
+
+        when(flowClient.getModelByKey("order_approval")).thenReturn(FlowResult.success(Map.of(
+                "status", 1,
+                "version", 0,
+                "processDefinitionId", "order_approval:0:100",
+                "deploymentId", "deployment-0")));
+        BusinessProcessValidationContext invalidVersionContext = resolver.resolve(
+                1L, 10L, "order_submit", schema);
+        assertFalse(invalidVersionContext.getAvailableFlowModelKeys().contains("order_approval"));
     }
 
     private BusinessApplicationObjectVO applicationObject() {
@@ -118,6 +131,7 @@ class BusinessProcessValidationContextResolverTest {
 
     private AiBusinessObjectDesignVersion objectVersion() {
         AiBusinessObjectDesignVersion version = new AiBusinessObjectDesignVersion();
+        version.setId(501L);
         version.setObjectId(20L);
         version.setDesignerOptionsSnapshot("{\"actions\":[{\"actionCode\":\"confirm\",\"status\":1}]}");
         return version;

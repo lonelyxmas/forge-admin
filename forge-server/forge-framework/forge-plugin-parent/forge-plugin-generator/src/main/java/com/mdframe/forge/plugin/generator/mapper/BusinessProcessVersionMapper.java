@@ -18,6 +18,11 @@ public interface BusinessProcessVersionMapper extends BaseMapper<AiBusinessProce
     AiBusinessProcessVersion selectPublishedVersionById(@Param("tenantId") Long tenantId,
                                                          @Param("versionId") Long versionId);
 
+    AiBusinessProcessVersion selectPublishedForApplicationVersion(
+            @Param("tenantId") Long tenantId,
+            @Param("processId") Long processId,
+            @Param("applicationVersion") Integer applicationVersion);
+
     List<AiBusinessProcessVersion> selectVersions(@Param("tenantId") Long tenantId,
                                                    @Param("processId") Long processId);
 

@@ -322,6 +322,8 @@
 
 ## Task 12：应用发布流程版本和依赖快照
 
+**状态：completed（2026-08-04）**。应用协调发布已新增可恢复 `PROCESSES` 步骤，默认选择应用内全部启用流程，并以候选快照中的草稿 hash 固定恢复边界；候选缺少所选流程摘要时失败关闭，不回退当前草稿。每个应用版本生成或幂等复用不可变流程版本，依赖快照固定业务对象设计版本及 Flowable `model/正版本号/processDefinitionId/deploymentId`。应用快照已增加 `processes/publishedProcessVersions/runtimeActions` 白名单字段，回滚只恢复流程发布投影、不修改历史运行实例。`runtimeActions` 本任务仅冻结稳定空字段，实际 `START_PROCESS` 编译仍由 Task 13 交付。
+
 - **目标**：把业务流程纳入应用就绪检查、不可变快照、可恢复发布和回滚。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/constant/BusinessApplicationPublishStep.java` — 在 `SNAPSHOT` 后增加 `PROCESSES`。

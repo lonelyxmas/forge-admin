@@ -93,6 +93,17 @@
         LIMIT 1
     </select>
 
+    <select id="selectPublishedForApplicationVersion" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_process_version
+        WHERE tenant_id = #{tenantId}
+          AND process_id = #{processId}
+          AND application_version = #{applicationVersion}
+          AND status = 1
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
     <select id="selectVersions" resultMap="BaseResultMap">
         SELECT <include refid="List_Columns"/>
         FROM ai_business_process_version

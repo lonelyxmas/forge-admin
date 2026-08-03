@@ -1,5 +1,10 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessSchemaValidator;
+import com.mdframe.forge.plugin.generator.businessprocess.schema.BusinessProcessSchema;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContext;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContextResolver;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
@@ -8,6 +13,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableFieldMappingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableMappingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +46,10 @@ class BusinessApplicationReadinessServiceTest {
     private BusinessApplicationPageDependencyInspector pageDependencyInspector;
     @Mock
     private BusinessObjectTableMappingService tableMappingService;
+    @Mock
+    private BusinessProcessSchemaValidator processSchemaValidator;
+    @Mock
+    private BusinessProcessValidationContextResolver processValidationContextResolver;
 
     private BusinessApplicationReadinessService service;
     private BusinessApplicationObjectVO object;
@@ -48,7 +58,8 @@ class BusinessApplicationReadinessServiceTest {
     void setUp() {
         service = new BusinessApplicationReadinessService(
                 applicationService, selectionService, objectPublishService, permissionService,
-                bindingMapper, pageDependencyInspector, tableMappingService);
+                bindingMapper, pageDependencyInspector, tableMappingService,
+                processSchemaValidator, processValidationContextResolver);
         object = object();
         BusinessApplicationVO application = application();
         BusinessApplicationAssetSelectionVO selection = new BusinessApplicationAssetSelectionVO();
@@ -56,7 +67,7 @@ class BusinessApplicationReadinessServiceTest {
         selection.setIncludeAutomation(false);
         BusinessApplicationAssetSelectionService.ResolvedSelection resolved
                 = new BusinessApplicationAssetSelectionService.ResolvedSelection(
-                        selection, List.of(object), List.of(), List.of());
+                        selection, List.of(object), List.of(), List.of(), List.of());
         BusinessPublishCheckVO objectCheck = new BusinessPublishCheckVO();
         objectCheck.setPublishable(true);
 
@@ -122,6 +133,46 @@ class BusinessApplicationReadinessServiceTest {
                 .map(issue -> issue.getMessage())
                 .anyMatch(message -> message.contains("存在未映射业务列 approval_code")
                         && !message.contains("department_name")));
+    }
+
+    @Test
+    @DisplayName("process graph and concurrency errors block application publish")
+    void processValidationErrorsBlockPublish() {
+        AiBusinessProcess process = new AiBusinessProcess();
+        process.setId(301L);
+        process.setApplicationId(101L);
+        process.setProcessCode("leave_submit");
+        process.setProcessName("离职审批");
+        process.setDraftSchemaJson("{}");
+        process.setStatus(1);
+        BusinessApplicationAssetSelectionVO selection = new BusinessApplicationAssetSelectionVO();
+        selection.setObjectIds(List.of(object.getObjectId()));
+        selection.setProcessIds(List.of(process.getId()));
+        selection.setIncludeAutomation(true);
+        BusinessApplicationAssetSelectionService.ResolvedSelection resolved
+                = new BusinessApplicationAssetSelectionService.ResolvedSelection(
+                        selection, List.of(object), List.of(), List.of(), List.of(process));
+        BusinessProcessSchema schema = new BusinessProcessSchema();
+        BusinessProcessValidationContext context = new BusinessProcessValidationContext();
+        BusinessProcessValidationVO validation = new BusinessProcessValidationVO();
+        validation.addError("APPROVAL_CONCURRENCY_INVALID", "审批并发策略无效", null,
+                "policies.approvalConcurrency", "使用单活动审批策略");
+        validation.finish();
+
+        when(selectionService.resolveContext(101L, null)).thenReturn(resolved);
+        when(tableMappingService.getTableMapping(object.getObjectId()))
+                .thenReturn(mapping("IN_SYNC", List.of(), 0));
+        when(processSchemaValidator.normalize("{}")).thenReturn(schema);
+        when(processValidationContextResolver.resolve(1L, 101L, "leave_submit", schema))
+                .thenReturn(context);
+        when(processSchemaValidator.validate(schema, context)).thenReturn(validation);
+        when(bindingMapper.selectByApplication(1L, 101L)).thenReturn(List.of());
+
+        BusinessApplicationReadinessVO readiness = service.check(101L);
+
+        assertFalse(readiness.getReady());
+        assertTrue(readiness.getIssues().stream()
+                .anyMatch(issue -> "PROCESS_APPROVAL_CONCURRENCY_INVALID".equals(issue.getIssueCode())));
     }
 
     private static BusinessApplicationVO application() {

@@ -150,3 +150,22 @@
 - 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8845` 个模块并成功构建（`built in 1m 58s`）；保留仓库既有组件命名冲突、动态/静态 import 和 CSS `//` 注释警告，无新增阻断。
 - 跳过项：未启动 Admin/Flow，未执行真实加密 HTTP、权限资源查询、MySQL/Flyway、Flowable 模型保存/部署或运行态变更；这些仍由 Task 19 目标环境验收。
 - 已启动服务：浏览器验证仅临时启动 Vite，已由脚本停止；未遗留 `3017` 监听进程。
+
+## 2026-08-04 Task 12：应用发布流程版本和依赖快照
+
+- TDD 红灯：先新增 `BusinessProcessPublishServiceTest` 和应用发布步骤断言；首次执行 `mvn -Penable-tests ... -Dtest=BusinessProcessPublishServiceTest,BusinessApplicationPhaseFiveSecurityTest` 在测试编译阶段因 `BusinessProcessPublishService` 尚不存在而失败，符合先冻结版本合同再实现的预期。
+- 发布选择与候选冻结：`BusinessApplicationPublishDTO/AssetSelectionVO` 增加流程 ID；空选择默认包含应用内全部启用流程，`includeAutomation=false` 时明确为空。候选快照保存流程白名单信息、完整结构化协议和 `draftSchemaHash`，恢复不得读取后来修改的新草稿。
+- 不可变版本：新增 `BusinessProcessPublishService/BusinessProcessPublishResult/BusinessProcessSnapshot`；发布前锁定流程定义，以 `(tenant_id, process_id, application_version, del_flag)` 幂等复用，hash 不同返回 409；新版本只执行 `insertImmutable`，无版本 UPDATE SQL。
+- 依赖固定：流程版本依赖快照固定对象设计版本；Flowable 必须同时具备 `status=1`、正版本号、`processDefinitionId` 和 `deploymentId`，并保存模型 ID、版本与部署标识；表单、业务动作、消息模板、能力和子流程只保存稳定白名单引用。
+- 应用发布与恢复：固定步骤变为 `PRECHECK → SNAPSHOT → PROCESSES → OBJECTS → ENTRIES → PAGE_MENUS → EXTENSIONS → COMMIT`；`PROCESSES` 被计入部分成功副作用，步骤成功后把结构化 `publishedProcessVersions` 写回运行单快照。`runtimeActions` 仅冻结空字段，Task 13 再编译手动动作。
+- 回滚边界：来源快照中的历史 `processVersionId` 只恢复流程定义的 `published_version/design_status` 投影，并清理未选择投影；不读取或更新运行表，因此已开始实例继续固定自己的流程版本。
+- 就绪检查：正式流程来源切换为 `businessProcessJson`；复用 Schema/图/依赖校验阻断对象版本、字段、审批部署版本、结束路径、子流程递归、单活动审批策略和手动权限问题。旧 binding 仅作为兼容快照保留，不再决定是否存在应用级流程。
+- 定向验证命令：`JAVA_HOME=<JDK17> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessPublishServiceTest,BusinessApplicationPhaseFiveSecurityTest,BusinessApplicationAssetSelectionServiceTest,BusinessApplicationReadinessServiceTest,BusinessProcessMapperContractTest,BusinessProcessSchemaValidatorTest,BusinessProcessValidationContextResolverTest,BusinessProcessServiceTest,BusinessApplicationPublishRunServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 边界复核红灯：补充“候选缺少流程 hash”和“Flowable 版本号为 0”回归后，相关两类测试共 `7` 项首次运行出现 `3` 个预期失败，确认协调发布仍会回退当前草稿且零版本会被校验/发布接受。
+- 边界修正：协调发布存在 `publishRunId` 时强制要求每个所选流程都有候选 hash；Flowable 模型在校验目录和依赖固定阶段均要求版本号 `> 0`。相关两类测试重跑 `7/7` 通过。
+- 定向验证结果：Task 12 九类测试最终 `46/46` 通过，Failures/Errors/Skipped 均为 0；覆盖幂等重试、hash 冲突、候选 hash 缺失失败关闭、Flowable 非正版本拒绝、对象/Flowable 依赖固定、历史投影恢复、默认流程选择、快照字段和就绪阻断。
+- Mapper 静态检查：`xmllint --noout BusinessProcessMapper.xml BusinessProcessVersionMapper.xml` 通过；目标差异 `git diff --check` 通过。
+- 聚合编译：边界修正后重跑 `JAVA_HOME=<JDK17> mvn -pl forge-admin-server -am -DskipTests compile`，47/47 模块 `BUILD SUCCESS`；仅保留仓库既有 deprecation、unchecked 和 Lombok `@Builder` warning。
+- generator 全量基线（边界修正前）：执行 `mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator test`，共 561 项，555 项通过，2 failures + 4 errors。失败为未被 Task 12 修改的 `FormulaExecutionEngineLookupTest`、`FormulaValueMaskerTest`、`BusinessBindingApplicationTargetTest`、`BusinessExtensionVersionServiceTest`（2 项）和 `LowcodeRuntimeConfigBuilderTest`；Task 12 定向类全部通过，本轮未越界修改这些存量失败。边界修正后未重复消耗时间执行同一已知失败全量，改以覆盖修改类的 `46/46` 定向测试和 47 模块聚合编译闭环。
+- 跳过项：未启动 Admin/Flow，未执行 Flyway、真实数据库发布/回滚、加密 HTTP 或 Flowable 部署联调；本任务没有新增数据库脚本，真实新旧实例并存验收留待 Task 19。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

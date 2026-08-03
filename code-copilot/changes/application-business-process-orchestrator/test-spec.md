@@ -292,3 +292,16 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 - 必跑命令：Task 16 API/工作台两份测试、Task 14/15 的业务画布与 BPMN 转换回归、目标 ESLint、目标文件空白检查和生产构建。
 - 浏览器验证：用 Playwright 启动临时 Vite，拦截控制面数据但执行真实应用路由和组件；验证工作台、全屏画布、字符串 ID、服务端 CAS、服务端校验、筛选返回和未保存离开确认，浏览器 console/page error 必须为 0。
 - 环境门禁：浏览器拦截只验证前端真实装配，不等价于加密 HTTP、真实 Flowable 或权限数据联调；Admin/Flow、MySQL/Flyway 和 Flowable 运行态继续留待 Task 19 目标环境验收。
+
+## 14. Task 12 增量验证
+
+- 不可变版本：相同 `applicationVersion + processId` 重试必须复用同一流程版本；已存在版本与候选草稿 hash 不同必须返回冲突，不允许覆盖或生成第二个版本。
+- 候选冻结：应用运行单的 `processes[].draftSchemaHash` 是 `PROCESSES` 恢复边界；候选缺少任一所选流程摘要时必须拒绝发布，不得回退读取当前草稿；流程草稿随后变化时，已生成版本仍按候选 hash 复用并将当前设计投影保持为 `CHANGED`。
+- 依赖快照：对象依赖固定 `objectId/designVersionId/versionNo/publishVersion`；审批依赖固定 `modelKey/modelId/modelVersion/processDefinitionId/deploymentId`；表单、业务动作、消息模板、能力和子流程只保存白名单稳定引用。
+- 应用快照：候选快照包含 `processes[]`，正式快照包含结构化 `publishedProcessVersions[]`；`runtimeActions[]` 在 Task 12 保持稳定空字段，由 Task 13 从同一不可变版本编译。
+- 发布恢复：`PROCESSES` 位于 `SNAPSHOT` 后并属于有副作用可恢复步骤；失败运行标记 `PARTIAL`，恢复使用原应用版本和原候选 hash。
+- 回滚：读取来源快照的 `processVersionId` 恢复定义表 `published_version` 投影并清理未选投影；不更新 `ai_business_process_run`，运行中实例继续持有自己的 `processVersionId`。
+- 就绪检查：发布前复用完整 Schema 校验，阻断对象未发布、字段失效、Flowable 未发布或缺少版本/流程定义/部署 ID、无结束路径、递归子流程、审批并发策略错误和手动权限缺失。
+- 必跑命令：Task 12 九个定向测试类、两份 Mapper XML `xmllint`、目标差异 `git diff --check`、`forge-admin-server -am compile -DskipTests`。
+- 全量基线：generator 全量测试若出现非本 Task 失败，必须记录具体类和计数，不得用定向通过掩盖；Task 12 修改类的定向回归必须全部通过。
+- 环境门禁：不启动 Admin/Flow，不执行 Flyway 或真实数据库写入；真实 Flowable 部署响应、发布/回滚 HTTP 和新旧实例并存留待 Task 19。

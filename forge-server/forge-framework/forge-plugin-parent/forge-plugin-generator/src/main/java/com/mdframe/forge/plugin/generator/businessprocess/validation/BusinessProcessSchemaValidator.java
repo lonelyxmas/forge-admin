@@ -304,6 +304,9 @@ public class BusinessProcessSchemaValidator {
         BusinessProcessSchema.Dependencies dependencies = schema.getDependencies();
         validateAvailable(dependencies.getObjects(), safeMap(context.getObjectIdsByCode()).keySet(),
                 "OBJECT_DEPENDENCY_UNAVAILABLE", "dependencies.objects", result);
+        validateAvailable(dependencies.getObjects(),
+                safeMap(context.getPublishedObjectVersionIdsByCode()).keySet(),
+                "OBJECT_VERSION_UNAVAILABLE", "dependencies.objects", result);
         validateAvailable(dependencies.getFlowModels(), safeSet(context.getAvailableFlowModelKeys()),
                 "FLOW_MODEL_UNAVAILABLE", "dependencies.flowModels", result);
         validateAvailable(dependencies.getFormAssets(), safeSet(context.getAvailableFormAssetKeys()),

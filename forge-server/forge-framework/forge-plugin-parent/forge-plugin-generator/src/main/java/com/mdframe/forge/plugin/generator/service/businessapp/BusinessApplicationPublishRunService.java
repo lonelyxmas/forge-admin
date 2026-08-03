@@ -36,6 +36,7 @@ public class BusinessApplicationPublishRunService
     private static final Map<String, String> STEP_NAMES = Map.of(
             BusinessApplicationPublishStep.PRECHECK, "发布预检查",
             BusinessApplicationPublishStep.SNAPSHOT, "准备快照",
+            BusinessApplicationPublishStep.PROCESSES, "发布业务流程",
             BusinessApplicationPublishStep.OBJECTS, "发布业务对象",
             BusinessApplicationPublishStep.ENTRIES, "切换页面入口",
             BusinessApplicationPublishStep.PAGE_MENUS, "同步应用页面菜单",
@@ -162,12 +163,14 @@ public class BusinessApplicationPublishRunService
         step.setStatus("FAILED");
         step.setMessage(StringUtils.abbreviate(errorSummary, 500));
         step.setFinishedTime(LocalDateTime.now());
-        boolean hasSideEffect = Set.of(BusinessApplicationPublishStep.OBJECTS,
+        boolean hasSideEffect = Set.of(BusinessApplicationPublishStep.PROCESSES,
+                BusinessApplicationPublishStep.OBJECTS,
                 BusinessApplicationPublishStep.ENTRIES, BusinessApplicationPublishStep.PAGE_MENUS,
                 BusinessApplicationPublishStep.EXTENSIONS,
                 BusinessApplicationPublishStep.COMMIT).contains(stepCode)
                 || steps.stream().anyMatch(item -> "SUCCESS".equals(item.getStatus())
-                && Set.of(BusinessApplicationPublishStep.OBJECTS, BusinessApplicationPublishStep.ENTRIES,
+                && Set.of(BusinessApplicationPublishStep.PROCESSES,
+                BusinessApplicationPublishStep.OBJECTS, BusinessApplicationPublishStep.ENTRIES,
                 BusinessApplicationPublishStep.PAGE_MENUS,
                 BusinessApplicationPublishStep.EXTENSIONS).contains(item.getStepCode()));
         String status = hasSideEffect ? BusinessApplicationPublishStatus.PARTIAL

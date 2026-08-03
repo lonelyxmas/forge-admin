@@ -9,6 +9,8 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPublishDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectPublishDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionMapper;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessPublishResult;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessPublishService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationSnapshotService.SnapshotBundle;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
@@ -46,6 +48,7 @@ public class BusinessApplicationPublishService {
     private final BusinessObjectPublishService objectPublishService;
     private final BusinessObjectDesignerService objectDesignerService;
     private final BusinessObjectDesignVersionService objectVersionService;
+    private final BusinessProcessPublishService processPublishService;
     private final BusinessAppService businessAppService;
     private final BusinessApplicationPageMenuPublishService pageMenuPublishService;
     private final BusinessExtensionMapper extensionMapper;
@@ -136,6 +139,22 @@ public class BusinessApplicationPublishService {
                 step = BusinessApplicationPublishStep.SNAPSHOT;
                 run = runService.markStepRunning(run, step);
                 run = runService.markStepSuccess(run, step, "候选快照摘要 " + shortHash(run.getSnapshotHash()));
+            }
+
+            if (!runService.isStepComplete(run, BusinessApplicationPublishStep.PROCESSES)) {
+                step = BusinessApplicationPublishStep.PROCESSES;
+                run = runService.markStepRunning(run, step);
+                BusinessProcessPublishResult processResult = processPublishService.publishForApplication(
+                        run.getApplicationId(),
+                        run.getTargetVersionNo(),
+                        selection.getProcessIds(),
+                        readProcessDraftHashes(run.getSnapshotJson()),
+                        run.getId());
+                SnapshotBundle processSnapshot = snapshotService.finalizeProcesses(
+                        run.getSnapshotJson(), processResult.snapshots());
+                run = runService.updateSnapshot(run, processSnapshot);
+                run = runService.markStepSuccess(run, step,
+                        "已固定 " + processResult.snapshots().size() + " 个业务流程版本");
             }
 
             Map<Long, Long> objectVersions = readPublishedObjectVersions(run.getSnapshotJson());
@@ -287,10 +306,31 @@ public class BusinessApplicationPublishService {
         dto.setSelectedObjectIds(selection.getObjectIds());
         dto.setSelectedEntryIds(selection.getEntryIds());
         dto.setSelectedExtensionIds(selection.getExtensionIds());
+        dto.setSelectedProcessIds(selection.getProcessIds());
         dto.setIncludeAutomation(selection.getIncludeAutomation());
         dto.setForceWarnings(source == null ? false : source.getForceWarnings());
         dto.setRemark(source == null ? null : source.getRemark());
         return dto;
+    }
+
+    private Map<Long, String> readProcessDraftHashes(String snapshotJson) {
+        Map<Long, String> result = new LinkedHashMap<>();
+        Object value = snapshotService.parse(snapshotJson).get("processes");
+        if (!(value instanceof List<?> list)) {
+            return result;
+        }
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Long processId = longValue(map.get("id"));
+            String schemaHash = map.get("draftSchemaHash") == null
+                    ? null : String.valueOf(map.get("draftSchemaHash"));
+            if (processId != null && StringUtils.isNotBlank(schemaHash)) {
+                result.put(processId, schemaHash);
+            }
+        }
+        return result;
     }
 
     private BusinessApplicationPublishResultVO fail(AiBusinessApplicationPublishRun run, String step,

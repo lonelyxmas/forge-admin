@@ -6,6 +6,9 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 @Mapper
 public interface BusinessProcessMapper extends BaseMapper<AiBusinessProcess> {
 
@@ -22,6 +25,17 @@ public interface BusinessProcessMapper extends BaseMapper<AiBusinessProcess> {
     AiBusinessProcess selectActiveByCode(@Param("tenantId") Long tenantId,
                                           @Param("applicationId") Long applicationId,
                                           @Param("processCode") String processCode);
+
+    List<AiBusinessProcess> selectByApplicationId(@Param("tenantId") Long tenantId,
+                                                   @Param("applicationId") Long applicationId);
+
+    AiBusinessProcess selectForPublish(@Param("tenantId") Long tenantId,
+                                       @Param("applicationId") Long applicationId,
+                                       @Param("id") Long id);
+
+    AiBusinessProcess selectForProjection(@Param("tenantId") Long tenantId,
+                                          @Param("applicationId") Long applicationId,
+                                          @Param("id") Long id);
 
     int updateDraftSchema(@Param("tenantId") Long tenantId,
                           @Param("id") Long id,
@@ -49,6 +63,18 @@ public interface BusinessProcessMapper extends BaseMapper<AiBusinessProcess> {
                            @Param("expectedSchemaHash") String expectedSchemaHash,
                            @Param("designStatus") String designStatus,
                            @Param("updateBy") Long updateBy);
+
+    int updatePublishedProjection(@Param("tenantId") Long tenantId,
+                                  @Param("applicationId") Long applicationId,
+                                  @Param("id") Long id,
+                                  @Param("versionNo") Integer versionNo,
+                                  @Param("schemaHash") String schemaHash,
+                                  @Param("updateBy") Long updateBy);
+
+    int clearPublishedProjectionExcept(@Param("tenantId") Long tenantId,
+                                       @Param("applicationId") Long applicationId,
+                                       @Param("processIds") Collection<Long> processIds,
+                                       @Param("updateBy") Long updateBy);
 
     int logicalDelete(@Param("tenantId") Long tenantId,
                       @Param("id") Long id,

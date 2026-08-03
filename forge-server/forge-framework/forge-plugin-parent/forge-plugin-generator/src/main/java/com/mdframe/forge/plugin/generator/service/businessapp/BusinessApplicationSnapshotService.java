@@ -8,9 +8,12 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApplication;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtensionVersion;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionVersionMapper;
+import com.mdframe.forge.plugin.generator.mapper.BusinessProcessMapper;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessSnapshot;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
@@ -54,6 +57,7 @@ public class BusinessApplicationSnapshotService {
     private final BusinessExtensionMapper extensionMapper;
     private final BusinessExtensionVersionMapper extensionVersionMapper;
     private final BusinessPermissionService permissionService;
+    private final BusinessProcessMapper processMapper;
 
     public SnapshotBundle prepare(Long applicationId, BusinessApplicationAssetSelectionVO selection) {
         return prepare(applicationId, selection, null, null, null, null);
@@ -83,12 +87,16 @@ public class BusinessApplicationSnapshotService {
                 ? businessAppService.listByApplicationId(applicationId) : resolved.entries();
         List<AiBusinessExtension> availableExtensions = resolved == null
                 ? extensionMapper.selectByApplicationId(resolveTenantId(), applicationId) : resolved.extensions();
+        List<AiBusinessProcess> availableProcesses = resolved == null
+                ? processMapper.selectByApplicationId(resolveTenantId(), applicationId) : resolved.processes();
         Map<Long, BusinessApplicationObjectVO> objects = availableObjects.stream()
                 .collect(Collectors.toMap(BusinessApplicationObjectVO::getObjectId, Function.identity()));
         Map<Long, AiBusinessApp> entries = availableEntries.stream()
                 .collect(Collectors.toMap(AiBusinessApp::getId, Function.identity()));
         Map<Long, AiBusinessExtension> extensions = availableExtensions.stream()
                 .collect(Collectors.toMap(AiBusinessExtension::getId, Function.identity()));
+        Map<Long, AiBusinessProcess> processes = availableProcesses.stream()
+                .collect(Collectors.toMap(AiBusinessProcess::getId, Function.identity()));
         List<BusinessApplicationObjectVO> selectedObjects = selection.getObjectIds().stream()
                 .map(objects::get).filter(java.util.Objects::nonNull).toList();
         List<AiBusinessExtension> selectedExtensions = selection.getExtensionIds().stream()
@@ -120,7 +128,27 @@ public class BusinessApplicationSnapshotService {
                 ? permissionService.documentActionSummaries(selectedObjects) : permissionSummaries;
         snapshot.put("permissions", selectedPermissionSummaries.stream()
                 .map(this::permissionSnapshot).toList());
+        snapshot.put("processes", selection.getProcessIds().stream()
+                .map(processes::get).filter(java.util.Objects::nonNull)
+                .map(this::processDraftSnapshot).toList());
         snapshot.put("publishedObjectVersions", new ArrayList<>());
+        snapshot.put("publishedProcessVersions", new ArrayList<>());
+        snapshot.put("runtimeActions", new ArrayList<>());
+        return bundle(snapshot);
+    }
+
+    public SnapshotBundle finalizeProcesses(
+            String candidateJson,
+            List<BusinessProcessSnapshot> processSnapshots) {
+        Map<String, Object> snapshot = parse(candidateJson);
+        List<Map<String, Object>> published = (processSnapshots == null ? List.<BusinessProcessSnapshot>of()
+                : processSnapshots).stream()
+                .map(item -> objectMapper.convertValue(
+                        item, new TypeReference<Map<String, Object>>() { }))
+                .toList();
+        snapshot.put("publishedProcessVersions", published);
+        // Task 13 将从同一不可变流程版本编译 START_PROCESS；本任务先冻结稳定空投影字段。
+        snapshot.putIfAbsent("runtimeActions", new ArrayList<>());
         return bundle(snapshot);
     }
 
@@ -287,6 +315,21 @@ public class BusinessApplicationSnapshotService {
                 "required", Boolean.TRUE.equals(action.getRequired()),
                 "configured", Boolean.TRUE.equals(action.getConfigured())
         )).toList());
+        return item;
+    }
+
+    private Map<String, Object> processDraftSnapshot(AiBusinessProcess process) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", stringValue(process.getId()));
+        item.put("processCode", process.getProcessCode());
+        item.put("processName", process.getProcessName());
+        item.put("processDescription", process.getProcessDescription());
+        item.put("subjectObjectId", stringValue(process.getSubjectObjectId()));
+        item.put("subjectObjectCode", process.getSubjectObjectCode());
+        item.put("draftSchemaHash", process.getDraftSchemaHash());
+        item.put("designStatus", process.getDesignStatus());
+        item.put("status", process.getStatus());
+        item.put("businessProcessJson", parseOptionalJson(process.getDraftSchemaJson()));
         return item;
     }
 

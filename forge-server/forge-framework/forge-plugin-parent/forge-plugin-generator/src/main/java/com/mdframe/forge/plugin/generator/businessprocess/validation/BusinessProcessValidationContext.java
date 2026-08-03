@@ -23,6 +23,9 @@ public class BusinessProcessValidationContext {
     /** objectCode -> 当前可用字段编码。 */
     private Map<String, Set<String>> fieldsByObjectCode = new LinkedHashMap<>();
 
+    /** objectCode -> 当前不可变发布版本 ID。 */
+    private Map<String, String> publishedObjectVersionIdsByCode = new LinkedHashMap<>();
+
     private Set<String> availableFlowModelKeys = new LinkedHashSet<>();
 
     private Set<String> availableFormAssetKeys = new LinkedHashSet<>();
