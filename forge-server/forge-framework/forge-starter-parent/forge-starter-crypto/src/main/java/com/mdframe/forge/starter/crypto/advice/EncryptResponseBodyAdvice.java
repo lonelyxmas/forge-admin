@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.crypto.crypto.Encryptor;
 import com.mdframe.forge.starter.crypto.crypto.EncryptorFactory;
 import com.mdframe.forge.starter.crypto.domain.EncryptedResponse;
 import com.mdframe.forge.starter.crypto.keyexchange.SessionKeyStore;
+import com.mdframe.forge.starter.crypto.support.InternalCallRequestVerifier;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
@@ -38,18 +39,21 @@ public class EncryptResponseBodyAdvice implements ResponseBodyAdvice<Object> {
     private final SessionKeyStore sessionKeyStore;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final IApiConfigManager apiConfigManager;
+    private final InternalCallRequestVerifier internalCallRequestVerifier;
     
     
     public EncryptResponseBodyAdvice(CryptoProperties properties,
                                      EncryptorFactory encryptorFactory,
                                      ObjectMapper objectMapper,
                                      SessionKeyStore sessionKeyStore,
-            IApiConfigManager apiConfigManager) {
+                                     IApiConfigManager apiConfigManager,
+                                     InternalCallRequestVerifier internalCallRequestVerifier) {
         this.properties = properties;
         this.encryptorFactory = encryptorFactory;
         this.objectMapper = objectMapper;
         this.sessionKeyStore = sessionKeyStore;
         this.apiConfigManager = apiConfigManager;
+        this.internalCallRequestVerifier = internalCallRequestVerifier;
     }
 
     @Override
@@ -75,7 +79,7 @@ public class EncryptResponseBodyAdvice implements ResponseBodyAdvice<Object> {
             return false;
         }
         // 内部服务调用（如 FlowClient）需要明文 JSON 响应，跳过响应加密
-        if ("true".equalsIgnoreCase(request.getHeader("X-Inner-Call"))) {
+        if (internalCallRequestVerifier.isTrustedInternalCall(request)) {
             return false;
         }
         ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());

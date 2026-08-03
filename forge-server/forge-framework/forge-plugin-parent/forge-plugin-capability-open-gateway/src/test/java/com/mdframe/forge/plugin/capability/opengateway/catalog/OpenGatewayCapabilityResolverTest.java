@@ -28,7 +28,9 @@ class OpenGatewayCapabilityResolverTest {
                 .isInstanceOfSatisfying(OpenGatewayException.class, exception -> {
                     assertThat(exception.getHttpStatus()).isEqualTo(409);
                     assertThat(exception.getErrorCode()).isEqualTo("CONFLICT");
-                    assertThat(exception.getMessage()).contains("尚未注册");
+                    assertThat(exception.getMessage())
+                            .contains("SYSTEM_SERVICE/ACTION")
+                            .contains("尚未启用执行适配器");
                 });
     }
 

@@ -40,7 +40,7 @@ public class TenantProperties {
      * true: 抛出异常（严格模式）
      * false: 记录警告日志（宽松模式）
      */
-    private Boolean strictMode = false;
+    private Boolean strictMode = true;
 
     /**
      * 是否自动检测租户字段

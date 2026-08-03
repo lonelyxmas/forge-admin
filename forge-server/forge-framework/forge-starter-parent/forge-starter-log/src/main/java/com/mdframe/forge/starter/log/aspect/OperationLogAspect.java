@@ -67,8 +67,12 @@ public class OperationLogAspect {
             "/auth/changePassword",
             "/auth/resetPassword",
             "/auth/online/kickout",
-            "/auth/online/batchKickout"
+            "/auth/online/batchKickout",
+            "/oauth2/token",
+            "/oauth2/revoke"
     );
+    private static final String CAPABILITY_OAUTH_PATH = "/oauth2/";
+    private static final String CAPABILITY_OPEN_GATEWAY_PATH = "/openapi/v1/capabilities/";
 
     /**
      * 定义切点：拦截所有标注@OperationLog的方法
@@ -554,7 +558,9 @@ public class OperationLogAspect {
      */
     private boolean isExcludePath(String requestUrl) {
         String normalizedUrl = requestUrl.replaceAll(";[^/]*", "").replaceAll("/+$", "");
-        if (SENSITIVE_CREDENTIAL_PATH_SUFFIXES.stream().anyMatch(normalizedUrl::endsWith)) {
+        if (SENSITIVE_CREDENTIAL_PATH_SUFFIXES.stream().anyMatch(normalizedUrl::endsWith)
+                || normalizedUrl.contains(CAPABILITY_OAUTH_PATH)
+                || normalizedUrl.contains(CAPABILITY_OPEN_GATEWAY_PATH)) {
             return true;
         }
         String[] excludePaths = logProperties.getExcludePaths();

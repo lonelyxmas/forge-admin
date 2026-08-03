@@ -130,11 +130,29 @@ class CapabilityCallGuideServiceTest {
         assertThat(guide.version()).isNull();
     }
 
+    @Test
+    void shouldBlockGuideWhenPublishedSourceHasNoOpenGatewayAdapter() {
+        AiCapability capability = capability("USER", "1.0.0");
+        AiCapabilityClient client = client("USER_DELEGATION", "OAUTH");
+        AiCapabilityVersion version = version();
+        version.setSourceType("LOW_CODE_CRUD");
+        version.setBehavior("READ_ONLY");
+        stub(capability, client, grant("PINNED", "1.0.0"), version);
+
+        CapabilityCallGuideVO guide = service(true, true)
+                .guide(TENANT_ID, CAPABILITY_ID, CLIENT_ID);
+
+        assertThat(guide.ready()).isFalse();
+        assertThat(check(guide, "EXECUTOR").message())
+                .contains("LOW_CODE_CRUD/READ_ONLY")
+                .contains("尚无开放网关执行适配器");
+    }
+
     private CapabilityCallGuideService service(boolean gatewayEnabled, boolean identityEnabled) {
         return new CapabilityCallGuideService(
                 catalogService, clientService, grantMapper, versionMapper,
                 documentService, objectMapper, clock, gatewayEnabled,
-                identityEnabled, "https://forge.example.com", Duration.ofMinutes(2),
+                identityEnabled, true, "https://forge.example.com", Duration.ofMinutes(2),
                 OPENAPI_RESOURCE);
     }
 
@@ -191,6 +209,7 @@ class CapabilityCallGuideServiceTest {
     private AiCapabilityVersion version() {
         AiCapabilityVersion version = new AiCapabilityVersion();
         version.setSourceType("SYSTEM_SERVICE");
+        version.setBehavior("ACTION");
         version.setStatus("PUBLISHED");
         version.setPolicySnapshot("""
                 {"platformPermission":"ai:capability:flow-action:invoke",

@@ -41,8 +41,8 @@ public class IdempotentAutoConfiguration {
     
     @Bean
     @ConditionalOnMissingBean
-    public IdempotentKeyGenerator idempotentKeyGenerator() {
-        return new DefaultIdempotentKeyGenerator();
+    public IdempotentKeyGenerator idempotentKeyGenerator(ObjectMapper objectMapper) {
+        return new DefaultIdempotentKeyGenerator(objectMapper);
     }
     
     @Bean

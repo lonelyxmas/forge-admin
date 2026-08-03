@@ -47,6 +47,7 @@ public class CapabilityCallGuideService {
     private final Clock clock;
     private final boolean gatewayEnabled;
     private final boolean identityEnabled;
+    private final boolean flowActionsEnabled;
     private final String identityIssuer;
     private final long userAssertionMaxTtlSeconds;
     private final String openapiResource;
@@ -61,6 +62,7 @@ public class CapabilityCallGuideService {
             Clock capabilityClock,
             @Value("${forge.capability.open-gateway.enabled:false}") boolean gatewayEnabled,
             @Value("${forge.capability.identity.enabled:true}") boolean identityEnabled,
+            @Value("${forge.capability.flow-actions.enabled:false}") boolean flowActionsEnabled,
             @Value("${forge.capability.identity.issuer:http://localhost:8580}")
             String identityIssuer,
             @Value("${forge.capability.identity.user-assertion-max-ttl:PT2M}")
@@ -76,6 +78,7 @@ public class CapabilityCallGuideService {
         this.clock = capabilityClock;
         this.gatewayEnabled = gatewayEnabled;
         this.identityEnabled = identityEnabled || gatewayEnabled;
+        this.flowActionsEnabled = flowActionsEnabled;
         this.identityIssuer = StringUtils.removeEnd(StringUtils.trim(identityIssuer), "/");
         long configuredTtlSeconds = userAssertionMaxTtl == null
                 ? USER_ASSERTION_TTL_SECONDS : userAssertionMaxTtl.toSeconds();
@@ -134,6 +137,10 @@ public class CapabilityCallGuideService {
                 versionAvailable
                         ? "调用版本为 " + resolvedVersion
                         : "授权版本不存在、版本策略不匹配或版本未发布");
+
+        ExecutionAvailability execution = executionAvailability(version);
+        add(checks, "EXECUTOR", "执行能力", execution.available(), true,
+                execution.message());
 
         List<String> runtimePermissions = runtimePermissions(version);
         boolean runtimeCheck = "USER".equals(capability.getRequiredActorType());
@@ -260,6 +267,29 @@ public class CapabilityCallGuideService {
                 policy.path("platformPermission").asText(), fallbackPlatform);
         String business = StringUtils.trimToNull(policy.path("permission").asText());
         return business == null ? List.of(platform) : List.of(platform, business);
+    }
+
+    private ExecutionAvailability executionAvailability(AiCapabilityVersion version) {
+        if (version == null) {
+            return new ExecutionAvailability(false, "授权版本可用后才能检查执行适配器");
+        }
+        String sourceType = StringUtils.defaultString(version.getSourceType());
+        String behavior = StringUtils.defaultString(version.getBehavior());
+        if ("BUSINESS_ACTION".equals(sourceType) && "ACTION".equals(behavior)) {
+            return new ExecutionAvailability(true, "低代码业务动作执行适配器已启用");
+        }
+        if ("SYSTEM_SERVICE".equals(sourceType) && "ACTION".equals(behavior)) {
+            return new ExecutionAvailability(true, "受控系统服务执行适配器已启用");
+        }
+        if ("FLOW_ACTION".equals(sourceType) && "FLOW".equals(behavior)) {
+            return flowActionsEnabled
+                    ? new ExecutionAvailability(true, "流程动作执行适配器已启用")
+                    : new ExecutionAvailability(false,
+                    "流程动作执行器未启用，请设置 forge.capability.flow-actions.enabled=true");
+        }
+        return new ExecutionAvailability(false,
+                "来源 " + sourceType + "/" + behavior
+                        + " 尚无开放网关执行适配器，请使用受控业务动作、流程动作或系统服务重新注册");
     }
 
     private String oauthExample(
@@ -759,5 +789,8 @@ public class CapabilityCallGuideService {
         catch (RuntimeException exception) {
             throw new BusinessException("开放平台 OpenAPI resource 配置无效");
         }
+    }
+
+    private record ExecutionAvailability(boolean available, String message) {
     }
 }

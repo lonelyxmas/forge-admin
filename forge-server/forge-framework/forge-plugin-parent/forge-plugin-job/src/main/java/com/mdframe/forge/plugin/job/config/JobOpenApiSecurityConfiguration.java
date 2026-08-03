@@ -11,6 +11,9 @@ public class JobOpenApiSecurityConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public JobApiTokenCodec jobApiTokenCodec(JobProperties properties) {
+        if (Boolean.TRUE.equals(properties.getOpenApi().getEnabled())) {
+            properties.getOpenApi().validatedTokenPepper();
+        }
         return new JobApiTokenCodec(properties);
     }
 }

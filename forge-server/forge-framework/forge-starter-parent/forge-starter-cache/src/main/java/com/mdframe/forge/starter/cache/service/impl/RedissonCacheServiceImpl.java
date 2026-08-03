@@ -49,6 +49,12 @@ public class RedissonCacheServiceImpl implements ICacheService {
     }
 
     @Override
+    public boolean setIfAbsent(String key, Object value, long timeout, TimeUnit timeUnit) {
+        RBucket<Object> bucket = redissonClient.getBucket(key);
+        return bucket.setIfAbsent(value, Duration.ofMillis(timeUnit.toMillis(timeout)));
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <T> T get(String key) {
         RBucket<T> bucket = redissonClient.getBucket(key);

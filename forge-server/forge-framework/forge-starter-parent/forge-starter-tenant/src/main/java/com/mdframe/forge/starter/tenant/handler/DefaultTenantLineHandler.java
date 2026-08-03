@@ -47,8 +47,10 @@ public class DefaultTenantLineHandler implements TenantLineHandler {
     public Expression getTenantId() {
         Long tenantId = TenantContextHolder.getTenantId();
         if (tenantId == null) {
-            // 如果没有租户ID，返回NULL（这样不会过滤任何数据，但在某些场景下可能需要抛出异常）
-            log.warn("当前上下文中没有租户ID，请检查租户设置");
+            if (Boolean.TRUE.equals(tenantProperties.getStrictMode())) {
+                throw new IllegalStateException("租户隔离已启用，但当前上下文中没有租户ID");
+            }
+            log.error("租户宽松模式放行了缺少租户ID的SQL，请尽快补齐上下文或显式忽略");
             return new NullValue();
         }
         return new LongValue(tenantId);
@@ -66,28 +68,31 @@ public class DefaultTenantLineHandler implements TenantLineHandler {
             return true;
         }
 
-        // 2. 如果上下文中没有租户ID，则跳过租户条件拼接，避免生成 tenant_id = NULL 导致查不到数据
-        //    典型场景：定时任务/系统级线程无租户上下文。此时不追加租户条件，而非拼接无效的 NULL。
-        if (TenantContextHolder.getTenantId() == null) {
-            log.debug("当前上下文无租户ID，跳过表[{}]的租户条件拼接", tableName);
-            return true;
-        }
-
-        // 3. 检查是否在手动配置的忽略表列表中
+        // 2. 检查是否在手动配置的忽略表列表中
         if (tenantProperties.getIgnoreTables() != null &&
             tenantProperties.getIgnoreTables().contains(tableName)) {
             return true;
         }
 
-        // 4. 检查手动添加到缓存的忽略表
+        // 3. 检查手动添加到缓存的忽略表
         if (ignoreTableCache.contains(tableName)) {
             return true;
         }
 
-        // 5. 自动检测：如果启用了自动检测，检查表是否包含租户字段
+        // 4. 自动检测：无租户列的表不要求租户上下文
         if (tenantProperties.getAutoDetectTenantColumn() && tenantTableChecker != null) {
-            // 不包含租户字段的表需要忽略
-            return !tenantTableChecker.hasTenantColumn(tableName);
+            if (!tenantTableChecker.hasTenantColumn(tableName)) {
+                return true;
+            }
+        }
+
+        // 5. 对真正需要租户条件的表执行失败关闭
+        if (TenantContextHolder.getTenantId() == null) {
+            if (Boolean.TRUE.equals(tenantProperties.getStrictMode())) {
+                throw new IllegalStateException("访问租户表[" + tableName + "]时缺少租户上下文");
+            }
+            log.error("租户宽松模式跳过表[{}]的租户条件，请尽快补齐上下文或显式忽略", tableName);
+            return true;
         }
 
         // 默认不忽略

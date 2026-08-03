@@ -20,10 +20,12 @@ import com.mdframe.forge.starter.crypto.keyexchange.RsaKeyPairHolder;
 import com.mdframe.forge.starter.crypto.keyexchange.SessionKeyStore;
 import com.mdframe.forge.starter.crypto.persistence.PersistentCryptoService;
 import com.mdframe.forge.starter.crypto.persistence.VersionedPersistentCryptoService;
+import com.mdframe.forge.starter.crypto.support.InternalCallRequestVerifier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.util.StringUtils;
@@ -33,7 +35,13 @@ import org.springframework.util.StringUtils;
  */
 @Slf4j
 @AutoConfiguration
+@EnableConfigurationProperties(InternalCallProperties.class)
 public class CryptoAutoConfiguration {
+
+    @Bean
+    public InternalCallRequestVerifier internalCallRequestVerifier(InternalCallProperties properties) {
+        return new InternalCallRequestVerifier(properties);
+    }
 
     @Bean
     public CryptoConfigurationValidator cryptoConfigurationValidator(CryptoProperties properties) {
@@ -136,9 +144,11 @@ public class CryptoAutoConfiguration {
                                                                EncryptorFactory encryptorFactory,
                                                                ObjectMapper objectMapper,
                                                                @Autowired(required = false) SessionKeyStore sessionKeyStore,
-            IApiConfigManager apiConfigManager) {
+                                                               IApiConfigManager apiConfigManager,
+                                                               InternalCallRequestVerifier internalCallRequestVerifier) {
         log.info("响应加密处理器初始化完成, 动态密钥: {}", sessionKeyStore != null);
-        return new EncryptResponseBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,apiConfigManager);
+        return new EncryptResponseBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,
+                apiConfigManager, internalCallRequestVerifier);
     }
 
     @Bean
@@ -146,9 +156,11 @@ public class CryptoAutoConfiguration {
                                                              EncryptorFactory encryptorFactory,
                                                              ObjectMapper objectMapper,
                                                              @Autowired(required = false) SessionKeyStore sessionKeyStore,
-            IApiConfigManager apiConfigManager) {
+                                                             IApiConfigManager apiConfigManager,
+                                                             InternalCallRequestVerifier internalCallRequestVerifier) {
         log.info("请求解密处理器初始化完成, 动态密钥: {}", sessionKeyStore != null);
-        return new DecryptRequestBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,apiConfigManager);
+        return new DecryptRequestBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,
+                apiConfigManager, internalCallRequestVerifier);
     }
 
     // ==================== 防重放相关 Bean ====================
@@ -165,10 +177,12 @@ public class CryptoAutoConfiguration {
     public FilterRegistrationBean<ReplayAttackFilter> replayAttackFilter(
             CryptoProperties properties,
             ReplayTokenCache tokenCache,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            InternalCallRequestVerifier internalCallRequestVerifier) {
 
         FilterRegistrationBean<ReplayAttackFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new ReplayAttackFilter(properties, tokenCache, objectMapper));
+        registration.setFilter(new ReplayAttackFilter(properties, tokenCache, objectMapper,
+                internalCallRequestVerifier));
         registration.addUrlPatterns("/*");
         registration.setOrder(1);
         log.info("防重放攻击过滤器初始化完成");

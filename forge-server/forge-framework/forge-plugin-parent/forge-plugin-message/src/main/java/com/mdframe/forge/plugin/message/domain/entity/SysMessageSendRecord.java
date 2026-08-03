@@ -85,7 +85,7 @@ public class SysMessageSendRecord implements Serializable {
     private String externalId;
     
     /**
-     * 发送状态：0-发送中/1-成功/2-失败
+     * 发送状态：0-发送中/1-成功/2-失败/3-部分成功
      */
     private Integer status;
     

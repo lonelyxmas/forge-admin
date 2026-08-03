@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * 本地文件系统存储实现
@@ -30,9 +32,12 @@ public class LocalFileStorage implements FileStorage {
     
     private static final String STORAGE_TYPE = "local";
     private static final String MULTIPART_DIR = "multipart";
+    private static final Pattern SAFE_PATH_SEGMENT = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_-]{0,63}");
+    private static final Pattern SAFE_EXTENSION = Pattern.compile("[A-Za-z0-9]{1,20}");
     
     private StorageConfig config;
     private String basePath;
+    private Path baseDirectory;
     
     @Autowired(required = false)
     private FileMetadataPersistence metadataPersistence;
@@ -56,13 +61,13 @@ public class LocalFileStorage implements FileStorage {
             this.basePath = System.getProperty("user.home") + File.separator + "file-storage";
         }
         
-        // 确保基础路径存在
-        File baseDir = new File(basePath);
-        if (!baseDir.exists()) {
-            boolean created = baseDir.mkdirs();
-            if (created) {
-                log.info("创建本地存储目录: {}", basePath);
-            }
+        try {
+            Path configuredBase = Paths.get(basePath).toAbsolutePath().normalize();
+            Files.createDirectories(configuredBase);
+            this.baseDirectory = configuredBase.toRealPath();
+            this.basePath = baseDirectory.toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("初始化本地存储目录失败", e);
         }
         
         log.info("本地文件存储初始化完成, 基础路径: {}", basePath);
@@ -90,26 +95,12 @@ public class LocalFileStorage implements FileStorage {
             // 生成存储路径和文件名
             String storageName = generateStorageName(fileName);
             String relativePath = generateRelativePath(businessType);
-            String fullPath = basePath + relativePath;
-            
-            // 确保目录存在
-            File dir = new File(fullPath);
-            if (!dir.exists()) {
-                boolean created = dir.mkdirs();
-                if (!created && !dir.exists()) {
-                    throw new RuntimeException("创建目录失败: " + fullPath);
-                }
-                log.debug("创建文件存储目录: {}", fullPath);
-            }
+            Path directory = resolveInsideBase(relativePath);
+            createDirectories(directory);
             
             // 保存文件
-            File targetFile = new File(fullPath + File.separator + storageName);
-            // 确保父目录存在
-            File parentDir = targetFile.getParentFile();
-            if (parentDir != null && !parentDir.exists()) {
-                parentDir.mkdirs();
-            }
-            Files.copy(inputStream, targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Path targetFile = resolveInsideBase(Paths.get(relativePath, storageName).toString());
+            Files.copy(inputStream, targetFile, StandardCopyOption.REPLACE_EXISTING);
             
             // 构建元数据
             return FileMetadata.builder()
@@ -117,7 +108,7 @@ public class LocalFileStorage implements FileStorage {
                     .originalName(fileName)
                     .storageName(storageName)
                     .filePath(relativePath + File.separator + storageName)
-                    .fileSize(targetFile.length())
+                    .fileSize(Files.size(targetFile))
                     .mimeType(contentType)
                     .extension(getExtension(fileName))
                     .storageType(STORAGE_TYPE)
@@ -144,16 +135,13 @@ public class LocalFileStorage implements FileStorage {
         context.setBusinessType(businessType);
         context.setBusinessId(businessId);
         context.setRelativePath(relativePath);
-        context.setTempDir(basePath + File.separator + MULTIPART_DIR + File.separator + uploadId);
+        context.setTempDir(resolveInsideBase(Paths.get(MULTIPART_DIR, uploadId).toString()).toString());
         
         // 创建临时目录
-        File tempDir = new File(context.getTempDir());
-        if (!tempDir.exists()) {
-            boolean created = tempDir.mkdirs();
-            if (!created && !tempDir.exists()) {
-                throw new RuntimeException("创建临时目录失败: " + context.getTempDir());
-            }
-            log.debug("创建分片上传临时目录: {}", context.getTempDir());
+        try {
+            createDirectories(Paths.get(context.getTempDir()));
+        } catch (IOException e) {
+            throw new RuntimeException("创建分片上传临时目录失败", e);
         }
         
         multipartUploads.put(uploadId, context);
@@ -172,8 +160,9 @@ public class LocalFileStorage implements FileStorage {
         try {
             // 保存分片文件
             String partFileName = "part_" + partNumber;
-            File partFile = new File(context.getTempDir() + File.separator + partFileName);
-            Files.copy(inputStream, partFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Path partFile = resolveInsideBase(baseDirectory.relativize(Paths.get(context.getTempDir()))
+                    .resolve(partFileName).toString());
+            Files.copy(inputStream, partFile, StandardCopyOption.REPLACE_EXISTING);
             
             context.getParts().put(partNumber, partFileName);
             
@@ -194,30 +183,19 @@ public class LocalFileStorage implements FileStorage {
         try {
             // 生成最终文件路径
             String storageName = generateStorageName(context.getFileName());
-            String fullPath = basePath + File.separator + context.getRelativePath();
-            File dir = new File(fullPath);
-            if (!dir.exists()) {
-                boolean created = dir.mkdirs();
-                if (!created && !dir.exists()) {
-                    throw new RuntimeException("创建目录失败: " + fullPath);
-                }
-                log.debug("创建文件存储目录: {}", fullPath);
-            }
+            Path directory = resolveInsideBase(context.getRelativePath());
+            createDirectories(directory);
             
-            File targetFile = new File(fullPath + File.separator + storageName);
-            // 确保父目录存在
-            File parentDir = targetFile.getParentFile();
-            if (parentDir != null && !parentDir.exists()) {
-                parentDir.mkdirs();
-            }
+            Path targetFile = resolveInsideBase(Paths.get(context.getRelativePath(), storageName).toString());
             
             // 合并分片
-            try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+            try (FileOutputStream fos = new FileOutputStream(targetFile.toFile())) {
                 for (int i = 1; i <= context.getParts().size(); i++) {
                     String partFileName = context.getParts().get(i);
-                    File partFile = new File(context.getTempDir() + File.separator + partFileName);
+                    Path partFile = resolveInsideBase(baseDirectory.relativize(Paths.get(context.getTempDir()))
+                            .resolve(partFileName).toString());
                     
-                    try (FileInputStream fis = new FileInputStream(partFile)) {
+                    try (FileInputStream fis = new FileInputStream(partFile.toFile())) {
                         byte[] buffer = new byte[8192];
                         int bytesRead;
                         while ((bytesRead = fis.read(buffer)) != -1) {
@@ -232,7 +210,7 @@ public class LocalFileStorage implements FileStorage {
             multipartUploads.remove(uploadId);
             
             log.info("完成分片上传: uploadId={}, fileName={}, size={}",
-                    uploadId, storageName, targetFile.length());
+                    uploadId, storageName, Files.size(targetFile));
             
             // 构建元数据
             return FileMetadata.builder()
@@ -240,7 +218,7 @@ public class LocalFileStorage implements FileStorage {
                     .originalName(context.getFileName())
                     .storageName(storageName)
                     .filePath(context.getRelativePath() + File.separator + storageName)
-                    .fileSize(targetFile.length())
+                    .fileSize(Files.size(targetFile))
                     .extension(getExtension(context.getFileName()))
                     .storageType(STORAGE_TYPE)
                     .businessType(context.getBusinessType())
@@ -261,16 +239,13 @@ public class LocalFileStorage implements FileStorage {
             throw new RuntimeException("文件不存在: " + fileId);
         }
         
+        Path file = resolveInsideBase(metadata.getFilePath());
         try {
-            String fullPath = basePath + File.separator + metadata.getFilePath();
-            File file = new File(fullPath);
-            
-            if (!file.exists()) {
-                throw new RuntimeException("文件不存在: " + fullPath);
+            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+                throw new RuntimeException("文件不存在: " + file);
             }
-            
-            return new FileInputStream(file);
-        } catch (FileNotFoundException e) {
+            return Files.newInputStream(file);
+        } catch (IOException e) {
             throw new RuntimeException("文件读取失败", e);
         }
     }
@@ -298,18 +273,12 @@ public class LocalFileStorage implements FileStorage {
             return false;
         }
         
+        Path file = resolveInsideBase(metadata.getFilePath());
         try {
-            String fullPath = basePath + File.separator + metadata.getFilePath();
-            File file = new File(fullPath);
-            
-            if (file.exists()) {
-                boolean deleted = file.delete();
-                log.info("删除文件: {}, 结果: {}", fullPath, deleted);
-                return deleted;
-            }
-            
-            return false;
-        } catch (Exception e) {
+            boolean deleted = Files.deleteIfExists(file);
+            log.info("删除文件: {}, 结果: {}", file, deleted);
+            return deleted;
+        } catch (IOException e) {
             log.error("删除文件失败: {}", fileId, e);
             return false;
         }
@@ -322,22 +291,28 @@ public class LocalFileStorage implements FileStorage {
             return false;
         }
         
-        String fullPath = basePath + File.separator + metadata.getFilePath();
-        File file = new File(fullPath);
-        return file.exists();
+        Path file = resolveInsideBase(metadata.getFilePath());
+        return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
     }
 
     @Override
     public boolean testConnection() {
-        File dir = new File(basePath);
-        return dir.exists() && dir.isDirectory() && dir.canWrite();
+        return baseDirectory != null && Files.isDirectory(baseDirectory) && Files.isWritable(baseDirectory);
     }
 
     @Override
     public boolean createBucket(String bucketName) {
-        String dirName = bucketName == null || bucketName.isEmpty() ? "" : bucketName;
-        File dir = dirName.isEmpty() ? new File(basePath) : new File(basePath, dirName);
-        return dir.exists() || dir.mkdirs();
+        if (bucketName == null || bucketName.isEmpty()) {
+            return true;
+        }
+        requireSafeSegment(bucketName, "bucketName");
+        Path directory = resolveInsideBase(bucketName);
+        try {
+            createDirectories(directory);
+            return true;
+        } catch (IOException e) {
+            throw new RuntimeException("创建存储桶失败", e);
+        }
     }
 
     @Override
@@ -345,14 +320,17 @@ public class LocalFileStorage implements FileStorage {
         if (bucketName == null || bucketName.isEmpty()) {
             return false;
         }
-        return FileUtil.del(new File(basePath, bucketName));
+        requireSafeSegment(bucketName, "bucketName");
+        return FileUtil.del(resolveInsideBase(bucketName).toFile());
     }
 
     @Override
     public boolean bucketExists(String bucketName) {
-        String dirName = bucketName == null || bucketName.isEmpty() ? "" : bucketName;
-        File dir = dirName.isEmpty() ? new File(basePath) : new File(basePath, dirName);
-        return dir.exists() && dir.isDirectory();
+        if (bucketName == null || bucketName.isEmpty()) {
+            return Files.isDirectory(baseDirectory);
+        }
+        requireSafeSegment(bucketName, "bucketName");
+        return Files.isDirectory(resolveInsideBase(bucketName), LinkOption.NOFOLLOW_LINKS);
     }
     
     /**
@@ -368,8 +346,10 @@ public class LocalFileStorage implements FileStorage {
      * 生成相对路径（按日期和业务类型分组）
      */
     private String generateRelativePath(String businessType) {
+        String safeBusinessType = businessType != null ? businessType : "common";
+        requireSafeSegment(safeBusinessType, "businessType");
         String date = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        return (businessType != null ? businessType : "common") + File.separator + date;
+        return Paths.get(safeBusinessType, date.split("/")).toString();
     }
     
     /**
@@ -385,7 +365,49 @@ public class LocalFileStorage implements FileStorage {
             return "";
         }
         
-        return fileName.substring(lastDot + 1);
+        String extension = fileName.substring(lastDot + 1);
+        return SAFE_EXTENSION.matcher(extension).matches() ? extension : "";
+    }
+
+    private void requireSafeSegment(String value, String fieldName) {
+        if (value == null || !SAFE_PATH_SEGMENT.matcher(value).matches()) {
+            throw new IllegalArgumentException(fieldName + " 只能包含字母、数字、下划线和中划线");
+        }
+    }
+
+    private Path resolveInsideBase(String relativePath) {
+        if (baseDirectory == null) {
+            throw new IllegalStateException("本地存储尚未初始化");
+        }
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("文件相对路径不能为空");
+        }
+        Path relative = Paths.get(relativePath);
+        if (relative.isAbsolute()) {
+            throw new IllegalArgumentException("禁止使用绝对文件路径");
+        }
+        Path candidate = baseDirectory.resolve(relative).normalize();
+        if (!candidate.startsWith(baseDirectory)) {
+            throw new IllegalArgumentException("文件路径超出本地存储目录");
+        }
+        rejectSymbolicLinks(candidate);
+        return candidate;
+    }
+
+    private void rejectSymbolicLinks(Path candidate) {
+        Path current = baseDirectory;
+        for (Path segment : baseDirectory.relativize(candidate)) {
+            current = current.resolve(segment);
+            if (Files.exists(current, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(current)) {
+                throw new IllegalArgumentException("本地存储路径禁止包含符号链接");
+            }
+        }
+    }
+
+    private void createDirectories(Path directory) throws IOException {
+        rejectSymbolicLinks(directory);
+        Files.createDirectories(directory);
+        rejectSymbolicLinks(directory);
     }
     
     /**

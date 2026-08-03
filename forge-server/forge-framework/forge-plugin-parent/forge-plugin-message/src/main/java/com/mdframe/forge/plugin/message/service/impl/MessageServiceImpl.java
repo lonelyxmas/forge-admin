@@ -52,6 +52,12 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
 
     private static final String DELIVERY_STATUS_PENDING = "PENDING";
 
+    private static final int SEND_STATUS_SUCCESS = 1;
+
+    private static final int SEND_STATUS_FAILED = 2;
+
+    private static final int SEND_STATUS_PARTIAL = 3;
+
     private final SysMessageMapper messageMapper;
     private final SysMessageReceiverMapper receiverMapper;
     private final SysMessageSendRecordMapper recordMapper;
@@ -345,7 +351,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     }
     
     /**
-     * 创建企业协同渠道发送记录并更新消息状态（部分失败视为已发送，失败接收人走重试）
+     * 创建企业协同渠道发送记录并更新消息状态
      */
     private void createCollaborationSendRecord(SysMessage msg, MessageSendRequestDTO req, int receiverCount,
                                                CollaborationDeliveryOutcome outcome, Long tenantId) {
@@ -361,21 +367,35 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         record.setReceiverCount(receiverCount);
         record.setSuccessCount(outcome.sentCount());
         record.setFailCount(outcome.failedCount());
-        boolean allFailed = receiverCount > 0 && outcome.sentCount() == 0 && outcome.skippedCount() == 0;
-        record.setStatus(allFailed ? 2 : 1);
+        int sendStatus = resolveCollaborationStatus(receiverCount, outcome.sentCount(),
+                outcome.failedCount(), outcome.skippedCount());
+        record.setStatus(sendStatus);
         record.setErrorMsg(outcome.firstErrorMsg());
         record.setSendTime(LocalDateTime.now());
         recordMapper.insert(record);
         
-        // 更新消息状态：全部失败才标记发送失败；同时回写企业协同平台编码，供消息列表/投递记录区分平台
+        // 同时回写企业协同平台编码，供消息列表/投递记录区分平台
         SysMessage updateMsg = new SysMessage();
         updateMsg.setId(msg.getId());
-        updateMsg.setStatus(allFailed ? 2 : 1);
+        updateMsg.setStatus(sendStatus);
         updateMsg.setPlatform(outcome.platform());
         messageMapper.updateById(updateMsg);
         // 同步回写返回实例，调用方可据此判断投递结果（逐人失败不抛异常）
         msg.setStatus(updateMsg.getStatus());
         msg.setPlatform(outcome.platform());
+    }
+
+    static int resolveCollaborationStatus(int receiverCount, int sentCount, int failedCount, int skippedCount) {
+        if (receiverCount <= 0) {
+            return SEND_STATUS_SUCCESS;
+        }
+        if (sentCount <= 0) {
+            return SEND_STATUS_FAILED;
+        }
+        if (sentCount < receiverCount || failedCount > 0 || skippedCount > 0) {
+            return SEND_STATUS_PARTIAL;
+        }
+        return SEND_STATUS_SUCCESS;
     }
     
     /**

@@ -88,6 +88,37 @@ class CryptoSecretEnvironmentPostProcessorTest {
     }
 
     @Test
+    void shouldGenerateAes256KeysForNewBootstrapFile() {
+        Path secretFile = tempDir.resolve("aes/secrets/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.ALGORITHM_PROPERTY, "AES_GCM"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))).hasSize(32);
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY))).hasSize(32);
+    }
+
+    @Test
+    void shouldKeepAcceptingLegacyAes128BootstrapKeys() throws IOException {
+        Path secretFile = tempDir.resolve("aes-legacy/crypto.properties");
+        writeLegacySecretFile(secretFile);
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.ALGORITHM_PROPERTY, "AES"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))).hasSize(16);
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY))).hasSize(16);
+    }
+
+    @Test
     void shouldNotCreateFileWhenTransportAndCapabilitySecretsAreExplicitlyConfigured() {
         Path secretFile = tempDir.resolve("explicit/crypto.properties");
         String explicitKey = Base64.getEncoder().encodeToString(new byte[16]);

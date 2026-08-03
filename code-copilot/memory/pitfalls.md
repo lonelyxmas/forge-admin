@@ -2,6 +2,14 @@
 
 > 记录开发过程中遇到的常见错误和解决方案，避免重复踩坑
 
+## Capability 短期 Token 不能交给 Sa-Token 解析
+
+**发现日期**：2026-08-02
+
+`/oauth2/token` 与 `/openapi/v1/capabilities/**` 使用 Capability 自有的 OAuth/OpenAPI 认证，`fdu_` 不是 Forge 后台登录 Sa-Token。通用租户拦截器或操作日志切面如果在协议认证前调用 `SessionHelper/StpUtil`，会把有效 `fdu_` 误报为“token 无效”，还可能产生无意义堆栈。
+
+处理原则：协议入口在完成自身认证前不解析 Sa-Token；OAuth 换 Token、撤销和开放网关路径不进入通用操作日志，改用 Capability 专用调用审计；开放网关完成认证后再通过 `ExecutionIdentityContextHolder` 与 `TenantContextHolder` 建立可信身份和租户上下文。
+
 ---
 
 ## 1. AiCrudPage组件占位符格式错误

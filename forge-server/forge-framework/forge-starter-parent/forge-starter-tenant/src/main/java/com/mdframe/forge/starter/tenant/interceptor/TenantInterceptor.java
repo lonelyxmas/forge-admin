@@ -58,6 +58,12 @@ public class TenantInterceptor implements HandlerInterceptor {
                 return true;
             }
         }
+
+        // Capability OAuth/OpenAPI 使用独立短期令牌，不属于 Sa-Token 登录态。
+        // 这些入口会在完成自身认证后建立可信租户上下文，避免在此处误解析 fdu_ Token。
+        if (isCapabilityProtocolEndpoint(request.getRequestURI())) {
+            return true;
+        }
         
         try {
             // 先安全读取登录态，公开接口或未登录请求不应在这里打 ERROR。
@@ -68,7 +74,10 @@ public class TenantInterceptor implements HandlerInterceptor {
                 loginUser = getLoginUserMethod.invoke(null);
             } catch (InvocationTargetException e) {
                 if (isNotLoginException(e.getTargetException())) {
-                    log.debug("当前请求未登录，跳过租户上下文设置: {} {}", request.getMethod(), request.getRequestURI());
+                    // OAuth/OpenAPI 等公开协议入口会在控制器内部建立可信租户上下文，
+                    // 未登录是预期状态，不应在 DEBUG 级别制造故障噪音。
+                    log.trace("当前请求未登录，跳过租户上下文设置: {} {}",
+                            request.getMethod(), request.getRequestURI());
                     return true;
                 }
                 throw e;
@@ -110,6 +119,15 @@ public class TenantInterceptor implements HandlerInterceptor {
     private boolean isNotLoginException(Throwable throwable) {
         return throwable != null
                 && "cn.dev33.satoken.exception.NotLoginException".equals(throwable.getClass().getName());
+    }
+
+    private boolean isCapabilityProtocolEndpoint(String requestUri) {
+        if (requestUri == null) {
+            return false;
+        }
+        String normalized = requestUri.replaceAll(";[^/]*", "").replaceAll("/+$", "");
+        return normalized.contains("/oauth2/")
+                || normalized.contains("/openapi/v1/capabilities/");
     }
 
     @Override

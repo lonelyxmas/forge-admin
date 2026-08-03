@@ -31,7 +31,7 @@ public class OpenGatewayCapabilityResolver {
             if (matched.size() != 1) {
                 throw new OpenGatewayException(
                         "CONFLICT", 409, matched.isEmpty()
-                        ? "能力来源尚未注册可用的执行适配器"
+                        ? unsupportedSourceMessage(snapshot)
                         : "能力来源匹配到多个执行适配器");
             }
             GovernedOpenGatewayAdapter adapter = matched.get(0);
@@ -81,5 +81,10 @@ public class OpenGatewayCapabilityResolver {
             return objectMapper.createObjectNode();
         }
         return readObject(content, label);
+    }
+
+    private String unsupportedSourceMessage(GovernedCapabilitySnapshot snapshot) {
+        return "能力来源 " + snapshot.sourceType() + "/" + snapshot.behavior()
+                + " 尚未启用执行适配器，请在调用指南中检查执行能力状态";
     }
 }

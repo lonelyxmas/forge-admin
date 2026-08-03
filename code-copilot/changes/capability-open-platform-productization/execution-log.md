@@ -196,3 +196,13 @@ git diff --check
 - 数据迁移：新增 `V1.0.79__add_capability_client_user_assertion.sql`，全部新增字段使用 `information_schema` 防重复，未写入任何密钥或真实用户标识。
 - 验证状态：按用户明确要求，本轮未执行 Maven、前端 ESLint/build、Flyway、服务启动、接口调用或浏览器测试；所有结果保持“待用户验证”，未表述为通过。
 - 服务清理：本轮未启动、停止或重启任何服务，未触碰用户现有 Admin/Flow/Vite 进程。
+
+## 11. Capability Token 误报与执行适配器现场修复
+
+- 日期：2026-08-02。
+- 日志结论：`/oauth2/token` 未登录属于 OAuth 公开端点的正常状态；`fdu_` 是 Capability 短期 Token，不是 Sa-Token。通用操作日志切面在网关控制器执行前尝试读取 Sa-Token 用户，造成“token 无效”堆栈，但真实网关认证随后已成功。
+- 协议隔离：租户拦截器直接跳过 Capability OAuth/OpenAPI 协议入口的 Sa-Token 解析；通用操作日志默认且硬性排除 `/oauth2/token`、`/oauth2/revoke` 与能力开放网关路径，凭据和业务报文继续由专用安全审计治理。
+- 适配器修复：Open Gateway 自动配置显式等待 Secure Action/Flow Action 配置，并强制注入业务动作、系统服务基础适配器；缺失来源错误增加 `sourceType/behavior` 提示。
+- 易用性：调用指南增加“执行能力”阻断项。`BUSINESS_ACTION/ACTION`、`SYSTEM_SERVICE/ACTION` 和已开启的 `FLOW_ACTION/FLOW` 可进入测试；旧的未知来源或关闭的流程执行器会提前给出中文修复建议。
+- 用户映射：客户端签名用户断言仍默认要求管理员预绑定，但每个外围 `sub` 只需绑定一次，后续所有 Token Exchange 复用。该边界用于阻止客户端任意指定 Forge 用户；受信 OIDC 模式仍可按已验证手机号完成首次自动映射。
+- 验证状态：按用户明确要求，本轮未执行 Maven、前端 ESLint/build、服务启动或接口测试；`git diff --check` 无新增空白错误，目标文件未发现冲突标记，运行结果待用户验证。

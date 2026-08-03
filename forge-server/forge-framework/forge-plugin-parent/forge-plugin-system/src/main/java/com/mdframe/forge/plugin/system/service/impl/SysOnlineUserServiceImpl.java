@@ -310,8 +310,7 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
                     .timestamp(System.currentTimeMillis())
                     .build();
             
-            // 使用通用Topic广播,由前端根据userId过滤
-            messagePushService.pushToTopic("auth", message);
+            messagePushService.pushToUser(String.valueOf(loginId), message);
             log.info("通知用户被踢下线: loginId={}", loginId);
         } catch (Exception e) {
             log.error("通知用户被踢下线失败: loginId={}", loginId, e);
@@ -344,8 +343,7 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
                     .timestamp(System.currentTimeMillis())
                     .build();
             
-            // 使用通用Topic广播,由前端根据userId过滤
-            messagePushService.pushToTopic("auth", message);
+            messagePushService.pushToUser(String.valueOf(loginId), message);
             log.info("通知用户被顶下线: loginId={}", loginId);
         } catch (Exception e) {
             log.error("通知用户被顶下线失败: loginId={}", loginId, e);
@@ -375,8 +373,7 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
                     .timestamp(System.currentTimeMillis())
                     .build();
             
-            // 使用通用Topic广播,由前端根据userId过滤
-            messagePushService.pushToTopic("auth", message);
+            messagePushService.pushToUser(String.valueOf(loginId), message);
             log.info("通知用户被封禁: loginId={}, disableTime={}", loginId, disableTime);
         } catch (Exception e) {
             log.error("通知用户被封禁失败: loginId={}", loginId, e);

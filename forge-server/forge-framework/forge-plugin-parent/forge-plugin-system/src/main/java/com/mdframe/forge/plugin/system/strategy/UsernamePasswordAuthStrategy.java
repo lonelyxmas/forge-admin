@@ -1,6 +1,8 @@
 package com.mdframe.forge.plugin.system.strategy;
 
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
+import com.mdframe.forge.starter.core.context.CryptoProperties;
+import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.auth.enums.AuthType;
 import com.mdframe.forge.starter.crypto.keyexchange.RsaKeyPairHolder;
@@ -10,7 +12,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 用户名+密码认证策略
- * 支持明文密码和 RSA 加密密码（自动探测解密）
+ * 启用加密时强制使用 RSA 密文；只有显式关闭加密功能才接受明文密码。
  */
 @Slf4j
 @Component
@@ -18,6 +20,9 @@ public class UsernamePasswordAuthStrategy extends AbstractAuthStrategy {
 
     @Autowired(required = false)
     private RsaKeyPairHolder rsaKeyPairHolder;
+
+    @Autowired(required = false)
+    private CryptoProperties cryptoProperties;
 
     @Override
     protected void validateRequest(LoginRequest request) {
@@ -40,7 +45,7 @@ public class UsernamePasswordAuthStrategy extends AbstractAuthStrategy {
             recordLoginFailure(null, "用户不存在");
         }
 
-        // 4. 解密密码（如果是 RSA 加密，则先解密；否则直接用明文）
+        // 4. 解密密码；启用加密时失败关闭，禁止静默降级明文
         String rawPassword = decryptPasswordIfNeeded(request.getPassword());
 
         // 5. 验证密码
@@ -53,11 +58,14 @@ public class UsernamePasswordAuthStrategy extends AbstractAuthStrategy {
     }
 
     /**
-     * 尝试 RSA 解密密码（Base64 密文），失败则返回原始密码（明文降级）
+     * 解密 RSA 密码。显式关闭加密功能时保留明文兼容。
      */
     private String decryptPasswordIfNeeded(String password) {
-        if (rsaKeyPairHolder == null) {
+        if (cryptoProperties != null && !Boolean.TRUE.equals(cryptoProperties.getEnabled())) {
             return password;
+        }
+        if (rsaKeyPairHolder == null) {
+            throw new BusinessException("密码加密服务不可用，请稍后重试");
         }
         try {
             String decrypted = rsaKeyPairHolder.decryptByPrivateKey(password);
@@ -65,9 +73,10 @@ public class UsernamePasswordAuthStrategy extends AbstractAuthStrategy {
                 return decrypted;
             }
         } catch (Exception e) {
-            log.debug("密码 RSA 解密失败，使用明文: {}", e.getMessage());
+            log.warn("登录密码 RSA 解密失败，已拒绝明文降级");
+            throw new BusinessException("密码加密校验失败，请刷新后重试");
         }
-        return password;
+        throw new BusinessException("密码加密校验失败，请刷新后重试");
     }
 
     @Override

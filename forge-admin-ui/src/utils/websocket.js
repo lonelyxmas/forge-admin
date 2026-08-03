@@ -44,6 +44,11 @@ export function initWebSocketClient() {
 
   stompClient = new Client({
     webSocketFactory: () => socket,
+    connectHeaders: {
+      Authorization: authStore.accessToken.startsWith('Bearer ')
+        ? authStore.accessToken
+        : `Bearer ${authStore.accessToken}`,
+    },
     reconnectDelay: 5000,
     heartbeatIncoming: 10000,
     heartbeatOutgoing: 10000,
@@ -56,8 +61,7 @@ export function initWebSocketClient() {
     isConnected = true
     isConnecting = false
 
-    // 订阅认证相关广播主题
-    stompClient.subscribe('/topic/auth', (frame) => {
+    const handleFrame = (frame) => {
       try {
         const body = JSON.parse(frame.body || '{}')
         handleWebSocketMessage(body)
@@ -65,7 +69,10 @@ export function initWebSocketClient() {
       catch (e) {
         console.error('解析 WebSocket 消息失败:', e, frame)
       }
-    })
+    }
+
+    stompClient.subscribe('/user/queue/messages', handleFrame)
+    stompClient.subscribe('/topic/broadcast', handleFrame)
   }
 
   stompClient.onStompError = (frame) => {

@@ -141,13 +141,13 @@ forge:
   flow:
     job:
       remote:
-        enabled: ${FORGE_FLOW_JOB_REMOTE_ENABLED:true}
+        enabled: ${FORGE_FLOW_JOB_REMOTE_ENABLED:false}
         url: ${FORGE_FLOW_JOB_REMOTE_URL:http://127.0.0.1:8081}
-        token: ${FORGE_FLOW_JOB_REMOTE_TOKEN:e91558ee6c499b1e927820b08461b1ebd3c57be7e41a43955d68092dd4b9f492}
+        token: ${FORGE_FLOW_JOB_REMOTE_TOKEN:}
   job:
     open-api:
-      enabled: ${FORGE_JOB_OPEN_API_ENABLED:true}
-      token-pepper: ${FORGE_JOB_OPEN_API_TOKEN_PEPPER:e91558ee6c499b1e927820b08461b1ebd3c57be7e41a43955d68092dd4b9f492}
+      enabled: ${FORGE_JOB_OPEN_API_ENABLED:false}
+      token-pepper: ${FORGE_JOB_OPEN_API_TOKEN_PEPPER:}
   capability:
     # 默认由 crypto bootstrap 首次生成并稳定持久化；环境变量/JVM 参数可显式覆盖
     client-pepper: ${FORGE_CAPABILITY_CLIENT_PEPPER:}

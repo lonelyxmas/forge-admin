@@ -48,7 +48,7 @@ public class SysMessage extends TenantEntity {
     private String sendChannel;
     
     /**
-     * 消息状态：0-草稿/1-已发送/2-发送失败
+     * 消息状态：0-草稿/1-已发送/2-发送失败/3-部分成功
      */
     private Integer status;
     

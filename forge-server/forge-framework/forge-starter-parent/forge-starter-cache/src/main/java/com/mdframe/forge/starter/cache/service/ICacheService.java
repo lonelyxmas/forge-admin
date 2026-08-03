@@ -40,6 +40,13 @@ public interface ICacheService {
     void set(String key, Object value, Duration duration);
 
     /**
+     * 仅在键不存在时设置缓存和过期时间。
+     *
+     * @return 本次是否成功写入
+     */
+    boolean setIfAbsent(String key, Object value, long timeout, TimeUnit timeUnit);
+
+    /**
      * 获取缓存
      *
      * @param key 键

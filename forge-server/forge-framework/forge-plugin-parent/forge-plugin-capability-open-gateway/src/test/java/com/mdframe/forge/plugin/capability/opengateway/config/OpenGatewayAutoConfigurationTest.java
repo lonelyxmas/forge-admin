@@ -15,6 +15,7 @@ import com.mdframe.forge.plugin.capability.opengateway.mapper.AiCapabilityOpenap
 import com.mdframe.forge.plugin.capability.opengateway.mapper.OpenGatewayCatalogMapper;
 import com.mdframe.forge.plugin.capability.opengateway.service.CapabilityInvokeOrchestrator;
 import com.mdframe.forge.plugin.capability.schema.CapabilitySchemaValidator;
+import com.mdframe.forge.plugin.capability.secureaction.system.SystemServiceOpenGatewayAdapter;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessActionExecutionService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessObjectActionService;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -66,6 +67,8 @@ class OpenGatewayAutoConfigurationTest {
                         () -> mock(BusinessObjectActionService.class))
                 .withBean(BusinessActionExecutionService.class,
                         () -> mock(BusinessActionExecutionService.class))
+                .withBean(SystemServiceOpenGatewayAdapter.class,
+                        () -> mock(SystemServiceOpenGatewayAdapter.class))
                 .withBean(OpenApiReplayGuard.class, () -> mock(OpenApiReplayGuard.class))
                 .withBean(PersistentCryptoService.class, () -> mock(PersistentCryptoService.class))
                 .withBean(OpenGatewayCatalogMapper.class,

@@ -268,7 +268,6 @@ export async function encryptPassword(password, axios) {
   }
   catch (error) {
     console.error('密码加密失败:', error)
-    // 加密失败时返回原密码（降级方案）
-    return password
+    throw new Error('密码加密服务暂不可用，请刷新后重试')
   }
 }

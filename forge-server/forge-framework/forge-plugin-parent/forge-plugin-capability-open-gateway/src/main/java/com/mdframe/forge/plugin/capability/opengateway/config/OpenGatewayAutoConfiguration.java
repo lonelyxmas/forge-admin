@@ -14,9 +14,11 @@ import com.mdframe.forge.plugin.capability.opengateway.mapper.OpenGatewayCatalog
 import com.mdframe.forge.plugin.capability.opengateway.service.CapabilityInvokeOrchestrator;
 import com.mdframe.forge.plugin.capability.opengateway.service.OpenGatewayContextBridge;
 import com.mdframe.forge.plugin.capability.schema.CapabilitySchemaValidator;
+import com.mdframe.forge.plugin.capability.secureaction.config.SecureActionAutoConfiguration;
 import com.mdframe.forge.plugin.capability.secureaction.publish.SecureActionPublishedModelPolicy;
 import com.mdframe.forge.plugin.capability.secureaction.publish.SecureActionStepValidator;
 import com.mdframe.forge.plugin.capability.secureaction.spi.GovernedOpenGatewayAdapter;
+import com.mdframe.forge.plugin.capability.secureaction.system.SystemServiceOpenGatewayAdapter;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessActionExecutionService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessObjectActionService;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -29,6 +31,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -37,7 +40,9 @@ import java.util.List;
  * 步骤校验器与发布模型策略为无状态组件，此处独立实例化，
  * 避免与 secure-actions 插件开关产生装配耦合。
  */
-@AutoConfiguration(after = CapabilityIdentityAutoConfiguration.class)
+@AutoConfiguration(
+        after = {CapabilityIdentityAutoConfiguration.class, SecureActionAutoConfiguration.class},
+        afterName = "com.mdframe.forge.plugin.capability.flowaction.config.FlowActionAutoConfiguration")
 @ConditionalOnProperty(prefix = "forge.capability.open-gateway", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(OpenGatewayProperties.class)
 public class OpenGatewayAutoConfiguration {
@@ -45,8 +50,14 @@ public class OpenGatewayAutoConfiguration {
     @Bean
     public OpenGatewayCapabilityResolver openGatewayCapabilityResolver(
             ObjectMapper objectMapper,
+            BusinessActionOpenGatewayAdapter businessActionAdapter,
+            SystemServiceOpenGatewayAdapter systemServiceAdapter,
             List<GovernedOpenGatewayAdapter> adapters) {
-        return new OpenGatewayCapabilityResolver(objectMapper, adapters);
+        LinkedHashSet<GovernedOpenGatewayAdapter> registered = new LinkedHashSet<>();
+        registered.add(businessActionAdapter);
+        registered.add(systemServiceAdapter);
+        registered.addAll(adapters);
+        return new OpenGatewayCapabilityResolver(objectMapper, List.copyOf(registered));
     }
 
     @Bean

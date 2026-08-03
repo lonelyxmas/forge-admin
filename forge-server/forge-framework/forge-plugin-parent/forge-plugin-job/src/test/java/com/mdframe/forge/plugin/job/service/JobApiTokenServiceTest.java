@@ -176,6 +176,7 @@ class JobApiTokenServiceTest {
 
     private JobApiTokenService service(SysJobApiTokenMapper tokenMapper, String pepper) {
         JobProperties properties = new JobProperties();
+        properties.getOpenApi().setEnabled(true);
         properties.getOpenApi().setTokenPepper(pepper);
         return new JobApiTokenService(
                 tokenMapper, mock(SysJobConfigMapper.class),

@@ -64,11 +64,14 @@ export const useAuthStore = defineStore('auth', {
       try {
         const res = await api.getPublicKey()
         const publicKey = res?.data?.publicKey
-        return publicKey ? rsaEncrypt(password, publicKey) : password
+        if (!publicKey) {
+          throw new Error('未获取到密码加密公钥')
+        }
+        return rsaEncrypt(password, publicKey)
       }
       catch (error) {
-        console.warn('密码 RSA 加密失败，使用明文降级:', error)
-        return password
+        console.error('密码 RSA 加密失败:', error)
+        throw new Error('密码加密服务暂不可用，请刷新后重试')
       }
     },
     async login(form) {

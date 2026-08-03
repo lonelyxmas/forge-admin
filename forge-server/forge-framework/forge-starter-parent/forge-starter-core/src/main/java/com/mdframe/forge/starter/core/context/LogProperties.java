@@ -45,6 +45,8 @@ public class LogProperties {
             "/auth/resetPassword",
             "/auth/online/kickout",
             "/auth/online/batchKickout",
+            "/oauth2/**",
+            "/openapi/v1/capabilities/**",
             "/actuator/**",
             "/swagger-ui/**",
             "/v3/api-docs/**"

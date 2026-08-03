@@ -1,6 +1,7 @@
 package com.mdframe.forge.starter.datascope.handler;
 
 import com.mdframe.forge.starter.datascope.context.DataScopeContext;
+import com.mdframe.forge.starter.datascope.config.DataScopeProperties;
 import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
 import com.mdframe.forge.starter.datascope.enums.DataScopeType;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 
+import static org.mockito.Mockito.mock;
+
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,7 +22,8 @@ class DataScopeInterceptorTest {
 
     @Test
     void shouldApplyTenantScopeInsideWrappedCountQuery() throws Exception {
-        DataScopeInterceptor interceptor = new DataScopeInterceptor();
+        DataScopeInterceptor interceptor = new DataScopeInterceptor(mock(com.mdframe.forge.starter.datascope.service.IDataScopeService.class),
+                new DataScopeProperties());
         SysDataScopeConfig config = buildTenantScopeConfig();
         DataScopeContext context = buildTenantScopeContext();
         String originalSql = """
@@ -46,7 +50,8 @@ class DataScopeInterceptorTest {
 
     @Test
     void shouldApplyTenantScopeToTopLevelSelectWhenNotWrapped() throws Exception {
-        DataScopeInterceptor interceptor = new DataScopeInterceptor();
+        DataScopeInterceptor interceptor = new DataScopeInterceptor(mock(com.mdframe.forge.starter.datascope.service.IDataScopeService.class),
+                new DataScopeProperties());
         SysDataScopeConfig config = buildTenantScopeConfig();
         DataScopeContext context = buildTenantScopeContext();
         String originalSql = """
