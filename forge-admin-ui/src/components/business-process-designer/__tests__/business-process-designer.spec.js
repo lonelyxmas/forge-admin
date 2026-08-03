@@ -175,6 +175,30 @@ describe('useBusinessProcessDesigner', () => {
     exported.nodes.push({ id: 'mutated' })
     expect(designer.getNode('mutated')).toBeNull()
   })
+
+  it('keeps governed dependencies synchronized with configured nodes', () => {
+    const designer = useBusinessProcessDesigner(
+      createBusinessProcessSchema({ processCode: 'purchase_submit', objectRef }),
+    )
+    const actionId = designer.addNode('start_manual', 'ACTION', {
+      config: {
+        actionType: 'SEND_MESSAGE',
+        messageTemplateCode: 'purchase_approved_notice',
+      },
+    })
+
+    expect(designer.schema.value.dependencies.messageTemplates).toEqual(['purchase_approved_notice'])
+
+    designer.updateNode(actionId, {
+      config: {
+        actionType: 'INVOKE_CAPABILITY',
+        messageTemplateCode: null,
+        capabilityCode: 'erp.purchase.sync',
+      },
+    })
+    expect(designer.schema.value.dependencies.messageTemplates).toEqual([])
+    expect(designer.schema.value.dependencies.capabilities).toEqual(['erp.purchase.sync'])
+  })
 })
 
 describe('business process canvas', () => {

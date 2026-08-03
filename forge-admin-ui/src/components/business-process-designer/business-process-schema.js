@@ -143,6 +143,47 @@ export function cloneBusinessProcessSchema(input) {
   return deepClone(normalizeBusinessProcessSchema(input))
 }
 
+export function synchronizeBusinessProcessDependencies(input) {
+  const schema = normalizeBusinessProcessSchema(input)
+  const dependencies = Object.fromEntries(DEPENDENCY_KEYS.map(key => [key, new Set()]))
+  if (schema.subject?.objectCode)
+    dependencies.objects.add(schema.subject.objectCode)
+
+  for (const node of schema.nodes) {
+    const config = node.config || {}
+    if (node.type === BUSINESS_PROCESS_NODE_TYPE.ACTION) {
+      if (['UPDATE_RECORD', 'CREATE_RECORD'].includes(config.actionType) && config.objectCode)
+        dependencies.objects.add(config.objectCode)
+      if (['BUSINESS_ACTION', 'EXECUTE_BUSINESS_ACTION', 'DOMAIN_ACTION'].includes(config.actionType)) {
+        const actionCode = config.businessActionCode || config.actionCode
+        if (actionCode)
+          dependencies.businessActions.add(actionCode)
+      }
+      if (config.actionType === 'SEND_MESSAGE' && config.messageTemplateCode)
+        dependencies.messageTemplates.add(config.messageTemplateCode)
+      if (config.actionType === 'INVOKE_CAPABILITY' && config.capabilityCode)
+        dependencies.capabilities.add(config.capabilityCode)
+    }
+    if (node.type === BUSINESS_PROCESS_NODE_TYPE.APPROVAL) {
+      if (config.flowModelKey)
+        dependencies.flowModels.add(config.flowModelKey)
+      if (config.formAsset?.formKey)
+        dependencies.formAssets.add(config.formAsset.formKey)
+    }
+    if (node.type === BUSINESS_PROCESS_NODE_TYPE.SUB_PROCESS) {
+      const processCode = config.processCode || config.subProcessCode
+      if (processCode)
+        dependencies.subProcesses.add(processCode)
+    }
+  }
+
+  schema.dependencies = Object.fromEntries(DEPENDENCY_KEYS.map(key => [
+    key,
+    [...dependencies[key]],
+  ]))
+  return normalizeBusinessProcessSchema(schema)
+}
+
 export function businessProcessHashInput(input) {
   return stableStringify(normalizeBusinessProcessSchema(input))
 }

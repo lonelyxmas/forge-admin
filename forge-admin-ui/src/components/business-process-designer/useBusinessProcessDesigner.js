@@ -10,6 +10,7 @@ import {
   businessProcessHashInput,
   cloneBusinessProcessSchema,
   normalizeBusinessProcessSchema,
+  synchronizeBusinessProcessDependencies,
 } from './business-process-schema.js'
 
 export function useBusinessProcessDesigner(initialSchema, options = {}) {
@@ -118,6 +119,31 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     return getNode(nodeId)
   }
 
+  function changeStartType(nodeId, type, overrides = {}) {
+    const source = getNode(nodeId)
+    if (!source || !isBusinessProcessStartType(source.type))
+      throw new Error('找不到要切换的开始节点')
+    const template = createBusinessProcessNodeTemplate(type)
+    if (!isBusinessProcessStartType(template.type))
+      throw new Error('开始节点只能切换为手动、事件或定时触发')
+
+    const next = cloneBusinessProcessSchema(schema.value)
+    const index = next.nodes.findIndex(node => node.id === nodeId)
+    next.nodes[index] = {
+      ...next.nodes[index],
+      type: template.type,
+      name: overrides.name || next.nodes[index].name || template.name,
+      ports: template.ports,
+      config: {
+        ...deepClone(template.config),
+        ...deepClone(overrides.config || {}),
+      },
+    }
+    next.subject.recordIdSource = overrides.recordIdSource || recordIdSource(template.type)
+    replaceSchema(next)
+    return getNode(nodeId)
+  }
+
   function deleteNode(nodeId) {
     const current = getNode(nodeId)
     if (!current)
@@ -217,7 +243,7 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
   }
 
   function replaceSchema(next) {
-    const normalized = normalizeBusinessProcessSchema(next)
+    const normalized = synchronizeBusinessProcessDependencies(next)
     history.snapshot()
     schema.value = normalized
   }
@@ -270,6 +296,7 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     addNode,
     copyNode,
     updateNode,
+    changeStartType,
     deleteNode,
     addEdge,
     updateEdge,
@@ -282,6 +309,14 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     clearHistory: history.clear,
     bindHistoryKeyboard: history.bindKeyboard,
   }
+}
+
+function recordIdSource(type) {
+  return {
+    START_MANUAL: 'RUNTIME_RECORD',
+    START_EVENT: 'EVENT_RECORD',
+    START_SCHEDULE: 'SCHEDULE_SCAN_RECORD',
+  }[type]
 }
 
 function requireNewNodeId(nodeId, schema) {

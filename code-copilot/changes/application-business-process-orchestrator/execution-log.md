@@ -119,3 +119,18 @@
 - 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8825` 个模块并 `BUILD SUCCESS`（`built in 1m 50s`）。保留仓库既有的组件命名冲突、动态/静态 import、CSS `//` 注释警告，未新增阻断。
 - 跳过项：未启动 Vite/浏览器，原因是 Task 14 仅交付协议和画布基础，尚无应用路由与完整节点配置；浏览器交互留待 Task 15-16。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
 - 已启动服务：无。
+
+## 2026-08-03 Task 15：节点配置、真实审批设计器与草稿交互
+
+- TDD 红灯：新增 `business-process-designer-workbench.spec.js` 后首次运行因五个目标组件不存在而在模块解析阶段失败，符合先冻结工作台交互合同再实现的预期。
+- 工作台：新增 `BusinessProcessDesigner.vue`，提供紧凑工具栏、节点面板、共享画布、问题列表、节点复制/删除、检查、自动/显式保存状态、服务端冲突提示与刷新入口；dirty 草稿注册 `beforeunload` 保护。
+- 节点配置：新增 `BusinessProcessNodeRenderer/BusinessProcessNodeConfigDrawer/StartNodeConfig/ActionAndApprovalNodeConfig`，覆盖触发方式、事件、定时服务账号、结构化条件、记录动作、消息、业务动作、能力、审批、子流程和结束结果，不暴露高级文本协议或自由外部目标。
+- 审批衔接：审批节点只选择已发布/已部署 Flowable 模型，并在全屏弹层异步复用真实 `flow/design.vue`；会签、驳回、退回、审批人和字段权限继续由 BPMN 所有，关闭/保存/部署后发出模型刷新事件。
+- 协议联动：新增 `synchronizeBusinessProcessDependencies` 与开始类型切换合同；节点引用变更自动重建七类受治理依赖，手动/事件/定时切换同步 `recordIdSource`，动作新增默认绑定当前主对象。
+- 定向测试：两份业务设计器测试共 `17/17` 通过（协议/历史 11、工作台交互 6）；工作台测试覆盖审批四出口、真实设计器入口、结构化触发切换、面板路由、依赖同步、自动保存、hash 冲突和离开保护。
+- 组合回归：业务设计器、BPMN roundtrip、JSON→BPMN、FlowCanvas 和 layout-engine 共 6 个测试文件，结果 `55/55` 通过；未发布/未部署审批模型不会进入可选目录。
+- 静态检查：`pnpm exec eslint src/components/business-process-designer` 通过；目标目录 `git diff --check` 通过。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8825` 个模块并成功构建（`built in 1m 46s`）；真实 `flow/design.vue` 异步依赖、Naive UI 抽屉和弹窗均通过装配。
+- 既有警告：仍为组件命名冲突、动态/静态 import 和 CSS `//` 注释等仓库存量构建警告，本任务未新增阻断。
+- 跳过项：未启动 Vite/浏览器，原因是 Task 15 独立组件尚未接入可访问路由；浏览器与路由离开验收将在 Task 16 完成应用工作台/全屏设计页后执行。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
+- 已启动服务：无。

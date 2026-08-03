@@ -270,3 +270,13 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 - 画布合同：`BusinessProcessCanvas` 通过只读布局适配层复用 `FlowCanvas/EdgeLayer/layoutFlow`；持久化节点不写入 `nodeType/bpmnElementId`，现有 `FlowCanvas` 无需修改。
 - 必跑命令：业务画布测试与既有 converter/canvas 5 个测试文件、业务画布与转换器定向 ESLint、目标差异 `git diff --check`、前端生产构建。
 - 环境门禁：Task 14 尚未接入应用路由和完整节点配置，不启动 Vite/浏览器做伪 E2E；Task 15-16 完成后再执行可视化操作、离开确认和应用工作台验收。
+
+## 12. Task 15 增量验证
+
+- 节点渲染：业务节点卡片与结果出口只读取业务注册表，不写入或依赖 BPMN 元素元数据；审批固定显示 `APPROVED/REJECTED/CANCELED/FAILED`。
+- 结构化配置：触发方式、记录事件、日期扫描、条件分支、记录动作、消息、业务动作、受治理能力、审批模型、表单资产和同应用子流程全部使用选择/字段映射；普通路径无高级文本协议、任意表达式、数据库语句或自由目标地址输入。
+- 审批边界：审批模型只从已发布/已部署目录选择；点击后异步嵌入真实 `flow/design.vue`，保存、部署或关闭后请求刷新模型摘要，业务画布不保存审批人、会签、驳回和节点字段权限。
+- 依赖合同：节点配置变更自动重建对象、Flowable 模型、表单、消息模板、业务动作、能力和子流程依赖数组；删除/改型节点后不保留失效的未使用依赖。
+- 草稿交互：覆盖防抖自动保存、显式检查/保存、dirty 事件、服务端 hash 冲突提示、刷新入口、浏览器离开保护、问题定位及撤销重做；保存成功由容器状态回写基线。
+- 必跑命令：两份业务流程设计器测试、Task 14 的 converter/canvas 回归、`src/components/business-process-designer` ESLint、目标差异 `git diff --check` 和生产构建。
+- 环境门禁：Task 15 仍是独立组件，尚未接入应用工作台路由和真实控制面 API；浏览器页面操作、加密草稿 CAS、目录刷新和路由离开确认留待 Task 16 一并验收。
