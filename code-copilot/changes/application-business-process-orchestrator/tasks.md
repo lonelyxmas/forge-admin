@@ -10,10 +10,10 @@
 - [x] 进入 `/apply` 前读取根 `AGENTS.md`、当前 `spec.md/tasks.md`、`code-copilot/memory/*` 和相关 Skill。
 - [x] 创建 `test-spec.md` 与 `execution-log.md`，并读取 `code-copilot/rules/automated-testing-standard.md` 形成增量验证基线。
 - [x] 实施前重新扫描 `forge-server/db/migration`；当前最新为并行变更中的 `V1.0.82`，本变更使用连续未占用的 `V1.0.83/V1.0.84`，不修改 `V1.0.82`。
-- [ ] 确认 `forge-flow`、消息模块、统一能力开放平台和企业集成模块的节点调用合同；缺少的真实能力必须在节点面板标为不可用，禁止以 TODO 成功结果替代。
+- [x] 已确认节点调用合同：审批复用 `BusinessFlowService/FlowClient`，消息与企业协同复用 `BusinessActionStepExecutor + MessageService/CollaborationMessageChannel`；统一能力平台提供 `CapabilityRegistry`，但 generator 尚无受控桥接，完成 Task 9B 前节点必须标为不可用；不提供自由 URL。
 - [ ] 确认采购审批样例和目标测试应用的当前发布版本、旧触发器、FLOW Binding、业务动作及运行中 Flowable 实例基线。
-- [ ] 所有 19 位 ID 在前端和 JSON 中按字符串处理；所有业务数据继续使用 `businessKey=<objectCode>:<recordId>`。
-- [ ] 本变更涉及状态、审批权限、定时身份和外部调用，编码前完成一次安全/权限/状态机人工审查。
+- [x] 所有 19 位 ID 在前端和 JSON 中按字符串处理；所有业务数据继续使用 `businessKey=<objectCode>:<recordId>`。
+- [x] 已在 `test-spec.md` 完成状态、审批权限、定时身份、外部调用、旧配置迁移和回调幂等专项审查；真实环境验收门禁继续保留。
 
 ## 里程碑
 
@@ -66,6 +66,8 @@
 - **验收**：不存在未决节点类型、自由 URL Webhook 或“实现时再定”的协议字段；测试 Spec 可追溯到 Spec 功能 1-40。
 
 ## Task 1：新增流程定义与版本数据库结构
+
+**状态：implemented（2026-08-03）**。`V1.0.83/V1.0.84` 已实现并通过静态检查；MySQL 8 新库、存量库和重复 Flyway 实跑留待 Task 19 真实环境门禁。
 
 - **目标**：创建应用级流程定义、不可变版本、运行实例、节点运行和权限资源表结构。
 - **涉及文件**：
