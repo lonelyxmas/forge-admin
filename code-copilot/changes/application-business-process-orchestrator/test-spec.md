@@ -261,3 +261,12 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 - 数据库静态门禁：`V1.0.85` 使用 `tenant_id=1`、显式列、`NOT EXISTS` 和既有运行权限继承；无 Flyway `${...}` 占位符和 `tenant_id=0`。
 - 必跑命令：Task 6/7 的 5 个定向测试类、三份 Mapper XML `xmllint`、目标差异 `git diff --check`、`forge-admin-server -am compile -DskipTests`。
 - 环境门禁：真实 Flyway、权限继承查询、Flowable 已发布/未发布模型响应和加密 HTTP API 留待 Task 19；未执行前不标记通过。
+
+## 11. Task 14 增量验证
+
+- 协议合同：默认草稿为 `START_MANUAL -> END`；节点、连线、端口和依赖稳定排序；所有 ID 保持字符串，数字 ID 和 BPMN `flowJson` 失败关闭。
+- BPMN 隔离：`convertJsonToBpmn` 显式拒绝 `businessProcessJson`，既有 JSON/BPMN roundtrip 和转换测试不得回退。
+- 图与编辑合同：覆盖多个开始节点、悬空边、环、八类业务节点注册表、审批四结果出口、条件双分支、节点插入/复制/删除、撤销重做、dirty 基线和深克隆导出。
+- 画布合同：`BusinessProcessCanvas` 通过只读布局适配层复用 `FlowCanvas/EdgeLayer/layoutFlow`；持久化节点不写入 `nodeType/bpmnElementId`，现有 `FlowCanvas` 无需修改。
+- 必跑命令：业务画布测试与既有 converter/canvas 5 个测试文件、业务画布与转换器定向 ESLint、目标差异 `git diff --check`、前端生产构建。
+- 环境门禁：Task 14 尚未接入应用路由和完整节点配置，不启动 Vite/浏览器做伪 E2E；Task 15-16 完成后再执行可视化操作、离开确认和应用工作台验收。

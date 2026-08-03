@@ -358,13 +358,15 @@
 
 ## Task 14：前端独立业务流程协议与画布基础
 
+**状态：completed（2026-08-03）**。已冻结前端 `businessProcessJson 1.0` 创建/归一化/稳定 hash 合同，新增八类业务节点注册表、DAG 图操作与历史状态，并以适配层复用现有画布、连线和布局；定向与既有回归共 48 项、ESLint 和生产构建通过。
+
 - **目标**：复用图形基础建立独立业务画布，不改变 DingFlowDesigner 的审批协议和 BPMN 转换。
 - **涉及文件**：
   - `forge-admin-ui/src/components/business-process-designer/business-process-schema.js` — 定义创建、归一化、克隆、hash 输入和协议迁移。
   - `forge-admin-ui/src/components/business-process-designer/business-process-node-types.js` — 定义开始、条件、动作、审批、子流程和结束节点注册表。
   - `forge-admin-ui/src/components/business-process-designer/useBusinessProcessDesigner.js` — 提供节点/边 CRUD、DAG 分支、撤销重做和选择状态。
   - `forge-admin-ui/src/components/business-process-designer/BusinessProcessCanvas.vue` — 复用或包装 `FlowCanvas`、EdgeLayer 和布局能力。
-  - `forge-admin-ui/src/components/flow-designer/canvas/FlowCanvas.vue` — 仅在必要时增加外部 node renderer/registry 插槽，保持 DingFlowDesigner 默认行为和测试。
+  - `forge-admin-ui/src/components/flow-designer/canvas/FlowCanvas.vue` — 已确认现有 `edges/nodes/toolbar` 插槽足够，本任务无需修改，保持 DingFlowDesigner 默认行为和测试。
 - **关键签名**：
   ```javascript
   export function createBusinessProcessSchema({ processCode, objectRef, startType })

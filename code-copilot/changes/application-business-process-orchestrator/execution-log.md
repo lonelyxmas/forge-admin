@@ -105,3 +105,17 @@
 - 聚合编译结果：47/47 模块 `BUILD SUCCESS`，generator 与 admin 装配链路通过；仅有既有 deprecation、unchecked 和 Lombok `@Builder` warning，无新增阻断。
 - 跳过项：未执行真实 MySQL/Flyway、权限继承数据查询、加密 HTTP API、Flowable 已发布/未发布模型联调和浏览器验证；原因是本轮遵循用户偏好不启动真实服务、不改数据库或 Flowable 运行态，留待 Task 19 环境门禁。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 14：前端独立协议与画布基础
+
+- TDD 红灯：首次执行 `pnpm exec vitest run src/components/business-process-designer/__tests__/business-process-designer.spec.js`，测试套件因 `BusinessProcessCanvas.vue` 等四个目标模块不存在而按预期失败，未进入用例执行。
+- 协议与注册表：新增 `business-process-schema.js/business-process-node-types.js`，提供默认草稿、严格字符串 ID、BPMN 输入拒绝、节点/边/端口/依赖排序、稳定 hash 输入、八类业务节点和审批四结果出口。
+- 设计器状态：新增 `useBusinessProcessDesigner.js`，复用 `useFlowHistory`，支持线性节点插入/复制/删除、边 CRUD、条件双分支、选择、撤销重做、dirty 基线和深克隆导出；业务 DAG 中不生成伪审批节点。
+- 画布复用：新增 `BusinessProcessCanvas.vue`，用临时只读布局适配把业务类型映射给 `layoutFlow`，持久化协议不增加 `nodeType/bpmnElementId`；直接复用既有 `FlowCanvas/EdgeLayer` 插槽，无需修改共享画布。
+- BPMN 隔离：`convertJsonToBpmn` 在转换前显式识别并拒绝 `businessProcessJson`，审批 `flowJson` 的原转换路径保持不变。
+- 定向测试：业务画布测试 `10/10` 通过；组合执行业务画布、BPMN roundtrip、JSON→BPMN、FlowCanvas、layout-engine 共 5 个测试文件，结果 `48/48` 通过。
+- 中间操作纠正：首次组合回归误在仓库根目录执行，pnpm 报 `Command "vitest" not found`，未执行任何测试或产生代码影响；切换到 `forge-admin-ui` 后按同一命令通过。
+- 静态检查：`pnpm exec eslint src/components/business-process-designer src/components/flow-designer/converter/json-to-bpmn.js` 通过；目标文件 `git diff --check` 通过。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8825` 个模块并 `BUILD SUCCESS`（`built in 1m 50s`）。保留仓库既有的组件命名冲突、动态/静态 import、CSS `//` 注释警告，未新增阻断。
+- 跳过项：未启动 Vite/浏览器，原因是 Task 14 仅交付协议和画布基础，尚无应用路由与完整节点配置；浏览器交互留待 Task 15-16。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
+- 已启动服务：无。

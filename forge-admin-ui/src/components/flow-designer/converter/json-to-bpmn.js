@@ -27,6 +27,8 @@ const DEFAULT_PROCESS_CONFIG = {
 const DEFAULT_CC_DELEGATE_EXPRESSION = '$' + '{flowCcNodeDelegate}'
 
 export function convertJsonToBpmn(flowJson) {
+  if (isBusinessProcessSchema(flowJson))
+    throw new TypeError('businessProcessJson 不能转换为 BPMN；审批内部流程必须使用独立 flowJson')
   if (!flowJson || !Array.isArray(flowJson.nodes))
     return buildEmptyDefinitions()
 
@@ -56,6 +58,13 @@ export function convertJsonToBpmn(flowJson) {
     `  ${diagram}`,
     '</bpmn:definitions>',
   ].join('\n')
+}
+
+function isBusinessProcessSchema(value) {
+  return value?.schemaVersion === '1.0'
+    && typeof value?.processCode === 'string'
+    && value?.subject != null
+    && Array.isArray(value?.nodes)
 }
 
 function normalizeProcessConfig(config = {}) {
