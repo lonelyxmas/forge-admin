@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0",
+  "processCode": "purchase_submit_approval",
+  "subject": {
+    "objectId": "1900000000000001001",
+    "objectCode": "sample_purchase_order",
+    "objectVersionId": null,
+    "recordIdSource": "RUNTIME_RECORD"
+  },
+  "nodes": [
+    {
+      "id": "start_manual",
+      "type": "START_MANUAL",
+      "name": "提交审批",
+      "config": {
+        "positions": ["ROW", "DETAIL"],
+        "permission": "ai:businessProcess:start",
+        "confirmText": "确认提交当前采购单审批？",
+        "visibleCondition": {"operator": "AND", "rules": [{"source": "record", "field": "status", "operator": "EQ", "value": "DRAFT"}]}
+      }
+    },
+    {
+      "id": "approval_purchase",
+      "type": "APPROVAL",
+      "name": "采购审批",
+      "ports": ["APPROVED", "REJECTED", "CANCELED", "FAILED"],
+      "config": {
+        "flowModelKey": "sample_purchase_order_approval",
+        "versionPolicy": "PINNED_AT_APPLICATION_PUBLISH",
+        "titleTemplate": "采购审批-{orderNo}",
+        "formAsset": {"formKey": "sample_purchase_order_approval_form", "formMode": "BUSINESS_CODE_FORM", "providerKey": "samplePurchaseOrder"},
+        "variableMappings": [
+          {"field": "id", "variable": "recordId"},
+          {"field": "orderNo", "variable": "orderNo"},
+          {"field": "title", "variable": "title"},
+          {"field": "amountCent", "variable": "amountCent"}
+        ]
+      }
+    },
+    {"id": "mark_approved", "type": "ACTION", "name": "更新为已通过", "config": {"actionType": "UPDATE_RECORD", "objectCode": "sample_purchase_order", "fieldMappings": [{"field": "status", "valueSource": "CONSTANT", "value": "APPROVED"}]}},
+    {"id": "mark_rejected", "type": "ACTION", "name": "更新为待修改", "config": {"actionType": "UPDATE_RECORD", "objectCode": "sample_purchase_order", "fieldMappings": [{"field": "status", "valueSource": "CONSTANT", "value": "NEED_MODIFY"}]}},
+    {"id": "mark_canceled", "type": "ACTION", "name": "更新为已取消", "config": {"actionType": "UPDATE_RECORD", "objectCode": "sample_purchase_order", "fieldMappings": [{"field": "status", "valueSource": "CONSTANT", "value": "CANCELED"}]}},
+    {"id": "end_success", "type": "END", "name": "审批完成", "config": {"result": "SUCCESS"}},
+    {"id": "end_rejected", "type": "END", "name": "等待修改", "config": {"result": "REJECTED"}},
+    {"id": "end_canceled", "type": "END", "name": "流程取消", "config": {"result": "CANCELED"}},
+    {"id": "end_failed", "type": "END", "name": "启动失败", "config": {"result": "FAILED"}}
+  ],
+  "edges": [
+    {"id": "e1", "source": "start_manual", "target": "approval_purchase", "sourcePort": "NEXT"},
+    {"id": "e2", "source": "approval_purchase", "target": "mark_approved", "sourcePort": "APPROVED"},
+    {"id": "e3", "source": "approval_purchase", "target": "mark_rejected", "sourcePort": "REJECTED"},
+    {"id": "e4", "source": "approval_purchase", "target": "mark_canceled", "sourcePort": "CANCELED"},
+    {"id": "e5", "source": "approval_purchase", "target": "end_failed", "sourcePort": "FAILED"},
+    {"id": "e6", "source": "mark_approved", "target": "end_success", "sourcePort": "NEXT"},
+    {"id": "e7", "source": "mark_rejected", "target": "end_rejected", "sourcePort": "NEXT"},
+    {"id": "e8", "source": "mark_canceled", "target": "end_canceled", "sourcePort": "NEXT"}
+  ],
+  "policies": {"approvalConcurrency": "ONE_ACTIVE_PER_BUSINESS_KEY", "maxSubProcessDepth": 5, "retry": {"mode": "LIMITED", "maxAttempts": 3, "backoffSeconds": [30, 120, 600]}},
+  "dependencies": {"objects": ["sample_purchase_order"], "flowModels": ["sample_purchase_order_approval"], "formAssets": ["sample_purchase_order_approval_form"], "businessActions": [], "messageTemplates": [], "capabilities": [], "subProcesses": []}
+}

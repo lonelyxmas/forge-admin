@@ -163,6 +163,8 @@
 
 ## Task 6：冻结 businessProcessJson 领域协议与校验器
 
+**状态：completed（2026-08-03）**。已实现强类型 1.0 协议、稳定规范化/hash、图与依赖失败关闭校验、敏感配置拦截，并用三份冻结样例和 10 项校验器测试验证。
+
 - **目标**：定义独立于 BPMN 的强类型业务编排协议和服务端发布校验。
 - **涉及文件**：
   - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/businessprocess/schema/BusinessProcessSchema.java` — 定义根协议、subject、policies 和 dependencies。

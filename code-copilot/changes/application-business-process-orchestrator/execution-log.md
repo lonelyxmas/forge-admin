@@ -73,3 +73,19 @@
 - 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
 - 结果：主代码编译成功；累计 Mapper 契约测试 `8/8` 通过，新增验证安全列和字符串 ID。仅保留已记录的既有编译提示。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 6：businessProcessJson 协议与发布校验
+
+- 新增强类型协议：`BusinessProcessSchema/BusinessProcessNode/BusinessProcessEdge` 分离根协议、主对象、节点、连线、策略、依赖和迁移元数据，不复用 BPMN/flowJson。
+- 新增 `BusinessProcessSchemaValidator`：严格拒绝重复键、未知根字段和数字 ID；按节点/边/端口及依赖排序生成 canonical JSON 和 SHA-256；保留条件分支与重试退避等有序语义。
+- 图门禁：单开始、节点注册表、固定/条件/审批出口、悬空边、自环、重复出口、DAG、开始可达、结束可达、节点/边数量和子流程深度全部失败关闭。
+- 节点与依赖门禁：校验事件、定时普通用户引用、审批固定版本与四结果出口、记录动作、消息、业务动作、能力桥接、同应用已发布子流程、直接/间接递归、对象与字段有效性。
+- 安全门禁：大小写及嵌套路径扫描 URL/Webhook/Secret/Token/Password/PrivateKey/Authorization/Cookie/JavaClass/SQL/Script/SpEL；自由 URL/JDBC 地址和画布 actor userId 覆盖失败关闭，问题响应不回显配置值。
+- 冻结样例修正：定时提醒样例原有未连线 `end_failed`，与不可达节点门禁冲突，已从 `test-spec.md` 和测试资源中移除；新增手动审批、事件审批、定时提醒三份 classpath 回归资源。
+- 新增 `BusinessProcessValidationVO/BusinessProcessValidationContext` 与 `BusinessProcessSchemaValidatorTest` 10 项，覆盖稳定 hash、三份冻结样例、重复键/数字 ID、多开始、环、悬空边、未知节点、无结束路径、失效字段、敏感键、自由 URL、递归子流程和能力桥接未就绪。
+- 中间失败 1：新增“未知节点/无结束节点”用例首次用字符串替换构造 fixture，未实际移除结束节点，导致 1 项断言失败；改为解析后按节点/边 ID 构造无结束图，重跑通过，生产代码无回退。
+- 中间失败 2：仅关闭 Jackson scalar coercion 仍会把数字 objectId 转为字符串，数字 ID 拒绝用例失败；增加原始 JsonNode 递归 ID 类型检查，并保留校验阶段二次保护，重跑通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessSchemaValidatorTest,BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；本轮 `18/18` 测试通过（Schema 10、Mapper 8）。仅保留已记录的既有 deprecation/unchecked 编译提示。
+- 知识沉淀：新增 `pitfalls.md #160`，明确画布样例必须通过真实图校验，不能以 JSON 语法解析代替合法性验证。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

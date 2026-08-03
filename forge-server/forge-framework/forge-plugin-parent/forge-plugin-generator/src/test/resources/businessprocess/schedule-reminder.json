@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0",
+  "processCode": "purchase_due_tiered_reminder",
+  "subject": {"objectId": "1900000000000001001", "objectCode": "sample_purchase_order", "objectVersionId": null, "recordIdSource": "SCHEDULE_SCAN_RECORD"},
+  "nodes": [
+    {"id": "start_due", "type": "START_SCHEDULE", "name": "到期扫描", "config": {"dueField": "expectedArrivalDate", "lookAheadDays": 3, "lookBackDays": 7, "batchSize": 100, "minimumIntervalMinutes": 1440, "serviceActor": {"mode": "CONFIGURED_USER", "userConfigKey": "business.process.schedule.service-user"}}},
+    {"id": "check_overdue", "type": "CONDITION", "name": "判断是否逾期", "ports": ["OVERDUE", "DUE_SOON"], "config": {"branches": [{"port": "OVERDUE", "condition": {"operator": "AND", "rules": [{"source": "context", "field": "daysUntilDue", "operator": "LT", "value": 0}]}}, {"port": "DUE_SOON", "isDefault": true}]}},
+    {"id": "notify_overdue", "type": "ACTION", "name": "发送逾期提醒", "config": {"actionType": "SEND_MESSAGE", "messageTemplateCode": "purchase_overdue_notice", "channels": ["WEB", "EMAIL"], "recipientRule": {"type": "RECORD_FIELD", "field": "ownerId"}}},
+    {"id": "notify_due", "type": "ACTION", "name": "发送到期提醒", "config": {"actionType": "SEND_MESSAGE", "messageTemplateCode": "purchase_due_notice", "channels": ["WEB"], "recipientRule": {"type": "RECORD_FIELD", "field": "ownerId"}}},
+    {"id": "end_success", "type": "END", "name": "提醒完成", "config": {"result": "SUCCESS"}}
+  ],
+  "edges": [
+    {"id": "e1", "source": "start_due", "target": "check_overdue", "sourcePort": "NEXT"},
+    {"id": "e2", "source": "check_overdue", "target": "notify_overdue", "sourcePort": "OVERDUE"},
+    {"id": "e3", "source": "check_overdue", "target": "notify_due", "sourcePort": "DUE_SOON", "isDefault": true},
+    {"id": "e4", "source": "notify_overdue", "target": "end_success", "sourcePort": "NEXT"},
+    {"id": "e5", "source": "notify_due", "target": "end_success", "sourcePort": "NEXT"}
+  ],
+  "policies": {"approvalConcurrency": "ONE_ACTIVE_PER_BUSINESS_KEY", "maxSubProcessDepth": 5, "retry": {"mode": "LIMITED", "maxAttempts": 3, "backoffSeconds": [60, 300, 1800]}},
+  "dependencies": {"objects": ["sample_purchase_order"], "flowModels": [], "formAssets": [], "businessActions": [], "messageTemplates": ["purchase_overdue_notice", "purchase_due_notice"], "capabilities": [], "subProcesses": []}
+}

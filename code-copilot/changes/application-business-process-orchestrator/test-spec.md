@@ -131,8 +131,7 @@ P1 必验项：CRUD 与草稿 hash 冲突、节点配置完整性、条件分支
     {"id": "check_overdue", "type": "CONDITION", "name": "判断是否逾期", "ports": ["OVERDUE", "DUE_SOON"], "config": {"branches": [{"port": "OVERDUE", "condition": {"operator": "AND", "rules": [{"source": "context", "field": "daysUntilDue", "operator": "LT", "value": 0}]}}, {"port": "DUE_SOON", "isDefault": true}]}},
     {"id": "notify_overdue", "type": "ACTION", "name": "发送逾期提醒", "config": {"actionType": "SEND_MESSAGE", "messageTemplateCode": "purchase_overdue_notice", "channels": ["WEB", "EMAIL"], "recipientRule": {"type": "RECORD_FIELD", "field": "ownerId"}}},
     {"id": "notify_due", "type": "ACTION", "name": "发送到期提醒", "config": {"actionType": "SEND_MESSAGE", "messageTemplateCode": "purchase_due_notice", "channels": ["WEB"], "recipientRule": {"type": "RECORD_FIELD", "field": "ownerId"}}},
-    {"id": "end_success", "type": "END", "name": "提醒完成", "config": {"result": "SUCCESS"}},
-    {"id": "end_failed", "type": "END", "name": "提醒失败", "config": {"result": "FAILED"}}
+    {"id": "end_success", "type": "END", "name": "提醒完成", "config": {"result": "SUCCESS"}}
   ],
   "edges": [
     {"id": "e1", "source": "start_due", "target": "check_overdue", "sourcePort": "NEXT"},
