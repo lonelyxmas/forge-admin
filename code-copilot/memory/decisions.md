@@ -567,3 +567,11 @@ Forge 的通用 API 传输加密继续由配置中心 `crypto` 分组和匿名 `
 Capability 不再以 7 个同级小插件散落在 `forge-plugin-parent` 下，统一由 `forge-plugin-capability-parent` 聚合四个子模块：`core`、`platform`、`actions`、`high-risk-approval`。父模块只负责 Maven 聚合，不放业务代码。
 
 依赖方向固定为 `core ← platform ← actions ← high-risk-approval`。控制面、Identity 和 Open Gateway 归入 platform；Secure Actions 与 Flow Actions 归入 actions；高风险审批继续独立并默认关闭。开放网关只依赖 core 中的通用执行 SPI，通过 Spring 收集 actions 提供的适配器，禁止 platform 反向依赖 actions、generator 或 flow-client。Java 业务包、REST 路径、配置前缀和数据库表保持兼容。
+
+## 63. 业务域删除显式清理孤立业务对象
+
+**记录日期**：2026-08-04
+
+删除业务应用继续保留业务对象，便于对象被同一业务域内其他应用复用；不能为了让业务域可删而改变应用删除语义。业务域已无子域、业务应用和访问入口，仅剩未被有效应用引用的业务对象时，删除入口必须明确展示对象数量和清理边界，并显式传入孤立对象清理意图。
+
+后端默认不级联，收到显式清理意图后在同一事务内再次校验有效应用引用，物理清理 `ai_business_object_relation` 关系重建数据，按主键墓碑逻辑删除 `ai_business_object` 和 `ai_business_suite`。动态业务数据表、设计/发布历史和运行日志不做物理删除；存在有效应用引用时失败关闭。

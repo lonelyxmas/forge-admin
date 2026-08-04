@@ -107,8 +107,9 @@ public class BusinessSuiteController {
     @DeleteMapping("/{id}")
     @SaCheckPermission("ai:businessSuite:edit")
     @OperationLog(module = "业务套件", type = OperationType.DELETE, desc = "删除业务套件")
-    public RespInfo<Void> delete(@PathVariable Long id) {
-        suiteService.delete(id);
+    public RespInfo<Void> delete(@PathVariable Long id,
+                                 @RequestParam(defaultValue = "false") boolean cleanupOrphanObjects) {
+        suiteService.delete(id, cleanupOrphanObjects);
         return RespInfo.success();
     }
 }

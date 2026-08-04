@@ -39,8 +39,8 @@ export function updateBusinessSuiteStatus(id, status) {
   return request.put(`/ai/business/suite/${id}/status`, null, encryptedParams({ status }))
 }
 
-export function deleteBusinessSuite(id) {
-  return request.delete(`/ai/business/suite/${id}`, ENCRYPTED_REQUEST)
+export function deleteBusinessSuite(id, cleanupOrphanObjects = false) {
+  return request.delete(`/ai/business/suite/${id}`, encryptedParams({ cleanupOrphanObjects }))
 }
 
 export function syncLowcodeDomains() {

@@ -531,12 +531,16 @@ function toggleSuite(suite) {
 }
 
 function removeSuite(suite) {
+  const orphanObjectCount = Number(suite?.objectCount || 0)
+  const cleanupOrphanObjects = orphanObjectCount > 0
   confirmAction({
     title: '删除业务域',
-    content: `确定删除“${suite.suiteName || suite.suiteCode}”吗？存在子域、应用、对象或入口时后端会阻止操作。`,
-    positiveText: '删除',
+    content: cleanupOrphanObjects
+      ? `确定删除“${suite.suiteName || suite.suiteCode}”吗？将同时清理该业务域内 ${orphanObjectCount} 个未被应用使用的业务对象配置；对应业务数据表和历史版本不会被物理删除。`
+      : `确定删除“${suite.suiteName || suite.suiteCode}”吗？存在子域、业务应用或访问入口时仍会阻止删除。`,
+    positiveText: cleanupOrphanObjects ? '删除并清理' : '删除',
     async onConfirm() {
-      await deleteBusinessSuite(suite.id)
+      await deleteBusinessSuite(suite.id, cleanupOrphanObjects)
       if (suiteCode.value === suite.suiteCode)
         suiteCode.value = null
       message.success('业务域已删除')

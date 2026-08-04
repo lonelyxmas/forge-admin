@@ -529,13 +529,17 @@ function deleteSuite() {
   if (!suite.value?.id)
     return
   const currentSuite = suite.value
+  const orphanObjectCount = Number(currentSuite.objectCount || 0)
+  const cleanupOrphanObjects = orphanObjectCount > 0
   window.$dialog?.warning({
     title: '删除业务域',
-    content: `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？已存在业务单元或访问入口的业务域会被后端拦截。`,
-    positiveText: '删除',
+    content: cleanupOrphanObjects
+      ? `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？将同时清理该业务域内 ${orphanObjectCount} 个未被应用使用的业务对象配置；对应业务数据表和历史版本不会被物理删除。`
+      : `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？存在子域、业务应用或访问入口时仍会阻止删除。`,
+    positiveText: cleanupOrphanObjects ? '删除并清理' : '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      await deleteBusinessSuite(currentSuite.id)
+      await deleteBusinessSuite(currentSuite.id, cleanupOrphanObjects)
       message.success('业务域已删除')
       router.replace('/app-center')
     },

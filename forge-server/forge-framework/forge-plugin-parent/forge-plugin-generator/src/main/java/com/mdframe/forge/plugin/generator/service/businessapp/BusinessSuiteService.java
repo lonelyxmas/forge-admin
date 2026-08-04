@@ -97,20 +97,28 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void delete(Long id) {
+    public void delete(Long id, boolean cleanupOrphanObjects) {
         AiBusinessSuite suite = requireEntity(id);
         Long tenantId = resolveTenantId();
         if (baseMapper.countChildrenBySuite(tenantId, suite.getId()) > 0) {
             throw new BusinessException("该业务域已存在子业务域，不能删除");
         }
-        if (baseMapper.countObjectsBySuite(tenantId, suite.getSuiteCode()) > 0) {
-            throw new BusinessException("该业务套件已存在业务对象，不能删除");
+        if (businessApplicationMapper.countBySuiteCode(tenantId, suite.getSuiteCode()) > 0) {
+            throw new BusinessException("该业务域下仍有业务应用，请先删除或迁移应用");
         }
         if (baseMapper.countAppsBySuite(tenantId, suite.getSuiteCode()) > 0) {
-            throw new BusinessException("该业务套件已存在应用入口，不能删除");
+            throw new BusinessException("该业务域下仍有应用入口，请先删除或迁移入口");
         }
-        if (businessApplicationMapper.countBySuiteCode(tenantId, suite.getSuiteCode()) > 0) {
-            throw new BusinessException("该业务套件已存在业务应用，不能删除");
+        Long objectCount = baseMapper.countObjectsBySuite(tenantId, suite.getSuiteCode());
+        if (objectCount > 0) {
+            if (!cleanupOrphanObjects) {
+                throw new BusinessException("该业务域还保留 " + objectCount + " 个业务对象，请确认同时清理后再删除");
+            }
+            if (baseMapper.countActiveApplicationObjectReferencesBySuite(tenantId, suite.getSuiteCode()) > 0) {
+                throw new BusinessException("该业务域下的业务对象仍被业务应用使用，不能删除");
+            }
+            baseMapper.deleteObjectRelationsBySuite(tenantId, suite.getSuiteCode());
+            baseMapper.logicDeleteObjectsBySuite(tenantId, suite.getSuiteCode());
         }
         removeById(suite.getId());
     }
