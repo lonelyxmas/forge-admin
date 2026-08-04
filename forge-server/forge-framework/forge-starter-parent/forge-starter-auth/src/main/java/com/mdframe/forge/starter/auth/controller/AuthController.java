@@ -78,17 +78,17 @@ public class AuthController {
     }
 
     /**
-     * 获取当前登录用户信息（每次完全从DB重建，与登录时 buildLoginUser 逻辑一致）
+     * 获取当前登录用户信息（每次按已认证用户ID从DB重建，与登录时 buildLoginUser 逻辑一致）
      */
     @GetMapping("/userInfo")
     public RespInfo<LoginUser> getUserInfo() {
         LoginUser loginUser = SessionHelper.getLoginUser();
 
         if (loginUser != null) {
-            LoginUser fresh = authService.loadUserByUsername(
-                    loginUser.getUsername(), loginUser.getTenantId(), loginUser.getActiveOrgId());
+            LoginUser fresh = authService.loadUserByUserId(
+                    loginUser.getUserId(), loginUser.getTenantId(), loginUser.getActiveOrgId());
             if (fresh != null) {
-                fresh.setLoginTime(System.currentTimeMillis());
+                fresh.setLoginTime(loginUser.getLoginTime());
                 fresh.setLoginIp(loginUser.getLoginIp());
                 fresh.setUserClient(loginUser.getUserClient());
                 SessionHelper.setLoginUser(fresh);
