@@ -1,6 +1,7 @@
 <script>
 import { HOME_PAGE } from '@/utils/route'
 import { setupDebugConsole } from '@/utils/debug-console'
+import { loadRuntimeCryptoConfig } from '@/utils/crypto/crypto-config'
 import { isWeComBrowser, startWeComAutoLogin, consumeWeComLoginRedirect } from '@/utils/wecom'
 
 function hideNativeTabBar() {
@@ -37,6 +38,7 @@ export default {
   onLaunch: async function () {
     // 优先加载页内调试面板（?vdebug=1 开启），确保后续 console 可见
     await setupDebugConsole()
+    await loadRuntimeCryptoConfig()
     hideNativeTabBar()
     bootstrapWeComAutoLogin()
     console.log('App Launch')

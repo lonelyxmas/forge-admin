@@ -2,6 +2,16 @@
 
 > 记录开发过程中遇到的常见错误和解决方案，避免重复踩坑
 
+## 登录密码 RSA 不能复用通用 API 传输加密开关
+
+**发现日期**：2026-08-04
+
+登录密码属于独立的凭据保护协议，通用 API 加解密属于业务报文传输协议。若前端根据硬编码或通用 `forge.crypto.enabled` 决定是否 RSA，而后端又使用另一份配置，关闭通用加密后会出现“一端发 RSA 密文、另一端按明文哈希校验”的必然登录失败。
+
+处理原则：登录配置单独维护 `enablePasswordEncryption`，通过匿名 `/auth/loginConfig` 下发；前端开启时获取 `/crypto/public-key` 并失败关闭，后端两种密码认证策略统一复用同一个 RSA 解码器。服务端不得信任客户端自报的 `encrypted` 字段。H5、报表等公共浏览器客户端也不得硬编码 AppSecret，客户端身份只使用公开 appId，固定 Secret 仅适用于能安全保管密钥的服务端机密客户端。
+
+---
+
 ## 登录前、Token 事件和定时任务访问租户表必须显式建立上下文
 
 **发现日期**：2026-08-03
@@ -3518,7 +3528,7 @@ Flyway 脚本为新环境写了包含完整字段的 `CREATE TABLE IF NOT EXISTS
 多模块测试只选择上层业务插件时，即使工作区中的底层 Starter 已修改，Maven 也可能从本地仓库解析旧版 Starter。Capability Identity 的 Spring 集成测试因此读取到旧版 `forge-starter-crypto` 规则，并在上下文初始化时误报新 Pepper 配置键不允许；同模块普通单测仍可通过，容易误判为业务代码或配置回归。
 
 **解决方案**:
-- 修改共享 Starter 后，运行上层插件集成测试时把该 Starter 显式加入同一 Reactor，例如同时选择 `:forge-starter-crypto,:forge-plugin-capability-identity` 并使用 `-am`。
+- 修改共享 Starter 后，运行上层插件集成测试时把该 Starter 显式加入同一 Reactor，例如同时选择 `:forge-starter-crypto,:forge-plugin-capability-platform` 并使用 `-am`。
 - 先执行 Reactor `test-compile`，再运行集成测试；同时核对依赖来源、Surefire 报告中的实际用例数和失败发生阶段。
 - 只有用当前 Reactor 产物复跑仍失败时，才按产品缺陷继续分析；不要把本地 Maven 仓库旧 JAR 的启动错误记为实现失败。
 

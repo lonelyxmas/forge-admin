@@ -35,6 +35,29 @@
       :can-update-grant="hasPermission('ai:capability:grant:add')"
     />
 
+    <n-modal v-model:show="editVisible" preset="card" title="编辑能力信息" style="width: 560px">
+      <n-alert type="info" class="edit-alert">
+        这里仅修改目录展示信息。能力编码、来源绑定、调用主体和已发布版本契约不可修改；契约变化请使用“发布新版本”。
+      </n-alert>
+      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="top">
+        <n-form-item label="能力名称" path="capabilityName">
+          <n-input v-model:value="editForm.capabilityName" maxlength="128" show-count />
+        </n-form-item>
+        <n-form-item label="能力描述" path="description">
+          <n-input v-model:value="editForm.description" type="textarea" :rows="4" maxlength="1000" show-count />
+        </n-form-item>
+        <n-form-item label="可见性" path="visibility">
+          <n-select v-model:value="editForm.visibility" :options="visibilityOptions" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="editVisible = false">取消</n-button>
+          <n-button type="primary" :loading="editLoading" @click="submitEdit">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 能力详情弹窗 -->
     <n-modal
       v-model:show="detailVisible"
@@ -129,8 +152,14 @@
 </template>
 
 <script setup>
-import { computed, h, ref } from 'vue'
-import { disableCapability, enableCapability, getCapabilityById } from '@/api/ai/capability'
+import { computed, h, reactive, ref } from 'vue'
+import {
+  deleteCapability,
+  disableCapability,
+  enableCapability,
+  getCapabilityById,
+  updateCapability,
+} from '@/api/ai/capability'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables'
@@ -190,6 +219,16 @@ const callGuideVisible = ref(false)
 const callGuideCapability = ref(null)
 const detailVisible = ref(false)
 const currentCapability = ref(null)
+const editVisible = ref(false)
+const editLoading = ref(false)
+const editFormRef = ref(null)
+const editingCapabilityId = ref(null)
+const editForm = reactive({ capabilityName: '', description: '', visibility: 'PRIVATE' })
+const editRules = {
+  capabilityName: { required: true, message: '请输入能力名称', trigger: ['blur', 'input'] },
+  description: { required: true, message: '请输入能力描述', trigger: ['blur', 'input'] },
+  visibility: { required: true, message: '请选择可见性', trigger: 'change' },
+}
 
 // 搜索表单配置
 const searchSchema = computed(() => [
@@ -296,7 +335,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 340,
+    width: 430,
     fixed: 'right',
     actions: [
       { label: '调用与测试', key: 'call-guide', type: 'primary', onClick: handleCallGuide },
@@ -309,6 +348,13 @@ const tableColumns = computed(() => [
       },
       { label: '详情', key: 'detail', onClick: handleViewDetail },
       {
+        label: '编辑',
+        key: 'edit',
+        type: 'primary',
+        onClick: openEdit,
+        visible: () => canPublish.value,
+      },
+      {
         label: '停用',
         key: 'disable',
         type: 'error',
@@ -320,6 +366,13 @@ const tableColumns = computed(() => [
         key: 'enable',
         type: 'success',
         onClick: handleEnable,
+        visible: row => canPublish.value && row.publishStatus === 'DISABLED',
+      },
+      {
+        label: '删除',
+        key: 'delete',
+        type: 'error',
+        onClick: handleDelete,
         visible: row => canPublish.value && row.publishStatus === 'DISABLED',
       },
     ],
@@ -343,6 +396,53 @@ function handleRegisterSuccess() {
 function handleCallGuide(row) {
   callGuideCapability.value = { ...row }
   callGuideVisible.value = true
+}
+
+function openEdit(row) {
+  editingCapabilityId.value = row.id
+  Object.assign(editForm, {
+    capabilityName: row.capabilityName || '',
+    description: row.description || '',
+    visibility: row.visibility || 'PRIVATE',
+  })
+  editVisible.value = true
+}
+
+async function submitEdit() {
+  try {
+    await editFormRef.value?.validate()
+  }
+  catch {
+    return
+  }
+  editLoading.value = true
+  try {
+    const res = await updateCapability(editingCapabilityId.value, { ...editForm })
+    if (res.code === 200) {
+      window.$message.success('能力信息已更新')
+      editVisible.value = false
+      crudRef.value?.refresh()
+    }
+  }
+  finally {
+    editLoading.value = false
+  }
+}
+
+function handleDelete(row) {
+  window.$dialog.error({
+    title: '删除能力',
+    content: `确定删除能力「${row.capabilityName}」吗？能力版本和历史调用日志会继续保留用于审计；存在有效授权时系统会阻止删除。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const res = await deleteCapability(row.id)
+      if (res.code === 200) {
+        window.$message.success('能力已删除')
+        crudRef.value?.refresh()
+      }
+    },
+  })
 }
 
 // 查看详情
@@ -400,6 +500,10 @@ function handleEnable(row) {
 
 .capability-detail {
   padding: 8px 0;
+}
+
+.edit-alert {
+  margin-bottom: 16px;
 }
 
 .detail-section {

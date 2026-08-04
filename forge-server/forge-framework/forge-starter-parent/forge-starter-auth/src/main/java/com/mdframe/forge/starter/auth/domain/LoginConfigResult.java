@@ -20,6 +20,11 @@ public class LoginConfigResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * 是否启用登录密码 RSA 加密。
+     */
+    private Boolean enablePasswordEncryption;
+
+    /**
      * 是否启用验证码
      */
     private Boolean enableCaptcha;

@@ -2,7 +2,7 @@ import { request } from '@/utils'
 
 export default {
   getPublicKey: () => request({ url: '/crypto/public-key', method: 'get', needToken: false }),
-  getLoginConfig: () => request({ url: '/auth/loginConfig', method: 'get', needToken: false }),
+  getLoginConfig: params => request({ url: '/auth/loginConfig', method: 'get', params, needToken: false }),
   getCaptcha: () => request({ url: '/auth/captcha', method: 'get', needToken: false }),
   login: data => request({ url: '/auth/login', method: 'post', data, needToken: false, needTip: false }),
   getWecomAuthorize: (params = {}) => request({

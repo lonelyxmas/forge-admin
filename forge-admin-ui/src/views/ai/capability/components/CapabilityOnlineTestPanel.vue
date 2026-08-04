@@ -2,7 +2,7 @@
   <section class="online-test-panel">
     <div class="panel-heading">
       <div>
-        <h3>在线测试</h3>
+        <h3>测试配置</h3>
         <p>使用所选客户端的真实认证方式调用开放网关，结果可下载后交给外围系统联调。</p>
       </div>
       <n-space>
@@ -21,8 +21,16 @@
       </n-space>
     </div>
 
-    <n-alert type="warning" :show-icon="true" class="security-alert">
-      Secret、签名密钥和用户断言私钥只在本弹窗内存中使用，关闭或切换客户端后立即清空；下载内容会自动脱敏。
+    <n-alert :type="credentialAutoFilled ? 'success' : 'warning'" :show-icon="true" class="security-alert">
+      <template #header>
+        {{ credentialAutoFilled ? '已带入本次浏览器会话中的一次性凭据' : '需要准备客户端凭据' }}
+      </template>
+      {{ credentialAutoFilled
+        ? '凭据只保存在当前页面内存，刷新浏览器后会清空；下载内容会自动脱敏。'
+        : 'Client Secret、Signing Key 和用户断言私钥无法从服务端反查。请到“客户端工作台 → 概览与凭据”创建或轮换，保存后返回本页会自动带入。' }}
+      <n-button v-if="!credentialAutoFilled" text type="primary" @click="goClientWorkbench">
+        去客户端工作台
+      </n-button>
     </n-alert>
 
     <n-alert
@@ -90,6 +98,14 @@
             v-model:value="userAssertionSubject"
             maxlength="512"
             placeholder="必须已在客户端页面预绑定"
+            autocomplete="off"
+          />
+        </div>
+        <div v-if="guide?.userAssertionMappingMode === 'VERIFIED_PHONE'" class="test-field">
+          <span class="field-label">已验证手机号（JWT phone_number）</span>
+          <n-input
+            v-model:value="userAssertionPhone"
+            placeholder="首次调用用于租户内唯一匹配，后续复用已固化映射"
             autocomplete="off"
           />
         </div>
@@ -177,6 +193,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { getCapabilityCredential } from '../capabilityCredentialSession'
 
 const props = defineProps({
   guide: {
@@ -184,17 +202,20 @@ const props = defineProps({
     default: null,
   },
 })
+const router = useRouter()
 
 const authMode = ref(null)
 const credential = ref('')
 const subjectTokenMode = ref('OIDC')
 const subjectToken = ref('')
 const userAssertionSubject = ref('')
+const userAssertionPhone = ref('')
 const userAssertionOrgId = ref('')
 const userAssertionPrivateKey = ref('')
 const requestBody = ref('{}')
 const testing = ref(false)
 const testReport = ref(null)
+const credentialAutoFilled = ref(false)
 
 const authOptions = computed(() => (props.guide?.availableAuthModes || []).map(mode => ({
   label: mode === 'OAUTH' ? 'OAuth 2.1' : 'AppId + HMAC-SHA256',
@@ -217,32 +238,36 @@ const credentialPlaceholder = computed(() => (
 
 watch(() => props.guide, (guide) => {
   authMode.value = guide?.availableAuthModes?.[0] || null
-  credential.value = ''
   subjectTokenMode.value = guide?.userAssertionEnabled ? 'USER_ASSERTION' : 'OIDC'
   subjectToken.value = ''
   userAssertionSubject.value = ''
+  userAssertionPhone.value = ''
   userAssertionOrgId.value = ''
   userAssertionPrivateKey.value = ''
   testReport.value = null
   resetBody()
+  applySessionCredential(guide)
 }, { immediate: true })
 
 watch(authMode, () => {
-  credential.value = ''
   subjectTokenMode.value = props.guide?.userAssertionEnabled ? 'USER_ASSERTION' : 'OIDC'
   subjectToken.value = ''
   userAssertionSubject.value = ''
+  userAssertionPhone.value = ''
   userAssertionOrgId.value = ''
   userAssertionPrivateKey.value = ''
   testReport.value = null
+  applySessionCredential(props.guide)
 })
 
 watch(subjectTokenMode, () => {
   subjectToken.value = ''
   userAssertionSubject.value = ''
+  userAssertionPhone.value = ''
   userAssertionOrgId.value = ''
   userAssertionPrivateKey.value = ''
   testReport.value = null
+  applySessionCredential(props.guide)
 })
 
 function resetBody() {
@@ -286,6 +311,12 @@ function validateTestInput() {
       }
       if (!userAssertionSubject.value.trim()) {
         window.$message.error('请输入已预绑定的外围用户标识')
+        return false
+      }
+      if (props.guide?.userAssertionMappingMode === 'VERIFIED_PHONE'
+        && userAssertionPhone.value.trim()
+        && !/^\+?\d{6,20}$/.test(userAssertionPhone.value.trim())) {
+        window.$message.error('手机号必须为 6 至 20 位数字，可带国际区号 +')
         return false
       }
       if (!userAssertionPrivateKey.value.includes('-----BEGIN PRIVATE KEY-----')) {
@@ -461,6 +492,9 @@ async function createUserAssertionJwt() {
     exp: issuedAt + ttlSeconds,
     jti: globalThis.crypto.randomUUID?.() || fallbackNonce(),
   }
+  if (props.guide?.userAssertionMappingMode === 'VERIFIED_PHONE'
+    && userAssertionPhone.value.trim())
+    claims.phone_number = userAssertionPhone.value.trim()
   if (userAssertionOrgId.value.trim())
     claims.forge_org_id = userAssertionOrgId.value.trim()
   const header = {
@@ -697,6 +731,24 @@ function exchangeText(exchange) {
   return exchange ? JSON.stringify(exchange, null, 2) : '未发起请求'
 }
 
+function applySessionCredential(guide) {
+  const session = getCapabilityCredential(guide?.clientId)
+  const nextCredential = authMode.value === 'HMAC'
+    ? session?.signingKey
+    : session?.clientSecret
+  credential.value = nextCredential || ''
+  userAssertionPrivateKey.value = session?.privateKeyPem || ''
+  const needsPrivateKey = authMode.value === 'OAUTH'
+    && guide?.tokenExchangeRequired
+    && subjectTokenMode.value === 'USER_ASSERTION'
+  credentialAutoFilled.value = !!nextCredential
+    && (!needsPrivateKey || !!session?.privateKeyPem)
+}
+
+function goClientWorkbench() {
+  router.push({ path: '/open-platform/capability-client', query: { clientId: props.guide?.clientId } })
+}
+
 function downloadTestReport() {
   if (!testReport.value)
     return
@@ -747,11 +799,22 @@ function downloadIntegrationExample() {
     JSON.stringify(guide.requestExample || {}, null, 2),
     '```',
   ]
-  appendCodeSection(sections, 'OAuth curl', 'bash', guide.oauthExample)
-  appendCodeSection(sections, 'HMAC curl', 'bash', guide.hmacExample)
-  appendCodeSection(sections, 'OAuth Java 17', 'java', guide.oauthJavaExample)
-  appendCodeSection(sections, '客户端用户断言 Java 17', 'java', guide.userAssertionJavaExample)
-  appendCodeSection(sections, 'HMAC Java 17', 'java', guide.hmacJavaExample)
+  appendFieldTable(sections, '请求参数', guide.requestFields)
+  appendFieldTable(sections, '返回参数', guide.responseFields)
+  if (guide.responseNotes?.length) {
+    sections.push('', '### 返回说明', '', ...guide.responseNotes.map(note => `- ${note}`))
+  }
+  if (guide.businessRules?.length) {
+    sections.push('', '## 业务校验', '', ...guide.businessRules.map((rule, index) => `${index + 1}. ${rule}`))
+  }
+  const currentCurl = authMode.value === 'HMAC' ? guide.hmacExample : guide.oauthExample
+  const currentJava = authMode.value === 'HMAC'
+    ? guide.hmacJavaExample
+    : subjectTokenMode.value === 'USER_ASSERTION' && guide.userAssertionJavaExample
+      ? guide.userAssertionJavaExample
+      : guide.oauthJavaExample
+  appendCodeSection(sections, 'Curl 示例', 'bash', currentCurl)
+  appendCodeSection(sections, 'Java 17 示例', 'java', currentJava)
   if (testReport.value)
     appendCodeSection(sections, '最近一次测试报文（已脱敏）', 'json', JSON.stringify(testReport.value, null, 2))
   downloadText(
@@ -759,6 +822,29 @@ function downloadIntegrationExample() {
     `${fileStem()}-integration-example.md`,
     'text/markdown;charset=UTF-8',
   )
+}
+
+function appendFieldTable(sections, title, fields = []) {
+  sections.push('', `## ${title}`, '')
+  if (!fields.length) {
+    sections.push('当前版本未声明字段。')
+    return
+  }
+  sections.push('| 中文名称 | 字段编码 | 类型 | 必填 | 含义与约束 | 示例 |')
+  sections.push('| --- | --- | --- | --- | --- | --- |')
+  fields.forEach((field) => {
+    sections.push(`| ${markdownCell(field.fieldLabel)} | \`${markdownCell(field.fieldCode)}\` | ${markdownCell(field.type)} | ${field.required ? '是' : '否'} | ${markdownCell(field.description)} | ${markdownCell(formatMarkdownExample(field.example))} |`)
+  })
+}
+
+function markdownCell(value) {
+  return String(value ?? '-').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>')
+}
+
+function formatMarkdownExample(value) {
+  if (value == null)
+    return '-'
+  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 function appendCodeSection(sections, title, language, content) {
@@ -793,7 +879,7 @@ function formatDate(date) {
 
 <style scoped>
 .online-test-panel {
-  padding: 22px 0 4px;
+  padding: 0 0 4px;
 }
 
 .panel-heading,

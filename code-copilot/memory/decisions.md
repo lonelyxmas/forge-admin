@@ -184,7 +184,7 @@ Forge 后续 MCP Server 的标准传输协议固定为最新的 **Streamable HTT
 
 **记录日期**: 2026-07-11
 
-Forge AI 能力统一由协议无关的 `forge-plugin-capability` 承载，`forge-plugin-mcp` 只负责 Streamable HTTP 与 MCP Schema/结果投影。业务插件只能通过 `CapabilitySource/CapabilityExecutor` 注册能力，不能直接创建 MCP Bean，也不能让 Capability 内核反向依赖 Spring AI、MCP SDK 或 `forge-plugin-ai`。
+Forge AI 能力的协议无关内核统一由 `forge-plugin-capability-core` 承载，`forge-plugin-mcp` 只负责 Streamable HTTP 与 MCP Schema/结果投影。业务插件只能通过 `CapabilitySource/CapabilityExecutor` 注册能力，不能直接创建 MCP Bean，也不能让 Capability 内核反向依赖 Spring AI、MCP SDK 或 `forge-plugin-ai`。
 
 MCP enabled 时启动期只允许 `STREAMABLE`，并拒绝 `SSE`、`STATELESS` 和 stdio。身份必须在 `/mcp` 进入 SDK 前完成验证，租户、用户、当前组织和 scope 只能来自可信传输上下文。能力游标绑定快照、查询、调用方并使用进程内 HMAC-SHA256 防篡改；Schema 必须先完整校验再投影；安全日志只记录 requestId、客户端安全引用、租户、组织、能力、结果码、Schema 路径和耗时。
 
@@ -210,7 +210,7 @@ Forge MCP 用户委托身份不引入 `spring-security-oauth2-authorization-serv
 
 **记录日期**: 2026-07-12
 
-Capability 内核继续保持协议和 ORM 无关，MCP 业务能力的最终授权由 `forge-plugin-capability-identity` 组合层实现，固定计算 `Token scope ∩ client grant ∩ 当前 LoginUser.permissions ∩ tenant/activeOrg`。默认 Forge 权限映射为 `ai:capability:discover:{capabilityCode}` 和 `ai:capability:invoke:{capabilityCode}`；后续安全动作可以替换映射 Bean，但不能从客户端参数推导权限。
+Capability 内核继续保持协议和 ORM 无关，MCP 业务能力的最终授权由 `forge-plugin-capability-platform` 中的 Identity 组合层实现，固定计算 `Token scope ∩ client grant ∩ 当前 LoginUser.permissions ∩ tenant/activeOrg`。默认 Forge 权限映射为 `ai:capability:discover:{capabilityCode}` 和 `ai:capability:invoke:{capabilityCode}`；后续安全动作可以替换映射 Bean，但不能从客户端参数推导权限。
 
 `capability.ping` 是阶段 2.0 唯一统一授权例外，仍必须先通过短期 Token scope 和可信执行身份校验。MCP Server 显式锁定 `type=SYNC + protocol=STREAMABLE + stdio=false`；用户、grant、权限或组织变化后由每请求实时身份加载与授权决策失败关闭。
 
@@ -551,3 +551,19 @@ SUBMIT 的字段契约来源于不可变业务对象发布模型；能力版本�
 业务动作的“启用”只表示设计态允许运行，不代表它已具备可安全开放的执行语义。开放候选必须从不可变业务对象发布快照读取，并通过与真实发布、运行时相同的 `SecureActionStepValidator` 校验。
 
 当前中等风险受控动作只允许顶层 `UPDATE_FIELD` 和 `CREATE_RECORD`，空步骤、嵌套步骤、流程、消息、领域动作和其它未审核类型继续失败关闭。管理端不复制该白名单规则，由服务端返回 `publishable/unavailableReason/stepTypes` 诊断；页面只负责提前禁用并说明修正方式，直接 API 调用仍必须经过服务端安全校验。
+
+## 61. 登录密码 RSA 与通用 API 传输加密采用独立策略
+
+**记录日期**：2026-08-04
+
+Forge 的通用 API 传输加密继续由配置中心 `crypto` 分组和匿名 `/crypto/config` 统一控制；Admin、H5、报表端只保留服务端配置的运行时镜像，不再维护产品级独立开关。
+
+登录密码 RSA 改由 `login.enablePasswordEncryption` 独立控制，默认启用，并通过 `/auth/loginConfig` 下发。后端普通密码和密码验证码认证共享统一解码器：开启时 RSA 解密失败关闭，关闭时才接收应用层明文；客户端 `encrypted` 标记不作为信任依据。浏览器/H5/报表属于公共客户端，不保存或发送固定 AppSecret，生产环境无论是否启用密码 RSA 都必须使用 HTTPS。
+
+## 62. Capability 使用专属父模块并收敛为四层依赖
+
+**记录日期**：2026-08-04
+
+Capability 不再以 7 个同级小插件散落在 `forge-plugin-parent` 下，统一由 `forge-plugin-capability-parent` 聚合四个子模块：`core`、`platform`、`actions`、`high-risk-approval`。父模块只负责 Maven 聚合，不放业务代码。
+
+依赖方向固定为 `core ← platform ← actions ← high-risk-approval`。控制面、Identity 和 Open Gateway 归入 platform；Secure Actions 与 Flow Actions 归入 actions；高风险审批继续独立并默认关闭。开放网关只依赖 core 中的通用执行 SPI，通过 Spring 收集 actions 提供的适配器，禁止 platform 反向依赖 actions、generator 或 flow-client。Java 业务包、REST 路径、配置前缀和数据库表保持兼容。

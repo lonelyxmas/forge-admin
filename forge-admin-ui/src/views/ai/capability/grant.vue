@@ -336,14 +336,20 @@ const grantModalTitle = computed(() => editingGrantId.value === null
   ? '新增能力授权'
   : '修改能力授权')
 
-const grantFieldOptions = computed(() => (selectedCapability.value?.allowedFields || [])
-  .map(field => ({
-    label: selectedCapability.value?.requiredFields?.includes(field)
-      ? `${field}（必填）`
-      : field,
-    value: field,
-    disabled: selectedCapability.value?.requiredFields?.includes(field),
-  })))
+const grantFieldOptions = computed(() => {
+  const fieldMeta = new Map((selectedCapability.value?.fields || [])
+    .map(field => [field.fieldCode, field]))
+  return (selectedCapability.value?.allowedFields || []).map((fieldCode) => {
+    const meta = fieldMeta.get(fieldCode)
+    const required = meta?.required
+      || selectedCapability.value?.requiredFields?.includes(fieldCode)
+    return {
+      label: `${meta?.fieldLabel || '未命名字段'}${required ? '（必填）' : ''}`,
+      value: fieldCode,
+      disabled: required,
+    }
+  })
+})
 
 const grantOperationOptions = computed(() => (selectedCapability.value?.allowedOperations || [])
   .map(operation => ({

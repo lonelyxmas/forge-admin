@@ -3,7 +3,7 @@ import { ResultEnum } from "@/enums/httpEnum"
 import { getLocalStorage, clearLocalStorage } from '@/utils/storage'
 import { StorageEnum } from '@/enums/storageEnum'
 import { decryptResponse, encryptRequest } from '@/utils/api-crypto/crypto-interceptor'
-import { shouldEncrypt } from '@/utils/api-crypto/crypto-config'
+import { cryptoConfig, matchPath, shouldEncrypt } from '@/utils/api-crypto/crypto-config'
 import { ensureKeyExchanged, getCurrentCryptoSessionId, resetKeyExchange } from '@/utils/api-crypto/key-exchange'
 import router from '@/router'
 
@@ -28,9 +28,6 @@ function generateUUID(): string {
     return v.toString(16)
   })
 }
-
-// 不需要防重放的路径
-const REPLAY_EXCLUDE_PATHS = ['/auth/captcha', '/crypto/public-key']
 
 // 防止多个并发 401 重复触发跳转
 let isHandlingUnauth = false
@@ -79,13 +76,16 @@ axiosInstance.interceptors.request.use(
       config.headers['X-Session-Id'] = getCurrentCryptoSessionId()
     }
 
-    // 防重放参数：X-Timestamp + X-Nonce
-    const url = config.url || ''
-    const path = url.split('?')[0]
-    const excluded = REPLAY_EXCLUDE_PATHS.some(p => path === p || path.endsWith(p))
-    if (!excluded) {
-      config.headers['X-Timestamp'] = Date.now().toString()
-      config.headers['X-Nonce'] = generateUUID()
+    // 防重放参数服从统一运行配置。
+    if (cryptoConfig.enabled && cryptoConfig.enableReplay) {
+      const path = (config.url || '').split('?')[0]
+      const excluded = cryptoConfig.replayExcludePaths.some(pattern => matchPath(path, pattern))
+      const included = !cryptoConfig.replayIncludePaths.length
+        || cryptoConfig.replayIncludePaths.some(pattern => matchPath(path, pattern))
+      if (!excluded && included) {
+        config.headers['X-Timestamp'] = Date.now().toString()
+        config.headers['X-Nonce'] = generateUUID()
+      }
     }
 
     const customConfig = config as InternalAxiosRequestConfig & { encrypt?: boolean }

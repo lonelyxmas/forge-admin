@@ -1,5 +1,6 @@
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { cryptoConfig, shouldEncrypt } from './crypto-config'
+import { aesDecrypt, aesEncrypt } from './aes'
 import { decodeKeyToHex, sm4Decrypt, sm4Encrypt } from './sm4'
 
 type EncryptedPayload = {
@@ -16,6 +17,9 @@ function encrypt(data: string, algorithm = cryptoConfig.algorithm): string {
   if (algorithm === 'SM4') {
     return sm4Encrypt(data, decodeKeyToHex(cryptoConfig.secretKey))
   }
+  if (algorithm === 'AES') {
+    return aesEncrypt(data, cryptoConfig.secretKey)
+  }
   throw new Error(`不支持的加密算法: ${algorithm}`)
 }
 
@@ -23,6 +27,9 @@ function decrypt(data: string, algorithm = cryptoConfig.algorithm): string {
   if (!cryptoConfig.secretKey) throw new Error('解密密钥未设置')
   if (algorithm === 'SM4') {
     return sm4Decrypt(data, decodeKeyToHex(cryptoConfig.secretKey))
+  }
+  if (algorithm === 'AES') {
+    return aesDecrypt(data, cryptoConfig.secretKey)
   }
   throw new Error(`不支持的加密算法: ${algorithm}`)
 }
@@ -63,8 +70,7 @@ export function encryptRequest(config: InternalAxiosRequestConfig): InternalAxio
   }
 
   if (!isKeyValid()) {
-    console.warn('[Crypto] 加密密钥未设置，跳过请求加密')
-    return config
+    throw new Error('安全通道未建立，已阻止明文请求')
   }
 
   if (config.data && typeof config.data === 'object') {

@@ -19,6 +19,22 @@
       </template>
     </AiCrudPage>
 
+    <CapabilityClientWorkbenchModal
+      v-model:show="workbenchVisible"
+      :client="workbenchClient"
+      :can-rotate="canRotate"
+      :can-edit="canEdit"
+      :can-revoke="canRevoke"
+      :can-grant="canGrant"
+      :can-grant-query="canGrantQuery"
+      :can-grant-revoke="canGrantRevoke"
+      :can-log-query="canLogQuery"
+      @rotate-secret="handleRotateSecret"
+      @rotate-signing-key="handleRotateSigningKey"
+      @configure-identity="openIdentityFromWorkbench"
+      @revoke="handleRevoke"
+    />
+
     <!-- 新增客户端弹窗 -->
     <n-modal
       v-model:show="addVisible"
@@ -34,66 +50,84 @@
         label-width="110px"
       >
         <n-form-item label="客户端编码" path="clientCode">
-          <n-input v-model:value="addForm.clientCode" placeholder="如 erp-sync，创建后不可修改" />
+          <div class="form-control-stack">
+            <n-input v-model:value="addForm.clientCode" placeholder="如 erp-sync，创建后不可修改" />
+            <p>外围系统的稳定标识，用于日志检索和接入识别；创建后不能修改。</p>
+          </div>
         </n-form-item>
         <n-form-item label="客户端名称" path="clientName">
           <n-input v-model:value="addForm.clientName" placeholder="请输入客户端名称" />
         </n-form-item>
         <n-form-item label="主体模式" path="actorMode">
-          <n-select
-            v-model:value="addForm.actorMode"
-            :options="actorModeOptions"
-            placeholder="请选择主体模式"
-          />
+          <div class="form-control-stack">
+            <n-select
+              v-model:value="addForm.actorMode"
+              :options="actorModeOptions"
+              placeholder="请选择主体模式"
+            />
+            <p>有真实操作人选“用户委托”；后台任务选“服务身份”；两种都要用选“混合模式”。</p>
+          </div>
         </n-form-item>
         <n-alert v-if="!actorModeOptions.length" type="error" class="form-alert">
           主体模式字典尚未初始化，请先确认 Flyway V1.0.76 已成功执行。
         </n-alert>
         <n-form-item v-if="requiresServiceIdentity" label="服务账号" path="serviceUserId">
-          <UserSelectPicker
-            v-model="addForm.serviceUserId"
-            v-model:label-value="serviceUserLabel"
-            title="选择机器客户端服务账号"
-            placeholder="请选择服务账号"
-            :clearable="false"
-            @select="handleServiceUserSelect"
-          />
+          <div class="form-control-stack">
+            <UserSelectPicker
+              v-model="addForm.serviceUserId"
+              v-model:label-value="serviceUserLabel"
+              title="选择机器客户端服务账号"
+              placeholder="请选择服务账号"
+              :clearable="false"
+              @select="handleServiceUserSelect"
+            />
+            <p>服务身份调用时使用该 Forge 用户的角色和权限，请使用专用最小权限账号。</p>
+          </div>
         </n-form-item>
         <n-form-item v-if="requiresServiceIdentity" label="生效组织" path="activeOrgId">
-          <n-select
-            v-model:value="addForm.activeOrgId"
-            :options="serviceOrgOptions"
-            :loading="serviceOrgLoading"
-            :disabled="!addForm.serviceUserId"
-            placeholder="请选择服务账号所属组织"
-            filterable
-          >
-            <template #empty>
-              <n-empty size="small" description="该账号未绑定可用组织" />
-            </template>
-          </n-select>
+          <div class="form-control-stack">
+            <n-select
+              v-model:value="addForm.activeOrgId"
+              :options="serviceOrgOptions"
+              :loading="serviceOrgLoading"
+              :disabled="!addForm.serviceUserId"
+              placeholder="请选择服务账号所属组织"
+              filterable
+            >
+              <template #empty>
+                <n-empty size="small" description="该账号未绑定可用组织" />
+              </template>
+            </n-select>
+            <p>决定服务账号执行能力时的数据组织上下文和数据权限范围。</p>
+          </div>
         </n-form-item>
         <n-form-item label="认证模式" path="authModes">
-          <n-select
-            v-model:value="addForm.authModes"
-            multiple
-            placeholder="默认 OAUTH"
-            :options="authModeOptions"
-            :disabled="addForm.actorMode === 'USER_DELEGATION'"
-            clearable
-          />
+          <div class="form-control-stack">
+            <n-select
+              v-model:value="addForm.authModes"
+              multiple
+              placeholder="默认 OAUTH"
+              :options="authModeOptions"
+              :disabled="addForm.actorMode === 'USER_DELEGATION'"
+              clearable
+            />
+            <p>OAuth 适合标准 Token 接入和用户委托；HMAC 适合无 OAuth 组件的服务间签名调用。</p>
+          </div>
         </n-form-item>
         <n-alert v-if="!authModeOptions.length" type="error" class="form-alert">
           认证模式字典尚未初始化，请先确认 Flyway V1.0.74 已成功执行。
         </n-alert>
         <n-form-item label="过期时间" path="expiresAt">
-          <n-date-picker
-            v-model:value="addForm.expiresAt"
-            type="datetime"
-            placeholder="不填则长期有效"
-            clearable
-            class="w-full"
-          />
+          <div class="form-control-stack">
+            <n-date-picker
+              v-model:value="addForm.expiresAt"
+              type="datetime"
+              placeholder="不填则长期有效"
+              clearable
+              class="w-full"
+            />
+            <p>到期后所有认证立即失效；生产客户端建议设置有效期并定期轮换凭据。</p>
+          </div>
         </n-form-item>
         <n-form-item label="备注" path="remark">
           <n-input
@@ -144,7 +178,7 @@
           </div>
 
           <n-alert type="info" :show-icon="true" class="assertion-alert">
-            外围系统使用当前客户端私钥签发最长 {{ userAssertionConfig.maxTtlSeconds }} 秒的 RS256 JWT，Forge 仅接受已预绑定的普通用户。
+            外围系统使用当前客户端私钥签发最长 {{ userAssertionConfig.maxTtlSeconds }} 秒的 RS256 JWT；Forge 按当前受控映射规则解析真实普通用户。
           </n-alert>
 
           <div class="assertion-protocol-grid">
@@ -194,8 +228,21 @@
             <div class="mapping-heading">
               <div>
                 <h3>外围用户映射</h3>
-                <p>客户端签名模式默认要求一次性预绑定，后续调用无需重复绑定；这样可避免外围系统仅凭 sub 冒充任意 Forge 用户。原始标识只生成 SHA-256 指纹，不会保存到数据库。</p>
+                <p>原始外围标识只生成 SHA-256 指纹，不会保存到数据库。自动匹配必须由管理员为当前客户端显式启用。</p>
               </div>
+            </div>
+            <div class="mapping-rule-row">
+              <div>
+                <strong>映射规则</strong>
+                <p>{{ mappingRuleDescription }}</p>
+              </div>
+              <n-select
+                :value="userAssertionConfig.mappingMode || 'PREBOUND'"
+                :options="mappingModeOptions"
+                :loading="mappingRuleUpdating"
+                style="width: 220px"
+                @update:value="handleMappingRuleChange"
+              />
             </div>
             <n-form
               ref="mappingFormRef"
@@ -229,13 +276,30 @@
               </n-button>
             </n-form>
 
+            <div class="mapping-toolbar">
+              <n-input
+                v-model:value="mappingKeyword"
+                clearable
+                placeholder="搜索外围标识提示、用户名或姓名"
+                @keyup.enter="searchMappingPage"
+              />
+              <n-button :loading="mappingPageLoading" @click="searchMappingPage">
+                查询
+              </n-button>
+            </div>
+
             <n-data-table
               :columns="mappingColumns"
-              :data="userAssertionConfig.mappings || []"
+              :data="mappingRows"
               :row-key="row => row.id"
               :bordered="false"
+              :loading="mappingPageLoading"
+              :pagination="mappingPagination"
+              remote
               size="small"
               class="mapping-table"
+              @update:page="handleMappingPageChange"
+              @update:page-size="handleMappingPageSizeChange"
             />
           </section>
         </template>
@@ -356,17 +420,21 @@
 </template>
 
 <script setup>
-import { computed, h, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   addClientUserAssertionMapping,
   addCapabilityClient,
   disableClientUserAssertion,
+  getCapabilityClient,
   getClientUserAssertionConfig,
+  getClientUserAssertionMappingPage,
   removeClientUserAssertionMapping,
   revokeCapabilityClient,
   rotateClientUserAssertionKey,
   rotateCapabilityClientSecret,
   rotateCapabilityClientSigningKey,
+  updateClientUserAssertionMappingRule,
 } from '@/api/ai/capability'
 import { AiCrudPage } from '@/components/ai-form'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
@@ -375,19 +443,27 @@ import { useDict } from '@/composables'
 import { useUserStore } from '@/store'
 import { formatDateTime, request } from '@/utils'
 import { copy } from '@/utils/clipboard'
+import {
+  forgetCapabilityCredential,
+  rememberCapabilityCredential,
+} from './capabilityCredentialSession'
+import CapabilityClientWorkbenchModal from './components/CapabilityClientWorkbenchModal.vue'
 
 defineOptions({ name: 'CapabilityClient' })
 
 const userStore = useUserStore()
+const route = useRoute()
 const { dict } = useDict(
   'ai_capability_client_status',
   'ai_capability_auth_mode',
   'ai_capability_client_actor_mode',
+  'ai_capability_user_mapping_mode',
 )
 
 const clientStatusOptions = computed(() => dict.value.ai_capability_client_status || [])
 const authModeOptions = computed(() => dict.value.ai_capability_auth_mode || [])
 const actorModeOptions = computed(() => dict.value.ai_capability_client_actor_mode || [])
+const mappingModeOptions = computed(() => dict.value.ai_capability_user_mapping_mode || [])
 
 function hasPermission(permission) {
   if (userStore?.isAdmin)
@@ -400,8 +476,35 @@ const canAdd = computed(() => hasPermission('ai:capability:client:add'))
 const canRotate = computed(() => hasPermission('ai:capability:client:rotate'))
 const canEdit = computed(() => hasPermission('ai:capability:client:edit'))
 const canRevoke = computed(() => hasPermission('ai:capability:client:revoke'))
+const canGrant = computed(() => hasPermission('ai:capability:grant:add'))
+const canGrantQuery = computed(() => hasPermission('ai:capability:grant:query'))
+const canGrantRevoke = computed(() => hasPermission('ai:capability:grant:revoke'))
+const canLogQuery = computed(() => hasPermission('ai:capability:invocation:query'))
 
 const crudRef = ref(null)
+const workbenchVisible = ref(false)
+const workbenchClient = ref(null)
+
+function openWorkbench(row) {
+  workbenchClient.value = row
+  workbenchVisible.value = true
+}
+
+async function openRequestedWorkbench() {
+  const clientId = route.query.clientId
+  if (!clientId)
+    return
+  try {
+    const res = await getCapabilityClient(clientId)
+    if (res.data)
+      openWorkbench(res.data)
+  }
+  catch (error) {
+    window.$message.error(error?.message || '指定客户端工作台加载失败')
+  }
+}
+
+onMounted(openRequestedWorkbench)
 
 // ===== 新增客户端 =====
 const addVisible = ref(false)
@@ -575,6 +678,7 @@ const issuedCredential = ref(null)
 function showIssuedCredential(title, data) {
   if (!data)
     return
+  rememberCapabilityCredential(data)
   issuedCredential.value = { ...data, title }
   issuedVisible.value = true
 }
@@ -607,6 +711,17 @@ const currentUserAssertionClient = ref(null)
 const userAssertionConfig = ref(null)
 const mappingFormRef = ref(null)
 const mappingSubmitting = ref(false)
+const mappingPageLoading = ref(false)
+const mappingRuleUpdating = ref(false)
+const mappingRows = ref([])
+const mappingKeyword = ref('')
+const mappingPagination = reactive({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50],
+})
 const mappingUserLabel = ref('')
 const mappingForm = reactive({
   externalSubject: '',
@@ -622,6 +737,10 @@ const mappingRules = {
     validator: (_rule, value) => isPositiveId(value) ? true : new Error('请选择 Forge 普通用户'),
   },
 }
+
+const mappingRuleDescription = computed(() => userAssertionConfig.value?.mappingMode === 'VERIFIED_PHONE'
+  ? '首次验签成功后，按 JWT phone_number 在当前租户唯一匹配普通启用用户并固化映射；无匹配或多匹配都会拒绝。'
+  : '安全默认：管理员预先把外围 JWT sub 绑定到 Forge 普通用户，外围系统不能自行指定 Forge 用户。')
 
 const mappingColumns = computed(() => [
   {
@@ -666,6 +785,11 @@ async function openUserAssertion(row) {
   await loadUserAssertionConfig()
 }
 
+function openIdentityFromWorkbench(row) {
+  workbenchVisible.value = false
+  openUserAssertion(row)
+}
+
 async function loadUserAssertionConfig() {
   const clientId = currentUserAssertionClient.value?.id
   if (!clientId)
@@ -674,6 +798,7 @@ async function loadUserAssertionConfig() {
   try {
     const res = await getClientUserAssertionConfig(clientId)
     userAssertionConfig.value = res.data || null
+    await loadMappingPage()
   }
   catch (error) {
     window.$message.error(error?.message || '用户断言配置加载失败')
@@ -687,7 +812,82 @@ async function loadUserAssertionConfig() {
 function clearUserAssertionState() {
   currentUserAssertionClient.value = null
   userAssertionConfig.value = null
+  mappingRows.value = []
+  mappingKeyword.value = ''
+  mappingPagination.page = 1
+  mappingPagination.itemCount = 0
   resetMappingForm()
+}
+
+async function loadMappingPage() {
+  const clientId = currentUserAssertionClient.value?.id
+  if (!clientId)
+    return
+  mappingPageLoading.value = true
+  try {
+    const res = await getClientUserAssertionMappingPage(clientId, {
+      pageNum: mappingPagination.page,
+      pageSize: mappingPagination.pageSize,
+      keyword: mappingKeyword.value.trim() || undefined,
+    })
+    mappingRows.value = res.data?.records || []
+    mappingPagination.itemCount = Number(res.data?.total || 0)
+  }
+  catch (error) {
+    mappingRows.value = []
+    mappingPagination.itemCount = 0
+    window.$message.error(error?.message || '外围用户映射加载失败')
+  }
+  finally {
+    mappingPageLoading.value = false
+  }
+}
+
+function searchMappingPage() {
+  mappingPagination.page = 1
+  loadMappingPage()
+}
+
+function handleMappingPageChange(page) {
+  mappingPagination.page = page
+  loadMappingPage()
+}
+
+function handleMappingPageSizeChange(pageSize) {
+  mappingPagination.pageSize = pageSize
+  mappingPagination.page = 1
+  loadMappingPage()
+}
+
+function handleMappingRuleChange(mappingMode) {
+  if (!userAssertionConfig.value || mappingMode === userAssertionConfig.value.mappingMode)
+    return
+  const isAutomatic = mappingMode === 'VERIFIED_PHONE'
+  window.$dialog.warning({
+    title: isAutomatic ? '启用可信手机号自动映射' : '恢复管理员预绑定',
+    content: isAutomatic
+      ? '仅应在外围系统能保护客户端私钥、并保证 phone_number 已完成短信或实名校验时启用。Forge 会在验签成功后按租户内手机号唯一匹配普通用户；管理员、无匹配和多匹配都会拒绝。是否确认？'
+      : '恢复后，未预绑定的外围用户将不能换取 Forge 用户令牌。已有固化映射不受影响。是否确认？',
+    positiveText: '确认修改',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      mappingRuleUpdating.value = true
+      try {
+        const res = await updateClientUserAssertionMappingRule(
+          userAssertionConfig.value.clientId,
+          { mappingMode },
+        )
+        if (res.code === 200) {
+          userAssertionConfig.value = { ...userAssertionConfig.value, mappingMode }
+          window.$message.success('外围用户映射规则已更新')
+          crudRef.value?.refresh()
+        }
+      }
+      finally {
+        mappingRuleUpdating.value = false
+      }
+    },
+  })
 }
 
 function resetMappingForm() {
@@ -770,7 +970,8 @@ async function handleAddUserAssertionMapping() {
     if (res.code === 200) {
       window.$message.success('外围用户映射已保存')
       resetMappingForm()
-      await loadUserAssertionConfig()
+      mappingPagination.page = 1
+      await loadMappingPage()
     }
   }
   finally {
@@ -791,7 +992,7 @@ function handleRemoveUserAssertionMapping(row) {
       const res = await removeClientUserAssertionMapping(clientId, row.id)
       if (res.code === 200) {
         window.$message.success('用户映射已解除')
-        await loadUserAssertionConfig()
+        await loadMappingPage()
       }
     },
   })
@@ -840,6 +1041,8 @@ function handleRevoke(row) {
       const res = await revokeCapabilityClient(row.id)
       if (res.code === 200) {
         window.$message.success('客户端已吊销')
+        forgetCapabilityCredential(row.id)
+        workbenchVisible.value = false
         crudRef.value?.refresh()
       }
     },
@@ -955,34 +1158,15 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 330,
+    width: 170,
     fixed: 'right',
     actions: [
       {
-        label: '用户断言',
-        key: 'userAssertion',
+        label: '客户端工作台',
+        key: 'workbench',
         type: 'primary',
-        onClick: openUserAssertion,
-        visible: row => canEdit.value
-          && row.status === 'ENABLED'
-          && Number(row.oauthEnabled) === 1
-          && ['USER_DELEGATION', 'HYBRID'].includes(row.actorMode),
-      },
-      {
-        label: '轮换密钥',
-        key: 'rotate',
-        type: 'warning',
-        onClick: handleRotateSecret,
-        visible: row => canRotate.value && row.status === 'ENABLED',
-      },
-      {
-        label: '轮换签名密钥',
-        key: 'rotateSigningKey',
-        type: 'warning',
-        onClick: handleRotateSigningKey,
-        visible: row => canEdit.value
-          && row.status === 'ENABLED'
-          && String(row.authModes || '').split(',').includes('SIGNATURE'),
+        onClick: openWorkbench,
+        visible: () => true,
       },
       {
         label: '吊销',
@@ -1007,6 +1191,17 @@ const tableColumns = computed(() => [
 
 .form-alert {
   margin-bottom: 18px;
+}
+
+.form-control-stack {
+  width: 100%;
+}
+
+.form-control-stack > p {
+  margin: 6px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .issued-block {
@@ -1167,6 +1362,44 @@ const tableColumns = computed(() => [
   margin-bottom: 1px;
 }
 
+.mapping-rule-row,
+.mapping-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.mapping-rule-row > div {
+  min-width: 0;
+}
+
+.mapping-rule-row strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.mapping-rule-row p {
+  margin: 5px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mapping-toolbar {
+  justify-content: flex-start;
+  padding: 0;
+  background: transparent;
+}
+
+.mapping-toolbar .n-input {
+  max-width: 360px;
+}
+
 .mapping-table {
   margin-top: 16px;
   border-top: 1px solid var(--border-light);
@@ -1195,6 +1428,18 @@ const tableColumns = computed(() => [
   .assertion-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .mapping-rule-row,
+  .mapping-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mapping-rule-row .n-select,
+  .mapping-toolbar .n-input {
+    width: 100% !important;
+    max-width: none;
   }
 }
 </style>

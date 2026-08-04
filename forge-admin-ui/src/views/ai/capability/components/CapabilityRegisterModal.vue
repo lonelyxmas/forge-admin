@@ -464,7 +464,7 @@ const flowSubmitOptionMissing = computed(() => !isUpgrade.value
 
 const flowSubmissionFieldOptions = computed(() => (flowSource.value?.submissionFields || [])
   .map(field => ({
-    label: `${field.label || field.field}（${field.field} · ${field.dataType || 'string'}${field.required ? ' · 必填' : ''}）`,
+    label: `${field.label || '未命名字段'}（${field.dataType || 'string'}${field.required ? ' · 必填' : ''}）`,
     value: field.field,
     disabled: field.required,
   })))
@@ -679,7 +679,7 @@ function isCreatePageAction(action = {}) {
 const fieldOptions = computed(() => fields.value
   .filter(item => String(item.fieldStatus || '').toUpperCase() !== 'DISABLED')
   .map(item => ({
-    label: `${item.fieldName || item.fieldCode}（${item.fieldCode}）`,
+    label: item.fieldName || '未命名字段',
     value: item.fieldCode,
   })))
 

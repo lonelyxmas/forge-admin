@@ -49,7 +49,7 @@ const menuOptions = computed(() => {
   })
 })
 
-function processDropdownMenuData(menuItems, parentLabels = []) {
+function processDropdownMenuData(menuItems) {
   if (!menuItems || !Array.isArray(menuItems)) {
     return []
   }
@@ -57,24 +57,24 @@ function processDropdownMenuData(menuItems, parentLabels = []) {
   return menuItems.flatMap((item) => {
     const label = item.name || item.label || ''
     const children = item.children?.length
-      ? processDropdownMenuData(item.children, [...parentLabels, label])
+      ? processDropdownMenuData(item.children)
       : []
-
-    if (item.type === 'module') {
-      return children
-    }
 
     const menuItem = {
       key: item.key || String(item.id),
-      label: parentLabels.length ? `${parentLabels.join(' / ')} / ${label}` : label,
+      label,
       icon: renderMenuIcon(item.icon),
     }
 
     if (item.path) {
       menuItem.path = item.path
     }
+    if (children.length) {
+      menuItem.children = children
+    }
 
-    return item.path ? [menuItem] : children
+    // 目录节点保留为可展开分组，叶子节点只保留真实可访问路径。
+    return item.path || children.length ? [menuItem] : []
   })
 }
 

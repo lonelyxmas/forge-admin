@@ -46,8 +46,9 @@ export function encryptRequest(config) {
   }
 
   if (!isKeyValid()) {
-    console.warn('加密密钥未设置，跳过请求加密')
-    return config
+    const error = new Error('安全通道未建立，已阻止明文请求')
+    error.code = 'ENCRYPT_REQUEST_FAILED'
+    throw error
   }
 
   if (config.data && typeof config.data === 'object') {

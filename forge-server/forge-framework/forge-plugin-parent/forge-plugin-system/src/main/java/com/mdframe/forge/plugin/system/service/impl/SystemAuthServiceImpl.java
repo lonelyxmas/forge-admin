@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicy;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicyResolver;
+import com.mdframe.forge.plugin.system.auth.LoginPasswordEncryptionPolicy;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.mapper.*;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -63,6 +64,7 @@ public class SystemAuthServiceImpl implements IAuthService {
     private final IClientService clientService;
     private final ICacheService cacheService;
     private final LoginCaptchaPolicyResolver captchaPolicyResolver;
+    private final LoginPasswordEncryptionPolicy passwordEncryptionPolicy;
     private final SysTenantMapper tenantMapper;
 
     // ==================== 核心认证方法 ====================
@@ -493,6 +495,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         SysTenant tenant = selectLoginTenantConfig(tenantId);
 
         return LoginConfigResult.builder()
+                .enablePasswordEncryption(passwordEncryptionPolicy.isEnabled(config))
                 .enableCaptcha(captchaPolicy.getEnableCaptcha())
                 .captchaType(captchaPolicy.getCaptchaType())
                 .userClient(captchaPolicy.getUserClient())

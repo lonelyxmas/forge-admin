@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import api from '@/api'
+import { loadRuntimeCryptoConfig } from '@/utils/crypto/crypto-config'
 import { rsaEncrypt } from '@/utils/crypto/rsa'
 
 function getToken(data = {}) {
@@ -60,7 +61,10 @@ export const useAuthStore = defineStore('auth', {
       this.menus = []
       this.permissions = []
     },
-    async encryptPassword(password) {
+    async encryptPassword(password, enabled) {
+      if (!enabled) {
+        return password
+      }
       try {
         const res = await api.getPublicKey()
         const publicKey = res?.data?.publicKey
@@ -75,7 +79,14 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async login(form) {
-      const password = await this.encryptPassword(form.password)
+      await loadRuntimeCryptoConfig()
+      const userClient = import.meta.env.VITE_USER_CLIENT || 'h5'
+      const loginConfigResponse = await api.getLoginConfig({
+        userClient,
+        ...(form.tenantId ? { tenantId: form.tenantId } : {}),
+      })
+      const passwordEncryptionEnabled = loginConfigResponse?.data?.enablePasswordEncryption !== false
+      const password = await this.encryptPassword(form.password, passwordEncryptionEnabled)
       const payload = {
         username: form.username,
         password,
@@ -83,9 +94,8 @@ export const useAuthStore = defineStore('auth', {
         codeKey: form.codeKey,
         tenantId: form.tenantId || undefined,
         authType: 'password_captcha',
-        userClient: import.meta.env.VITE_USER_CLIENT || 'app',
+        userClient,
         appId: import.meta.env.VITE_APP_ID || undefined,
-        appSecret: import.meta.env.VITE_APP_SECRET || undefined,
       }
       const res = await api.login(payload)
       this.setToken(res.data || {})
@@ -101,7 +111,6 @@ export const useAuthStore = defineStore('auth', {
         authType: 'oauth2',
         userClient: import.meta.env.VITE_USER_CLIENT || 'app',
         appId: import.meta.env.VITE_APP_ID || undefined,
-        appSecret: import.meta.env.VITE_APP_SECRET || undefined,
       }
       const res = await api.login(payload)
       this.setToken(res.data || {})

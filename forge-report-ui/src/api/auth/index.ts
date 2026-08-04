@@ -1,4 +1,5 @@
 import { get, post } from '@/api/http'
+import { loadRuntimeCryptoConfig } from '@/utils/api-crypto/crypto-config'
 import { encryptPassword } from '@/utils/rsa'
 
 export interface LoginRequest {
@@ -7,7 +8,6 @@ export interface LoginRequest {
   authType?: string
   userClient?: string
   appId?: string
-  encrypted?: boolean
 }
 
 export interface LoginResult {
@@ -26,20 +26,35 @@ export interface SsoExchangeRequest {
   ticket: string
 }
 
+export interface LoginConfigResponse {
+  code: number
+  msg?: string
+  message?: string
+  data?: {
+    enablePasswordEncryption?: boolean
+  }
+}
+
+export const getLoginConfigApi = (userClient = 'forge_report'): Promise<LoginConfigResponse> => {
+  return get('/forge-report-api/auth/loginConfig', { userClient }) as unknown as Promise<LoginConfigResponse>
+}
+
 /**
- * 用户登录（密码使用 RSA 加密）
+ * 用户登录。密码 RSA 策略由服务端登录配置决定。
  */
 export const loginApi = async (data: LoginRequest): Promise<LoginResponse> => {
-  const encryptedPwd = await encryptPassword(data.password)
+  await loadRuntimeCryptoConfig()
+  const userClient = data.userClient || 'forge_report'
+  const loginConfig = await getLoginConfigApi(userClient)
+  const passwordEncryptionEnabled = loginConfig?.data?.enablePasswordEncryption !== false
+  const submittedPassword = await encryptPassword(data.password, passwordEncryptionEnabled)
 
   return post('/forge-report-api/auth/login', {
     username: data.username,
-    password: encryptedPwd,
+    password: submittedPassword,
     authType: data.authType || 'password',
-    userClient: data.userClient || 'forge_report',
+    userClient,
     appId: data.appId || 'forge_report',
-    appSecret: 'forage_pc123',
-    encrypted: true,
   }) as unknown as Promise<LoginResponse>
 }
 

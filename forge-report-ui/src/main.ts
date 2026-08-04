@@ -6,6 +6,7 @@ import { setupStore } from '@/store'
 import { setupNaive, setupDirectives, setupCustomComponents, initFunction } from '@/plugins'
 import { FgAppProvider } from '@/components/FgAppProvider/index'
 import { setHtmlTheme } from '@/utils'
+import { loadRuntimeCryptoConfig } from '@/utils/api-crypto/crypto-config'
 import { addCollection } from 'iconify-icon'
 import uimIcons from '@iconify/json/json/uim.json'
 import lineMdIcons from '@iconify/json/json/line-md.json'
@@ -25,6 +26,8 @@ addCollection(lineMdIcons)
 addCollection(wiIcons)
 
 async function appInit() {
+  await loadRuntimeCryptoConfig()
+
   const goAppProvider = createApp(FgAppProvider)
 
   const app = createApp(App)
@@ -66,4 +69,3 @@ async function appInit() {
 appInit().then(() => {
   initFunction()
 })
-

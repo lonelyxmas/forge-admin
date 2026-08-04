@@ -9,6 +9,12 @@ import lombok.Data;
 public class LoginConfig {
 
     /**
+     * 是否启用登录密码 RSA 加密。
+     * 与通用 API 传输加密开关相互独立。
+     */
+    private Boolean enablePasswordEncryption = true;
+
+    /**
      * 是否启用验证码
      */
     private Boolean enableCaptcha = true;

@@ -49,6 +49,18 @@
               </div>
             </div>
             <div class="config-grid">
+              <div class="config-item password-encryption-item">
+                <div class="config-copy">
+                  <div class="config-label">
+                    <i class="i-material-symbols:password" />
+                    登录密码 RSA 加密
+                  </div>
+                  <div class="config-help">
+                    独立于通用接口传输加密。开启后登录密码必须使用服务端公钥加密；关闭时请确保系统仅通过 HTTPS 访问。
+                  </div>
+                </div>
+                <n-switch v-model:value="configForms.login.enablePasswordEncryption" />
+              </div>
               <div class="config-item">
                 <div class="config-label">
                   <i class="i-material-symbols:verified-user-outline" />
@@ -752,6 +764,7 @@ const saving = reactive({
 
 const configForms = ref({
   login: {
+    enablePasswordEncryption: true,
     enableCaptcha: true,
     captchaType: 'char',
     enableRememberMe: true,
@@ -1136,6 +1149,22 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 500;
   color: #334155;
+}
+
+.password-encryption-item {
+  grid-column: 1 / -1;
+  gap: 24px;
+}
+
+.config-copy {
+  min-width: 0;
+}
+
+.config-help {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .config-input {

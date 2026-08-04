@@ -50,6 +50,14 @@ export function enableCapability(id) {
   return request.post(`/ai/capability/enable/${id}`)
 }
 
+export function updateCapability(id, data) {
+  return postEncrypt(`/ai/capability/update/${id}`, data)
+}
+
+export function deleteCapability(id) {
+  return request.delete(`/ai/capability/delete/${id}`)
+}
+
 export function downloadCapabilityOpenApi(id) {
   return request({
     method: 'get',
@@ -84,6 +92,10 @@ export function getCapabilityCallGuideClients() {
 
 export function getCapabilityClientPage(params) {
   return request.get('/ai/capability/client/page', { params })
+}
+
+export function getCapabilityClient(id) {
+  return request.get(`/ai/capability/client/${id}`)
 }
 
 export function addCapabilityClient(data) {
@@ -122,6 +134,14 @@ export function removeClientUserAssertionMapping(id, mappingId) {
   return request.delete(`/ai/capability/client/${id}/user-assertion/mapping/${mappingId}`)
 }
 
+export function getClientUserAssertionMappingPage(id, params) {
+  return request.get(`/ai/capability/client/${id}/user-assertion/mapping/page`, { params })
+}
+
+export function updateClientUserAssertionMappingRule(id, data) {
+  return postEncrypt(`/ai/capability/client/${id}/user-assertion/mapping-rule`, data)
+}
+
 // ========== 能力授权 ==========
 
 export function getCapabilityGrantPage(params) {
@@ -152,4 +172,8 @@ export function revokeCapabilityGrant(id) {
 
 export function getCapabilityInvocationPage(params) {
   return request.get('/ai/capability/invocation/page', { params })
+}
+
+export function getCapabilityInvocationDetail(id) {
+  return request.get(`/ai/capability/invocation/${id}`)
 }

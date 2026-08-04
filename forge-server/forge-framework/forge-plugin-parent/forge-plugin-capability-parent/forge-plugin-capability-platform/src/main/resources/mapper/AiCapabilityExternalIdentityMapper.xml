@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.capability.identity.mapper.AiCapabilityExternalIdentityMapper">
+
+    <select id="selectActive"
+            resultType="com.mdframe.forge.plugin.capability.identity.domain.AiCapabilityExternalIdentity">
+        SELECT id, tenant_id, provider_code, issuer_hash, subject_hash, subject_hint, user_id,
+               status, last_authenticated_at, del_flag,
+               create_by, create_time, create_dept, update_by, update_time
+        FROM ai_capability_external_identity
+        WHERE tenant_id = #{tenantId}
+          AND provider_code = #{providerCode}
+          AND issuer_hash = #{issuerHash}
+          AND subject_hash = #{subjectHash}
+          AND status = 'ENABLED'
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <update id="touchAuthenticated">
+        UPDATE ai_capability_external_identity
+        SET last_authenticated_at = #{authenticatedAt}, update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND status = 'ENABLED'
+          AND del_flag = 0
+    </update>
+
+    <select id="selectClientMappings"
+            resultType="com.mdframe.forge.plugin.capability.identity.mapper.model.ClientUserAssertionMappingRow">
+        SELECT mapping.id,
+               mapping.subject_hint,
+               mapping.subject_hash,
+               mapping.user_id,
+               u.username,
+               u.real_name,
+               mapping.last_authenticated_at,
+               mapping.create_time
+        FROM ai_capability_external_identity mapping
+        LEFT JOIN sys_user u
+          ON u.id = mapping.user_id
+         AND u.tenant_id = mapping.tenant_id
+         AND u.del_flag = 0
+        WHERE mapping.tenant_id = #{tenantId}
+          AND mapping.provider_code = #{providerCode}
+          AND mapping.issuer_hash = #{issuerHash}
+          AND mapping.status = 'ENABLED'
+          AND mapping.del_flag = 0
+        ORDER BY mapping.create_time DESC, mapping.id DESC
+    </select>
+
+    <select id="selectClientMappingPage"
+            resultType="com.mdframe.forge.plugin.capability.identity.mapper.model.ClientUserAssertionMappingRow">
+        SELECT mapping.id,
+               mapping.subject_hint,
+               mapping.subject_hash,
+               mapping.user_id,
+               u.username,
+               u.real_name,
+               mapping.last_authenticated_at,
+               mapping.create_time
+        FROM ai_capability_external_identity mapping
+        LEFT JOIN sys_user u
+          ON u.id = mapping.user_id
+         AND u.tenant_id = mapping.tenant_id
+         AND u.del_flag = 0
+        WHERE mapping.tenant_id = #{tenantId}
+          AND mapping.provider_code = #{providerCode}
+          AND mapping.issuer_hash = #{issuerHash}
+          AND mapping.status = 'ENABLED'
+          AND mapping.del_flag = 0
+        <if test="keyword != null and keyword != ''">
+            AND (mapping.subject_hint LIKE CONCAT('%', #{keyword}, '%')
+              OR u.username LIKE CONCAT('%', #{keyword}, '%')
+              OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY mapping.create_time DESC, mapping.id DESC
+    </select>
+
+    <update id="disableClientMapping">
+        UPDATE ai_capability_external_identity
+        SET status = 'DISABLED', del_flag = id, update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+          AND provider_code = #{providerCode}
+          AND issuer_hash = #{issuerHash}
+          AND status = 'ENABLED'
+          AND del_flag = 0
+    </update>
+</mapper>

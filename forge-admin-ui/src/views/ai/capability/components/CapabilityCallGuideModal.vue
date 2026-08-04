@@ -18,7 +18,7 @@
     <div class="guide-body">
       <div class="client-bar">
         <div class="client-field">
-          <span class="field-label">选择调用客户端</span>
+          <span class="field-label">调用客户端</span>
           <n-select
             v-model:value="selectedClientId"
             :options="clientOptions"
@@ -54,7 +54,7 @@
         {{ clientsError }}
       </n-alert>
       <n-alert v-else-if="!clientsLoading && clients.length === 0" type="warning" :show-icon="true">
-        还没有可用于诊断的客户端。请先在“机器客户端”页面创建客户端，再为它授权此能力。
+        还没有可用于诊断的客户端。请先在“客户端工作台”创建客户端，再为它授权此能力。
       </n-alert>
       <n-spin v-else-if="guideLoading" class="guide-loading" description="正在核对网关、客户端和授权状态…" />
 
@@ -89,14 +89,16 @@
           </div>
         </n-alert>
 
-        <section class="guide-section">
-          <div class="section-heading">
-            <div>
-              <h3>调用地址与身份</h3>
-              <p>以下内容由所选客户端的实际授权版本实时生成。</p>
-            </div>
-          </div>
-          <div class="endpoint-grid">
+        <n-tabs v-model:value="activeGuideTab" type="line" animated class="guide-tabs">
+          <n-tab-pane name="overview" tab="接入概览">
+            <section class="guide-section guide-section-first">
+              <div class="section-heading">
+                <div>
+                  <h3>调用地址与身份</h3>
+                  <p>以下内容由所选客户端的实际授权版本实时生成。</p>
+                </div>
+              </div>
+              <div class="endpoint-grid">
             <div class="endpoint-item endpoint-wide">
               <span class="endpoint-label">调用地址</span>
               <div class="copy-line">
@@ -167,99 +169,132 @@
                 </div>
               </div>
             </template>
-          </div>
-        </section>
-
-        <section class="guide-section readiness-section">
-          <div class="section-heading">
-            <div>
-              <h3>调用前检查</h3>
-              <p>红色项会直接阻断请求；“运行时”项由实际用户或服务账号在调用时校验。</p>
-            </div>
-          </div>
-          <div class="check-list">
-            <div v-for="check in guide.checks" :key="check.code" class="check-row">
-              <div class="check-state" :class="`state-${check.status.toLowerCase()}`">
-                <i :class="checkIcon(check.status)" />
               </div>
-              <div class="check-content">
-                <div class="check-title">
-                  <strong>{{ check.label }}</strong>
-                  <n-tag :type="checkTagType(check.status)" size="small" :bordered="false">
-                    {{ checkStatusLabel(check.status) }}
-                  </n-tag>
+            </section>
+
+            <section class="guide-section readiness-section">
+              <div class="section-heading">
+                <div>
+                  <h3>调用前检查</h3>
+                  <p>红色项会直接阻断请求；“运行时”项由实际用户或服务账号在调用时校验。</p>
                 </div>
-                <p>{{ check.message }}</p>
               </div>
-            </div>
-          </div>
-        </section>
+              <div class="check-list">
+                <div v-for="check in guide.checks" :key="check.code" class="check-row">
+                  <div class="check-state" :class="`state-${check.status.toLowerCase()}`">
+                    <i :class="checkIcon(check.status)" />
+                  </div>
+                  <div class="check-content">
+                    <div class="check-title">
+                      <strong>{{ check.label }}</strong>
+                      <n-tag :type="checkTagType(check.status)" size="small" :bordered="false">
+                        {{ checkStatusLabel(check.status) }}
+                      </n-tag>
+                    </div>
+                    <p>{{ check.message }}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </n-tab-pane>
 
-        <section class="guide-section">
-          <div class="section-heading example-heading">
-            <div>
-              <h3>可复制调用示例</h3>
-              <p>命令不会包含真实密钥。请在安全环境中替换尖括号占位符。</p>
-            </div>
-            <n-button
-              v-if="currentExample"
-              size="small"
-              @click="copyValue(currentExample, '调用命令已复制')"
-            >
-              <template #icon>
-                <i class="i-material-symbols:content-copy-outline-rounded" />
-              </template>
-              复制当前示例
-            </n-button>
-          </div>
-          <n-tabs v-model:value="activeExample" type="line" animated>
-            <n-tab-pane v-if="guide.oauthExample" name="OAUTH" tab="OAuth 2.1">
-              <n-alert
-                v-if="guide.requiredActorType === 'USER'"
-                type="info"
-                class="example-alert"
-              >
-                {{ guide.userAssertionEnabled
-                  ? '该客户端默认使用独立 RSA 私钥签发用户断言，再通过 Token Exchange 换取 Forge 短期令牌。'
-                  : '该能力使用受信 OIDC/JWT Token Exchange。外围用户必须已映射为 Forge 用户，权限由该用户实时校验。' }}
-              </n-alert>
-              <pre class="code-panel"><code>{{ guide.oauthExample }}</code></pre>
-            </n-tab-pane>
-            <n-tab-pane v-if="guide.hmacExample" name="HMAC" tab="AppId + HMAC">
-              <n-alert type="warning" class="example-alert">
-                签名密钥仅在创建或轮换时展示一次，请从密钥管理系统注入，不要写入代码仓库。
-              </n-alert>
-              <pre class="code-panel"><code>{{ guide.hmacExample }}</code></pre>
-            </n-tab-pane>
-            <n-tab-pane v-if="guide.oauthJavaExample" name="OAUTH_JAVA" tab="OAuth Java 17">
-              <n-alert type="info" class="example-alert">
-                受信 OIDC 方案仅使用 Java 17 标准库。配置 FORGE_CLIENT_SECRET（委托模式另配 FORGE_SUBJECT_TOKEN）后即可运行。
-              </n-alert>
-              <pre class="code-panel"><code>{{ guide.oauthJavaExample }}</code></pre>
-            </n-tab-pane>
-            <n-tab-pane
-              v-if="guide.userAssertionJavaExample"
-              name="USER_ASSERTION_JAVA"
-              tab="用户断言 Java 17"
-            >
-              <n-alert type="warning" class="example-alert">
-                完整示例会读取 PKCS#8 私钥文件并生成两分钟 RS256 JWT。请配置 FORGE_CLIENT_SECRET、FORGE_USER_ASSERTION_PRIVATE_KEY_FILE 和 FORGE_EXTERNAL_SUBJECT。
-              </n-alert>
-              <pre class="code-panel"><code>{{ guide.userAssertionJavaExample }}</code></pre>
-            </n-tab-pane>
-            <n-tab-pane v-if="guide.hmacJavaExample" name="HMAC_JAVA" tab="HMAC Java 17">
-              <n-alert type="warning" class="example-alert">
-                示例会按真实网关规范生成摘要和签名；Signing Key 从 FORGE_SIGNING_KEY 环境变量读取。
-              </n-alert>
-              <pre class="code-panel"><code>{{ guide.hmacJavaExample }}</code></pre>
-            </n-tab-pane>
-            <n-tab-pane name="BODY" tab="请求 Body">
-              <pre class="code-panel"><code>{{ requestBodyText }}</code></pre>
-            </n-tab-pane>
-          </n-tabs>
-        </section>
+          <n-tab-pane name="contract" tab="接口契约">
+            <section class="guide-section guide-section-first contract-section">
+              <div class="section-heading">
+                <div>
+                  <h3>请求、返回与业务校验</h3>
+                  <p>中文名称用于理解业务含义，字段编码才是外围系统实际发送的 JSON Key。</p>
+                </div>
+              </div>
 
-        <CapabilityOnlineTestPanel :guide="guide" />
+              <n-tabs type="segment" animated>
+            <n-tab-pane name="request-contract" tab="请求参数">
+              <n-data-table
+                :columns="fieldColumns"
+                :data="guide.requestFields || []"
+                :row-key="row => row.path"
+                :bordered="false"
+                size="small"
+                class="contract-table"
+              />
+              <div v-if="guide.requestNotes?.length" class="contract-notes">
+                <strong>请求说明</strong>
+                <ul><li v-for="note in guide.requestNotes" :key="note">{{ note }}</li></ul>
+              </div>
+            </n-tab-pane>
+            <n-tab-pane name="response-contract" tab="返回参数">
+              <n-data-table
+                :columns="fieldColumns"
+                :data="guide.responseFields || []"
+                :row-key="row => row.path"
+                :bordered="false"
+                size="small"
+                class="contract-table"
+              />
+              <div v-if="guide.responseNotes?.length" class="contract-notes">
+                <strong>返回说明</strong>
+                <ul><li v-for="note in guide.responseNotes" :key="note">{{ note }}</li></ul>
+              </div>
+            </n-tab-pane>
+            <n-tab-pane name="business-rules" tab="业务校验">
+              <n-empty v-if="!guide.businessRules?.length" description="当前版本未补充业务校验说明" />
+              <ol v-else class="business-rule-list">
+                <li v-for="rule in guide.businessRules" :key="rule">{{ rule }}</li>
+              </ol>
+            </n-tab-pane>
+              </n-tabs>
+            </section>
+          </n-tab-pane>
+
+          <n-tab-pane name="examples" tab="示例代码">
+            <section class="guide-section guide-section-first">
+              <div class="section-heading example-heading">
+                <div>
+                  <h3>复制调用示例</h3>
+                  <p>只保留 Curl 和 Java 两种交付格式；先选择认证方式，再复制完整示例。</p>
+                </div>
+                <n-space align="center">
+                  <n-select
+                    v-model:value="exampleAuthMode"
+                    :options="exampleAuthOptions"
+                    size="small"
+                    style="width: 180px"
+                  />
+                  <n-button
+                    v-if="currentExample"
+                    size="small"
+                    @click="copyValue(currentExample, '调用示例已复制')"
+                  >
+                    <template #icon>
+                      <i class="i-material-symbols:content-copy-outline-rounded" />
+                    </template>
+                    复制示例
+                  </n-button>
+                </n-space>
+              </div>
+              <n-tabs v-model:value="activeExample" type="line" animated>
+                <n-tab-pane name="CURL" tab="Curl">
+                  <n-alert v-if="exampleCredentialNotice" type="info" class="example-alert">
+                    {{ exampleCredentialNotice }}
+                  </n-alert>
+                  <pre class="code-panel"><code>{{ curlExample }}</code></pre>
+                </n-tab-pane>
+                <n-tab-pane name="JAVA" tab="Java 17">
+                  <n-alert type="warning" class="example-alert">
+                    凭据从环境变量或密钥管理系统注入，不要写入代码仓库。
+                  </n-alert>
+                  <pre class="code-panel"><code>{{ javaExample }}</code></pre>
+                </n-tab-pane>
+              </n-tabs>
+            </section>
+          </n-tab-pane>
+
+          <n-tab-pane name="test" tab="在线测试">
+            <section class="guide-section guide-section-first test-section">
+              <CapabilityOnlineTestPanel :guide="guide" />
+            </section>
+          </n-tab-pane>
+        </n-tabs>
       </template>
 
       <div v-else-if="!clientsLoading" class="guide-placeholder">
@@ -329,7 +364,9 @@ const clientsError = ref('')
 const selectedClientId = ref(null)
 const guide = ref(null)
 const guideLoading = ref(false)
-const activeExample = ref('BODY')
+const activeGuideTab = ref('overview')
+const activeExample = ref('CURL')
+const exampleAuthMode = ref('OAUTH')
 const markdownDownloading = ref(false)
 const openApiDownloading = ref(false)
 const versionSwitching = ref(false)
@@ -365,20 +402,44 @@ const grantVersionStrategyLabel = computed(() => {
   return guide.value?.grantVersionStrategy || '尚未授权'
 })
 
-const requestBodyText = computed(() => JSON.stringify(guide.value?.requestExample || {}, null, 2))
+const fieldColumns = [
+  { title: '中文名称', key: 'fieldLabel', width: 150 },
+  { title: '字段编码', key: 'fieldCode', width: 150 },
+  { title: '类型', key: 'type', width: 105 },
+  { title: '必填', key: 'required', width: 70, render: row => row.required ? '是' : '否' },
+  { title: '字段含义与约束', key: 'description', minWidth: 260 },
+  { title: '示例', key: 'example', width: 150, render: row => formatExample(row.example) },
+]
+
+const exampleAuthOptions = computed(() => (guide.value?.availableAuthModes || []).map(mode => ({
+  label: mode === 'OAUTH' ? 'OAuth 2.1' : 'AppId + HMAC',
+  value: mode,
+})))
+
+const curlExample = computed(() => exampleAuthMode.value === 'HMAC'
+  ? guide.value?.hmacExample || '当前客户端未启用 HMAC 认证'
+  : guide.value?.oauthExample || '当前客户端未启用 OAuth 认证')
+
+const javaExample = computed(() => {
+  if (exampleAuthMode.value === 'HMAC')
+    return guide.value?.hmacJavaExample || '当前客户端未启用 HMAC 认证'
+  if (guide.value?.userAssertionEnabled && guide.value?.userAssertionJavaExample)
+    return guide.value.userAssertionJavaExample
+  return guide.value?.oauthJavaExample || '当前客户端未启用 OAuth 认证'
+})
+
+const exampleCredentialNotice = computed(() => {
+  if (exampleAuthMode.value === 'HMAC')
+    return '需要 AppId 和 Signing Key；Signing Key 只在创建或轮换时展示一次。'
+  if (guide.value?.requiredActorType === 'USER' && guide.value?.userAssertionEnabled)
+    return '需要 Client Secret、外围用户标识和用户断言 RSA 私钥，再通过 Token Exchange 获取短期令牌。'
+  if (guide.value?.requiredActorType === 'USER')
+    return '需要 Client Secret 和受信 OIDC subject_token，通过 Token Exchange 获取短期令牌。'
+  return '需要 Client ID / AppId 和 Client Secret，通过 client_credentials 获取短期令牌。'
+})
 
 const currentExample = computed(() => {
-  if (activeExample.value === 'OAUTH')
-    return guide.value?.oauthExample || ''
-  if (activeExample.value === 'HMAC')
-    return guide.value?.hmacExample || ''
-  if (activeExample.value === 'OAUTH_JAVA')
-    return guide.value?.oauthJavaExample || ''
-  if (activeExample.value === 'USER_ASSERTION_JAVA')
-    return guide.value?.userAssertionJavaExample || ''
-  if (activeExample.value === 'HMAC_JAVA')
-    return guide.value?.hmacJavaExample || ''
-  return requestBodyText.value
+  return activeExample.value === 'JAVA' ? javaExample.value : curlExample.value
 })
 
 watch(() => props.show, async (visible) => {
@@ -389,7 +450,8 @@ watch(() => props.show, async (visible) => {
   }
   guide.value = null
   selectedClientId.value = null
-  activeExample.value = 'BODY'
+  activeGuideTab.value = 'overview'
+  activeExample.value = 'CURL'
   await loadClients()
 })
 
@@ -398,6 +460,7 @@ watch(() => props.capability?.id, () => {
     return
   guide.value = null
   selectedClientId.value = null
+  activeGuideTab.value = 'overview'
   loadClients()
 })
 
@@ -424,15 +487,15 @@ async function loadClients() {
 
 async function loadGuide(clientId) {
   guide.value = null
+  activeGuideTab.value = 'overview'
   if (!clientId || !props.capability?.id)
     return
   guideLoading.value = true
   try {
     const res = await getCapabilityCallGuide(props.capability.id, clientId)
     guide.value = res.data
-    activeExample.value = guide.value?.oauthExample
-      ? 'OAUTH'
-      : guide.value?.hmacExample ? 'HMAC' : 'BODY'
+    activeExample.value = 'CURL'
+    exampleAuthMode.value = guide.value?.availableAuthModes?.[0] || 'OAUTH'
   }
   catch (error) {
     window.$message.error(error?.message || '调用指南加载失败')
@@ -501,6 +564,12 @@ function checkStatusLabel(status) {
     RUNTIME: '运行时校验',
     INFO: '说明',
   }[status] || status
+}
+
+function formatExample(value) {
+  if (value == null)
+    return '-'
+  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 async function copyValue(value, successMessage) {
@@ -665,6 +734,14 @@ function responseFilename(response) {
   border-bottom: 1px solid var(--border-light);
 }
 
+.guide-tabs {
+  margin-top: 16px;
+}
+
+.guide-section-first {
+  padding-top: 10px;
+}
+
 .guide-section:last-child {
   padding-bottom: 4px;
   border-bottom: 0;
@@ -798,6 +875,39 @@ function responseFilename(response) {
 
 .example-heading {
   align-items: center;
+}
+
+.contract-table {
+  min-width: 820px;
+}
+
+.contract-section :deep(.n-tab-pane) {
+  overflow-x: auto;
+}
+
+.contract-notes {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.contract-notes ul,
+.business-rule-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.business-rule-list {
+  padding: 8px 8px 8px 28px;
+  color: var(--text-secondary);
+}
+
+.test-section {
+  padding-bottom: 0;
 }
 
 .example-alert {

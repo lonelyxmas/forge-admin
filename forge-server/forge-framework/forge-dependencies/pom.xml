@@ -484,41 +484,24 @@
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability</artifactId>
+                <artifactId>forge-plugin-capability-core</artifactId>
                 <version>${revision}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-control-plane</artifactId>
+                <artifactId>forge-plugin-capability-platform</artifactId>
                 <version>${revision}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-identity</artifactId>
-                <version>${revision}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-secure-actions</artifactId>
-                <version>${revision}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-flow-actions</artifactId>
+                <artifactId>forge-plugin-capability-actions</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
                 <artifactId>forge-plugin-capability-high-risk-approval</artifactId>
-                <version>${revision}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-open-gateway</artifactId>
                 <version>${revision}</version>
             </dependency>
 

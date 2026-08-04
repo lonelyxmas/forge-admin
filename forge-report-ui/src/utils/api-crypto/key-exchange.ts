@@ -2,7 +2,7 @@ import type { AxiosInstance } from 'axios'
 import { getLocalStorage } from '@/utils/storage'
 import { StorageEnum } from '@/enums/storageEnum'
 import { rsaEncrypt } from '@/utils/rsa'
-import { updateCryptoConfig } from './crypto-config'
+import { cryptoConfig, updateCryptoConfig } from './crypto-config'
 
 const STORAGE_KEYS = {
   SESSION_KEY: 'report_crypto_session_key',
@@ -194,6 +194,12 @@ export async function exchangeKey(axios: AxiosInstance): Promise<boolean> {
 }
 
 export async function ensureKeyExchanged(axios: AxiosInstance): Promise<boolean> {
+  if (!cryptoConfig.enabled || !cryptoConfig.enableApiCrypto) {
+    return true
+  }
+  if (!cryptoConfig.enableDynamicKey) {
+    return true
+  }
   restoreKeyState()
   return exchangeKey(axios)
 }

@@ -93,7 +93,7 @@ flowchart TB
     TF --> K
     TA --> K
 
-    subgraph Kernel[forge-plugin-capability 能力内核]
+    subgraph Kernel[forge-plugin-capability-parent 统一能力平台]
       K[统一调用入口]
       I[机器身份与请求上下文]
       R[Capability Registry]
@@ -116,21 +116,18 @@ flowchart TB
     P --> DS[DynamicDataScopeService / DataScopeInterceptor]
 ```
 
-### 3.2 两个新增模块的职责
+### 3.2 Capability 聚合模块与 MCP 模块职责
 
-#### `forge-plugin-capability`
+#### `forge-plugin-capability-parent`
 
-这是协议无关的能力内核，不能放进 `forge-plugin-mcp`。否则后续内部 Function Calling、A2A 或其它协议会重复实现授权、审计和执行逻辑。
+Capability 使用专属父模块聚合，父模块不放业务代码。协议无关内核不能放进 `forge-plugin-mcp`，否则后续内部 Function Calling、A2A 或其它协议会重复实现授权、审计和执行逻辑。
 
-主要职责：
+四个子模块职责：
 
-- 统一能力定义、版本、发布状态和来源映射；
-- 从已发布低代码对象、业务动作、流程、消息和 API 配置生成能力；
-- 提供 `BusinessCapabilityProvider` SPI，让代码优先业务显式注册查询和动作契约；
-- 解析机器客户端为 Forge 用户/租户/当前组织上下文；
-- 执行授权、字段过滤、风险、配额、幂等和人工审批策略；
-- 路由到现有业务 Service；
-- 统一记录调用日志、耗时、结果和脱敏摘要。
+- `forge-plugin-capability-core`：统一能力定义、Schema、Registry、`CapabilitySource/CapabilityExecutor` 与开放执行 SPI。
+- `forge-plugin-capability-platform`：目录、版本、客户端、授权、调用审计、OAuth/外围身份映射和 REST Open Gateway。
+- `forge-plugin-capability-actions`：低代码业务动作、系统服务动作和流程动作的发布、快照校验与执行适配。
+- `forge-plugin-capability-high-risk-approval`：高风险动作人工审批、版本化载荷加密和回调执行，默认关闭。
 
 #### `forge-plugin-mcp`
 
@@ -148,18 +145,19 @@ flowchart TB
 
 ```text
 forge-admin-server
+  ├── forge-plugin-capability-high-risk-approval
+  │     └── forge-plugin-capability-actions
+  │            └── forge-plugin-capability-platform
+  │                   ├── forge-plugin-mcp
+  │                   │     └── forge-plugin-capability-core
+  │                   └── forge-plugin-capability-core
   ├── forge-plugin-mcp
-  │     └── forge-plugin-capability
-  │            ├── forge-plugin-generator
-  │            ├── forge-flow-client
-  │            ├── forge-plugin-message
-  │            ├── forge-plugin-external
-  │            └── forge-starter-api-config
+  │     └── forge-plugin-capability-core
   ├── forge-business-core（依赖 capability SPI 并注册代码业务 Provider）
   └── forge-plugin-ai（阶段 4 再依赖 capability 的内部 ToolCallback 适配）
 ```
 
-`forge-plugin-capability` 不依赖 `forge-plugin-ai`，避免“业务能力依赖模型调用层”。能力可以脱离 LLM 单独测试、调用和治理。
+`forge-plugin-capability-core` 不依赖 `forge-plugin-ai`、MCP SDK、ORM 或动作实现，避免“业务能力依赖模型调用层”。能力可以脱离 LLM 单独测试、调用和治理。
 
 ---
 
@@ -467,7 +465,7 @@ R3 调用必须形成可恢复、一次性执行的状态机：
 
 #### 工作项
 
-1. 新建 `forge-plugin-capability` 和 `forge-plugin-mcp`，接入 `forge-plugin-parent` 与 `forge-admin-server`。
+1. 建立 `forge-plugin-capability-parent`（`core/platform/actions/high-risk-approval`）和 `forge-plugin-mcp`，接入 `forge-plugin-parent` 与 `forge-admin-server`。
 2. 建立阶段 1 的五张表、Mapper XML、Service、Controller 和 Flyway 迁移。
 3. 实现 `LowcodePublishedCapabilitySource`：只读取已发布 `AiCrudConfig`，生成查询和详情能力。
 4. 实现 `PublishedCrudSchemaBuilder`：从运行态 Schema 生成 JSON Schema，并过滤内部/敏感/不可查询字段。
@@ -612,15 +610,12 @@ forge-server/
 ├── pom.xml                                      # 管理 MCP/Spring AI 兼容版本
 ├── forge-admin-server/pom.xml                   # 聚合 capability 与 mcp 插件
 ├── forge-framework/forge-plugin-parent/
-│   ├── pom.xml                                  # 注册两个新模块
-│   ├── forge-plugin-capability/
-│   │   ├── controller/                          # 能力、客户端、授权、日志管理 API
-│   │   ├── domain/                              # Capability/Client/Grant/InvocationLog
-│   │   ├── dto/ vo/ mapper/ resources/mapper/  # 标准分层与 XML SQL
-│   │   ├── registry/                            # 目录同步、版本、来源解析
-│   │   ├── policy/                              # 授权、字段、风险、配额策略
-│   │   ├── executor/                            # 统一执行入口与适配器
-│   │   └── context/                             # 机器身份和调用上下文
+│   ├── pom.xml                                  # 注册 Capability 父模块与 MCP
+│   ├── forge-plugin-capability-parent/
+│   │   ├── forge-plugin-capability-core/        # 模型、Schema、Registry、公共 SPI
+│   │   ├── forge-plugin-capability-platform/    # 控制面、Identity、Open Gateway
+│   │   ├── forge-plugin-capability-actions/     # Secure/Flow/System actions
+│   │   └── forge-plugin-capability-high-risk-approval/
 │   └── forge-plugin-mcp/
 │       ├── config/                              # MCP Server 自动配置
 │       ├── transport/                           # MCP 协议映射

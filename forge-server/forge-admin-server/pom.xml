@@ -108,30 +108,16 @@
 
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability-control-plane</artifactId>
+            <artifactId>forge-plugin-capability-platform</artifactId>
         </dependency>
 
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability-identity</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability-secure-actions</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability-flow-actions</artifactId>
+            <artifactId>forge-plugin-capability-actions</artifactId>
         </dependency>
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-capability-high-risk-approval</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability-open-gateway</artifactId>
         </dependency>
 
         <dependency>
