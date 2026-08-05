@@ -156,7 +156,6 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public String submit(Long id, SamplePurchaseOrderSubmitDTO dto) {
         SamplePurchaseOrder entity = requireEntity(id);
         if (!STATUS_DRAFT.equals(entity.getStatus())) {
@@ -190,6 +189,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         variables.put(SamplePurchaseOrderFlowDefinition.VAR_CC_ROLE_KEYS, ccRoleKeys);
 
         String flowTitle = buildConfiguredFlowTitle(entity, businessKey, variables);
+
+        // 流程启动（远程 RPC）在事务外执行，避免长事务占用 DB 连接
         FlowResult<String> result = flowClient.startProcess(
                 MODEL_KEY,
                 businessKey,
@@ -204,6 +205,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             throw new BusinessException("流程发起失败: " + (result == null ? "无返回结果" : result.getMsg()));
         }
 
+        // 流程启动成功后更新单据状态（自动提交，不占用长事务）
         entity.setBusinessKey(businessKey);
         entity.setProcessInstanceId(result.getData());
         entity.setDeptLeaderId(dto.getDeptLeaderId());
@@ -211,7 +213,13 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         entity.setCountersignUserIds(joinLongs(dto.getCountersignUserIds()));
         entity.setCcRoleKeys(String.join(",", ccRoleKeys));
         markInProcess(entity);
-        updateById(entity);
+        try {
+            updateById(entity);
+        } catch (Exception e) {
+            log.error("流程已启动但单据状态更新失败，请人工处理: orderId={}, processInstanceId={}",
+                    entity.getId(), result.getData(), e);
+            throw new BusinessException("流程已启动但单据状态更新失败，请联系管理员处理");
+        }
         return result.getData();
     }
 
