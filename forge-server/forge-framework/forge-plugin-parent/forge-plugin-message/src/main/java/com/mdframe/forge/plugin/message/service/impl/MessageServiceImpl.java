@@ -15,6 +15,7 @@ import com.mdframe.forge.plugin.message.domain.entity.SysMessageSendRecord;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessageTemplate;
 import com.mdframe.forge.plugin.message.domain.vo.MessageVO;
 import com.mdframe.forge.plugin.message.domain.vo.UnreadCountVO;
+import com.mdframe.forge.plugin.message.event.MessageSendEvent;
 import com.mdframe.forge.plugin.message.mapper.SysMessageMapper;
 import com.mdframe.forge.plugin.message.mapper.SysMessageReceiverMapper;
 import com.mdframe.forge.plugin.message.mapper.SysMessageSendRecordMapper;
@@ -31,9 +32,12 @@ import com.mdframe.forge.starter.message.service.MessageTemplateEngine;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -67,6 +71,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     private final MessageReceiverResolver receiverResolver;
     private final SysMessageReceiverService sysMessageReceiverService;
     private final ISysUserService sysUserService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MessageServiceImpl(SysMessageMapper messageMapper,
                               SysMessageReceiverMapper receiverMapper,
@@ -76,7 +81,8 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
                               MessageTemplateEngine templateEngine,
                               MessageReceiverResolver receiverResolver,
             SysMessageReceiverService sysMessageReceiverService,
-            ISysUserService sysUserService) {
+            ISysUserService sysUserService,
+            ApplicationEventPublisher eventPublisher) {
         this.messageMapper = messageMapper;
         this.receiverMapper = receiverMapper;
         this.recordMapper = recordMapper;
@@ -86,6 +92,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         this.receiverResolver = receiverResolver;
         this.sysMessageReceiverService = sysMessageReceiverService;
         this.sysUserService = sysUserService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -127,16 +134,40 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         int receiverCount = batchCreateReceiverRecords(msg.getId(), req, tenantId,
                 collaboration ? DELIVERY_STATUS_PENDING : null);
         
-        // 4/5. 发送到渠道并落发送记录
-        if (collaboration) {
-            CollaborationDeliveryOutcome outcome = sendToCollaboration(msg, renderResult, req);
-            createCollaborationSendRecord(msg, req, receiverCount, outcome, tenantId);
-        } else {
-            MessageChannel.SendResult sendResult = sendToChannel(msg, renderResult, req);
-            createSendRecord(msg.getId(), req.getChannel(), receiverCount, sendResult, tenantId);
-        }
+        // 4. 发布发送事件，事务提交后由监听器执行渠道发送（远程调用移出事务，避免长事务占 DB 连接）
+        eventPublisher.publishEvent(new MessageSendEvent(msg, req, renderResult.title, renderResult.content,
+                renderResult.channel, tenantId, receiverCount, collaboration));
         
         return msg;
+    }
+
+    /**
+     * 事务提交后执行渠道发送（远程调用在事务外，不占用 DB 连接）。
+     * 发送失败仅标记状态为 SEND_STATUS_FAILED 并告警，不回滚已落库消息记录。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleMessageSendEvent(MessageSendEvent event) {
+        SysMessage msg = event.getMessage();
+        try {
+            RenderResult renderResult = new RenderResult(event.getRenderedTitle(), event.getRenderedContent(),
+                    event.getChannel());
+            if (event.isCollaboration()) {
+                CollaborationDeliveryOutcome outcome = sendToCollaboration(msg, renderResult, event.getRequest());
+                createCollaborationSendRecord(msg, event.getRequest(), event.getReceiverCount(), outcome,
+                        event.getTenantId());
+            } else {
+                MessageChannel.SendResult sendResult = sendToChannel(msg, renderResult, event.getRequest());
+                createSendRecord(msg.getId(), event.getRequest().getChannel(), event.getReceiverCount(),
+                        sendResult, event.getTenantId());
+            }
+        } catch (Exception e) {
+            log.error("消息发送失败，已标记为失败状态，请人工排查: messageId={}, channel={}",
+                    msg.getId(), event.getChannel(), e);
+            SysMessage updateMsg = new SysMessage();
+            updateMsg.setId(msg.getId());
+            updateMsg.setStatus(SEND_STATUS_FAILED);
+            messageMapper.updateById(updateMsg);
+        }
     }
 
     @Override
