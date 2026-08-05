@@ -25,6 +25,11 @@ public interface GenTableColumnMapper extends BaseMapper<GenTableColumn> {
     List<GenTableColumn> selectByTableId(@Param("tableId") Long tableId);
 
     /**
+     * 按表名查询已配置的字段配置（参数化查询，防止 SQL 注入）
+     */
+    List<GenTableColumn> selectConfiguredColumnsByTableName(@Param("tableName") String tableName);
+
+    /**
      * 删除指定表配置的字段
      */
     int deleteByTableId(@Param("tableId") Long tableId);
