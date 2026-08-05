@@ -32,4 +32,4 @@ cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/ope
 
 ### 备注
 - Q3 确认：`DataBusinessDatasetMapper` extends `BaseMapper`（非 IService），无 `saveBatch` 能力。`DataBusinessDefinitionServiceImpl` 虽继承 `ServiceImpl<DataBusinessDefinitionMapper, DataBusinessDefinition>`，但 `saveBatch` 只能用于 `DataBusinessDefinition` 实体，不能用于 `DataBusinessDataset`。因此 `saveDatasetBindings` 的循环 insert 保留（属 P2 范围）。
-- Task 11 新增 Flyway 迁移脚本 `V1.0.86__unify_flow_category_to_id.sql`，将 `sys_flow_model.category` 和 `sys_flow_template.category` 中存储 category_code 的值更新为对应 ID。
+- Task 11 新增 Flyway 迁移脚本 `V1.0.86.2__unify_flow_category_to_id.sql`，将 `sys_flow_model.category` 和 `sys_flow_template.category` 中存储 category_code 的值更新为对应 ID。
