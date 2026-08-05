@@ -1,11 +1,12 @@
 # 变更规格 - 后端数据库性能 P1 分页查询优化
 
-> status: confirmed
+> status: review-ready
 > created: 2026-08-05
 > complexity: 🟡中等
 > 前置变更：backend-db-perf-and-injection-hardening（P0 已完成）
 > 本轮执行范围：Task 5-12（P1 分页性能优化）
-> Q1=方案A（Flyway迁移统一ID）；Q2=方案B（增加90天时间范围过滤）；Q3=实现时确认
+> Q1=方案A（Flyway迁移统一ID）；Q2=方案B（增加90天时间范围过滤）；Q3=实现时确认（businessDatasetMapper 无 saveBatch 能力，保留循环 insert）
+> 全量编译：`mvn clean install -DskipTests` 通过（2026-08-05）
 
 ## 1. 背景与动机
 

@@ -1,6 +1,6 @@
 # 任务拆分 - 后端数据库性能 P1 分页查询优化
 
-> status: draft
+> status: review-ready
 > created: 2026-08-05
 > 前置变更：backend-db-perf-and-injection-hardening（P0 已完成）
 > 每个 Task = 可独立提交的原子变更
@@ -9,7 +9,7 @@
 
 - [x] P0 变更已完成（Task 1-4 commit bf613888, e6832fcf, db19e638, 6e18e9f0）
 - [x] 已扫描 Task 5-12 涉及的 7 个核心文件，确认问题行号
-- [ ] Q1-Q3 待澄清
+- [x] Q1=方案A（Flyway迁移统一ID）；Q2=方案B（增加90天时间范围过滤）；Q3=实现时确认（businessDatasetMapper 无 saveBatch 能力，保留循环 insert）
 
 ## Task 5：消息管理 N+1 修复（P1-F5）
 
@@ -107,6 +107,19 @@
 
 ## Task 13：聚合验证
 
-- [ ] 执行 `cd forge-server && mvn clean install -DskipTests`
-- [ ] 回填 spec.md 执行日志
-- [ ] 精确暂存本变更文件并提交
+- [x] 执行 `cd forge-server && mvn clean install -DskipTests` — 全量编译通过
+- [x] 回填 spec.md 执行日志
+- [x] 精确暂存本变更文件并提交
+
+## 执行记录
+
+| Task | Commit | 说明 |
+|------|--------|------|
+| 5 | b36d4031 | 消息管理 N+1 修复，循环 selectList 改一次 IN 批量查询 |
+| 6 | 322e5c26 | 公告列表 N+1 修复，已读状态 + 附件改批量查询 |
+| 7 | bf479768 | 用户租户批量绑定，循环 selectById/selectCount 改批量 |
+| 8 | b3783b02 | 业务定义 N+1 修复，数据集校验和查询改批量 |
+| 9 | 350f36db | AI 统计查询优化，子查询改 JOIN + 增加 90 天时间范围 |
+| 10 | 2ec99da6 | 待办查询 LIKE 优化改 FIND_IN_SET |
+| 11 | 764a26d7 | 流程 JOIN OR 优化，Flyway 统一 category 为 ID |
+| 12 | f56c1836 | 角色资源加载优化，全量 list() 改按需查询 |
