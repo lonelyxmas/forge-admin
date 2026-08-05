@@ -19,11 +19,16 @@
     <select id="selectSessionPage" resultMap="sessionVOResultMap">
         SELECT s.id, s.user_id, u.real_name AS nick_name, u.avatar,
                s.session_name, s.agent_code, s.status,
-               (SELECT COUNT(*) FROM ai_chat_record r WHERE r.session_id = s.id) AS message_count,
-               (SELECT COALESCE(SUM(r.token_usage), 0) FROM ai_chat_record r WHERE r.session_id = s.id) AS token_usage,
+               COALESCE(r.message_count, 0) AS message_count,
+               COALESCE(r.token_usage, 0) AS token_usage,
                s.create_time, s.update_time
         FROM ai_chat_session s
         LEFT JOIN sys_user u ON s.user_id = u.id AND u.del_flag = 0
+        LEFT JOIN (
+            SELECT session_id, COUNT(*) AS message_count, COALESCE(SUM(token_usage), 0) AS token_usage
+            FROM ai_chat_record
+            GROUP BY session_id
+        ) r ON r.session_id = s.id
         <where>
             1=1
             AND s.status = '0'
@@ -48,10 +53,10 @@
 
     <select id="selectStatistics" resultType="com.mdframe.forge.plugin.ai.session.vo.AiSessionStatisticsVO">
         SELECT
-            (SELECT COUNT(*) FROM ai_chat_session WHERE status = '0') AS totalSessions,
-            (SELECT COUNT(*) FROM ai_chat_record) AS totalMessages,
+            (SELECT COUNT(*) FROM ai_chat_session WHERE status = '0' AND create_time &gt;= DATE_SUB(NOW(), INTERVAL 90 DAY)) AS totalSessions,
+            (SELECT COUNT(*) FROM ai_chat_record WHERE create_time &gt;= DATE_SUB(NOW(), INTERVAL 90 DAY)) AS totalMessages,
             (SELECT COUNT(*) FROM ai_chat_session WHERE status = '0' AND DATE(create_time) = CURDATE()) AS todaySessions,
-            (SELECT COALESCE(SUM(token_usage), 0) FROM ai_chat_record) AS totalTokenUsage
+            (SELECT COALESCE(SUM(token_usage), 0) FROM ai_chat_record WHERE create_time &gt;= DATE_SUB(NOW(), INTERVAL 90 DAY)) AS totalTokenUsage
     </select>
 
     <select id="selectDailyTrend" resultType="com.mdframe.forge.plugin.ai.session.vo.DailyTrendItem">

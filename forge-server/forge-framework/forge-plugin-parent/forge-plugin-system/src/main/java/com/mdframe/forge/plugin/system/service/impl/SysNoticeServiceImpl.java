@@ -23,7 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 通知公告Service实现类
@@ -73,11 +79,21 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
         // 处理附件信息
         if (StrUtil.isNotBlank(notice.getAttachmentIds())) {
             String[] fileIds = notice.getAttachmentIds().split(",");
-            List<SysNoticeVO.AttachmentInfo> attachments = new ArrayList<>();
+            List<Long> fileIdList = new ArrayList<>();
             for (String fileIdStr : fileIds) {
                 try {
-                    Long fileId = Long.parseLong(fileIdStr.trim());
-                    SysFileMetadata fileMetadata = fileMetadataMapper.selectById(fileId);
+                    fileIdList.add(Long.parseLong(fileIdStr.trim()));
+                } catch (NumberFormatException e) {
+                    log.warn("无效的文件ID: {}", fileIdStr);
+                }
+            }
+            if (!fileIdList.isEmpty()) {
+                List<SysFileMetadata> files = fileMetadataMapper.selectBatchIds(fileIdList);
+                Map<Long, SysFileMetadata> fileMap = files.stream()
+                        .collect(Collectors.toMap(SysFileMetadata::getId, Function.identity(), (left, right) -> left));
+                List<SysNoticeVO.AttachmentInfo> attachments = new ArrayList<>();
+                for (Long fileId : fileIdList) {
+                    SysFileMetadata fileMetadata = fileMap.get(fileId);
                     if (fileMetadata != null) {
                         SysNoticeVO.AttachmentInfo attachment = new SysNoticeVO.AttachmentInfo();
                         attachment.setFileId(fileId);
@@ -85,11 +101,9 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
                         attachment.setFileSize(fileMetadata.getFileSize());
                         attachments.add(attachment);
                     }
-                } catch (NumberFormatException e) {
-                    log.warn("无效的文件ID: {}", fileIdStr);
                 }
+                vo.setAttachments(attachments);
             }
-            vo.setAttachments(attachments);
         }
 
         return vo;
@@ -277,30 +291,54 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
             
             Page<SysNotice> page = noticeMapper.selectPage(pageQuery.toPage(), wrapper);
             
-            // 转换为VO并填充已读状态
-            Page<SysNoticeVO> voPage = new Page<>();
-            voPage.setCurrent(page.getCurrent());
-            voPage.setSize(page.getSize());
-            voPage.setTotal(page.getTotal());
+            // 批量查询已读状态：一次 IN 查询返回用户已读的 noticeId 集合
+            List<Long> noticeIds = page.getRecords().stream()
+                    .map(SysNotice::getNoticeId)
+                    .collect(Collectors.toList());
+            Set<Long> readNoticeIds;
+            if (noticeIds.isEmpty()) {
+                readNoticeIds = Collections.emptySet();
+            } else {
+                readNoticeIds = new HashSet<>(noticeReadRecordMapper.selectReadNoticeIds(userId, noticeIds));
+            }
+
+            // 批量查询附件：收集所有 fileId，一次 selectBatchIds
+            List<Long> allFileIds = page.getRecords().stream()
+                    .filter(n -> StrUtil.isNotBlank(n.getAttachmentIds()))
+                    .flatMap(n -> Arrays.stream(n.getAttachmentIds().split(",")))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(s -> {
+                        try { return Long.parseLong(s); } catch (NumberFormatException e) { return null; }
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            Map<Long, SysFileMetadata> fileMap;
+            if (allFileIds.isEmpty()) {
+                fileMap = Collections.emptyMap();
+            } else {
+                fileMap = fileMetadataMapper.selectBatchIds(allFileIds).stream()
+                        .collect(Collectors.toMap(SysFileMetadata::getId, Function.identity(), (left, right) -> left));
+            }
             
+            final Set<Long> finalReadNoticeIds = readNoticeIds;
+            final Map<Long, SysFileMetadata> finalFileMap = fileMap;
             List<SysNoticeVO> voList = page.getRecords().stream().map(notice -> {
                 SysNoticeVO vo = new SysNoticeVO();
                 BeanUtil.copyProperties(notice, vo);
                 
-                // 检查是否已读
-                LambdaQueryWrapper<SysNoticeReadRecord> readWrapper = new LambdaQueryWrapper<>();
-                readWrapper.eq(SysNoticeReadRecord::getNoticeId, notice.getNoticeId())
-                           .eq(SysNoticeReadRecord::getUserId, userId);
-                vo.setIsRead(noticeReadRecordMapper.selectCount(readWrapper) > 0 ? 1 : 0);
+                // 已读状态从批量查询结果中获取
+                vo.setIsRead(finalReadNoticeIds.contains(notice.getNoticeId()) ? 1 : 0);
                 
-                // 填充附件信息
+                // 附件信息从批量查询结果中获取
                 if (StrUtil.isNotBlank(notice.getAttachmentIds())) {
                     String[] fileIds = notice.getAttachmentIds().split(",");
                     List<SysNoticeVO.AttachmentInfo> attachments = new ArrayList<>();
                     for (String fileIdStr : fileIds) {
                         try {
                             Long fileId = Long.parseLong(fileIdStr.trim());
-                            SysFileMetadata fileMetadata = fileMetadataMapper.selectById(fileId);
+                            SysFileMetadata fileMetadata = finalFileMap.get(fileId);
                             if (fileMetadata != null) {
                                 SysNoticeVO.AttachmentInfo attachment = new SysNoticeVO.AttachmentInfo();
                                 attachment.setFileId(fileId);
@@ -316,8 +354,12 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
                 }
                 
                 return vo;
-            }).collect(java.util.stream.Collectors.toList());
+            }).collect(Collectors.toList());
             
+            Page<SysNoticeVO> voPage = new Page<>();
+            voPage.setCurrent(page.getCurrent());
+            voPage.setSize(page.getSize());
+            voPage.setTotal(page.getTotal());
             voPage.setRecords(voList);
             return voPage;
         } catch (Exception e) {

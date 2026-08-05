@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.capability.opengateway.mapper.AiCapabilityOpenapiIdempotencyMapper">
+
+    <select id="selectActiveSnapshot" resultType="com.mdframe.forge.plugin.capability.opengateway.entity.AiCapabilityOpenapiIdempotency">
+        SELECT id, tenant_id, client_id, capability_id, idempotency_key_hash,
+               request_id, response_snapshot, expires_at, del_flag
+        FROM ai_capability_openapi_idempotency
+        WHERE tenant_id = #{tenantId}
+          AND client_id = #{clientId}
+          AND capability_id = #{capabilityId}
+          AND idempotency_key_hash = #{keyHash}
+          AND del_flag = 0
+          AND expires_at &gt; NOW()
+        LIMIT 1
+    </select>
+
+    <delete id="deleteExpired">
+        DELETE FROM ai_capability_openapi_idempotency
+        WHERE expires_at &lt; NOW()
+        LIMIT #{limit}
+    </delete>
+</mapper>

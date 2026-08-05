@@ -20,7 +20,7 @@
         <slot :item="item" :index="index"></slot>
       </view>
       
-      <view class="loading-text" v-if="refreshing">加载中...</view>
+      <AiListSkeleton v-if="refreshing" :rows="dataSource.length ? 2 : 5" :compact="dataSource.length > 0" />
       <view class="loading-text" v-if="finished && dataSource.length > 0">没有更多了</view>
       <view class="empty-tip" v-if="finished && dataSource.length === 0">暂无数据</view>
     </view>
@@ -34,6 +34,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import AiPage from './AiPage.vue'
+import AiListSkeleton from './AiListSkeleton.vue'
 import { usePaging } from '@/composables'
 
 const props = defineProps({

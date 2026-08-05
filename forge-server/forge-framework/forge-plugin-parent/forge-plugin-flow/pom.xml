@@ -37,6 +37,12 @@
             <artifactId>forge-plugin-message</artifactId>
         </dependency>
 
+        <!-- 企业协同连接配置（待办卡片推送开关/H5地址收敛在 sys_social_config） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-social</artifactId>
+        </dependency>
+
         <!-- Flow Client SPI (业务列表展示扩展点) -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>

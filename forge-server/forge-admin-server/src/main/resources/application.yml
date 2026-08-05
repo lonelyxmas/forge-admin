@@ -120,7 +120,7 @@ sa-token:
   # 使用Redis存储Session
   alone-redis:
     # Redis数据库索引（默认为0）
-    database: 1
+    database: 0
     # Redis服务器地址
     host: ${spring.data.redis.host}
     # Redis服务器连接端口
@@ -141,22 +141,22 @@ forge:
   flow:
     job:
       remote:
-        enabled: ${FORGE_FLOW_JOB_REMOTE_ENABLED:true}
+        enabled: ${FORGE_FLOW_JOB_REMOTE_ENABLED:false}
         url: ${FORGE_FLOW_JOB_REMOTE_URL:http://127.0.0.1:8081}
-        token: ${FORGE_FLOW_JOB_REMOTE_TOKEN:e91558ee6c499b1e927820b08461b1ebd3c57be7e41a43955d68092dd4b9f492}
+        token: ${FORGE_FLOW_JOB_REMOTE_TOKEN:}
   job:
     open-api:
-      enabled: ${FORGE_JOB_OPEN_API_ENABLED:true}
-      token-pepper: ${FORGE_JOB_OPEN_API_TOKEN_PEPPER:e91558ee6c499b1e927820b08461b1ebd3c57be7e41a43955d68092dd4b9f492}
+      enabled: ${FORGE_JOB_OPEN_API_ENABLED:false}
+      token-pepper: ${FORGE_JOB_OPEN_API_TOKEN_PEPPER:}
   capability:
-    # 机器客户端密钥 HMAC Pepper；无默认值，创建/轮换/验证凭据时缺失会失败关闭
+    # 默认由 crypto bootstrap 首次生成并稳定持久化；环境变量/JVM 参数可显式覆盖
     client-pepper: ${FORGE_CAPABILITY_CLIENT_PEPPER:}
     secure-actions:
       # 仅发布固定 search/describe/invoke 元工具；业务动作仍需 USER 委托、grant、字段白名单与 elicitation
-      enabled: ${FORGE_CAPABILITY_SECURE_ACTIONS_ENABLED:${FORGE_MCP_ENABLED:false}}
+      enabled: ${FORGE_CAPABILITY_SECURE_ACTIONS_ENABLED:${FORGE_CAPABILITY_OPEN_GATEWAY_ENABLED:${FORGE_MCP_ENABLED:false}}}
     flow-actions:
-      # 复用固定元工具，首批仅开放已发布 FLOW 绑定的 START/APPROVE/REJECT
-      enabled: ${FORGE_CAPABILITY_FLOW_ACTIONS_ENABLED:${FORGE_MCP_ENABLED:false}}
+      # 开放已发布业务对象的 SUBMIT/START/APPROVE/REJECT 受控流程能力
+      enabled: ${FORGE_CAPABILITY_FLOW_ACTIONS_ENABLED:${FORGE_CAPABILITY_OPEN_GATEWAY_ENABLED:${FORGE_MCP_ENABLED:true}}}
     high-risk:
       # HIGH 动作默认关闭；启用前必须通过环境变量提供版本化 256-bit KEK
       enabled: ${FORGE_CAPABILITY_HIGH_RISK_ENABLED:false}
@@ -166,19 +166,41 @@ forge:
         keys:
           v1: ${FORGE_CAPABILITY_HIGH_RISK_KEK_V1:}
     identity:
-      enabled: ${FORGE_CAPABILITY_IDENTITY_ENABLED:${FORGE_MCP_ENABLED:false}}
+      enabled: ${FORGE_CAPABILITY_IDENTITY_ENABLED:${FORGE_CAPABILITY_OPEN_GATEWAY_ENABLED:${FORGE_MCP_ENABLED:false}}}
       issuer: ${FORGE_CAPABILITY_OAUTH_ISSUER:http://localhost:8580}
       resource: ${FORGE_CAPABILITY_MCP_RESOURCE:http://localhost:8580/mcp}
-      # 两个 Pepper 均需至少 32 字符，禁止与客户端密钥 Pepper 共用
+      openapi-resource: ${FORGE_CAPABILITY_OPENAPI_RESOURCE:http://localhost:8580/openapi}
+      # 默认随 crypto bootstrap 生成；两个值至少 32 字符，且必须与客户端 Pepper 互不相同
       token-pepper: ${FORGE_CAPABILITY_TOKEN_PEPPER:}
       authorization-code-pepper: ${FORGE_CAPABILITY_AUTH_CODE_PEPPER:}
       access-token-ttl: ${FORGE_CAPABILITY_TOKEN_TTL:10m}
       authorization-code-ttl: ${FORGE_CAPABILITY_AUTH_CODE_TTL:2m}
+      # 无统一 OIDC 客户端签发的 RS256 用户断言，最长两分钟并允许有限时钟偏差
+      user-assertion-max-ttl: ${FORGE_CAPABILITY_USER_ASSERTION_MAX_TTL:2m}
+      user-assertion-clock-skew: ${FORGE_CAPABILITY_USER_ASSERTION_CLOCK_SKEW:30s}
       allowed-origins: ${FORGE_CAPABILITY_MCP_ALLOWED_ORIGINS:}
+      external-providers:
+        partner:
+          enabled: ${FORGE_CAPABILITY_OIDC_PROVIDER_ENABLED:false}
+          issuer: ${FORGE_CAPABILITY_OIDC_ISSUER:}
+          jwk-set-uri: ${FORGE_CAPABILITY_OIDC_JWK_SET_URI:}
+          audience: ${FORGE_CAPABILITY_OIDC_AUDIENCE:}
+          tenant-id: ${FORGE_CAPABILITY_OIDC_TENANT_ID:}
+          phone-claim: ${FORGE_CAPABILITY_OIDC_PHONE_CLAIM:phone_number}
+          name-claim: ${FORGE_CAPABILITY_OIDC_NAME_CLAIM:name}
+          organization-claim: ${FORGE_CAPABILITY_OIDC_ORG_CLAIM:forge_org_id}
+    open-gateway:
+      # 统一能力开放网关，默认关闭（失败关闭）；防重放窗口/nonce/幂等锁参数复用 forge.openapi.security.*
+      enabled: ${FORGE_CAPABILITY_OPEN_GATEWAY_ENABLED:true}
+      # 读/写能力限流：每分钟每客户端许可数
+      read-permits-per-minute: ${FORGE_CAPABILITY_OPEN_GATEWAY_READ_PERMITS:120}
+      write-permits-per-minute: ${FORGE_CAPABILITY_OPEN_GATEWAY_WRITE_PERMITS:20}
+      # 幂等响应快照保留时长，超期由清理任务物理删除
+      idempotency-ttl: ${FORGE_CAPABILITY_OPEN_GATEWAY_IDEMPOTENCY_TTL:24h}
   crypto:
     bootstrap:
       enabled: ${FORGE_CRYPTO_BOOTSTRAP_ENABLED:true}
-      # /你的持久化目录/crypto.properties 默认保存到 ~/.forge/secrets/crypto.properties中
+      # 默认保存到 ~/.forge/secrets/crypto.properties，同时托管 Crypto 密钥和 Capability Peppers
       file: ${FORGE_CRYPTO_BOOTSTRAP_FILE:}
     secret-key: ${FORGE_CRYPTO_SECRET_KEY:}
     persistence:

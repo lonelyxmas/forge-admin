@@ -184,7 +184,7 @@ Forge 后续 MCP Server 的标准传输协议固定为最新的 **Streamable HTT
 
 **记录日期**: 2026-07-11
 
-Forge AI 能力统一由协议无关的 `forge-plugin-capability` 承载，`forge-plugin-mcp` 只负责 Streamable HTTP 与 MCP Schema/结果投影。业务插件只能通过 `CapabilitySource/CapabilityExecutor` 注册能力，不能直接创建 MCP Bean，也不能让 Capability 内核反向依赖 Spring AI、MCP SDK 或 `forge-plugin-ai`。
+Forge AI 能力的协议无关内核统一由 `forge-plugin-capability-core` 承载，`forge-plugin-mcp` 只负责 Streamable HTTP 与 MCP Schema/结果投影。业务插件只能通过 `CapabilitySource/CapabilityExecutor` 注册能力，不能直接创建 MCP Bean，也不能让 Capability 内核反向依赖 Spring AI、MCP SDK 或 `forge-plugin-ai`。
 
 MCP enabled 时启动期只允许 `STREAMABLE`，并拒绝 `SSE`、`STATELESS` 和 stdio。身份必须在 `/mcp` 进入 SDK 前完成验证，租户、用户、当前组织和 scope 只能来自可信传输上下文。能力游标绑定快照、查询、调用方并使用进程内 HMAC-SHA256 防篡改；Schema 必须先完整校验再投影；安全日志只记录 requestId、客户端安全引用、租户、组织、能力、结果码、Schema 路径和耗时。
 
@@ -210,7 +210,7 @@ Forge MCP 用户委托身份不引入 `spring-security-oauth2-authorization-serv
 
 **记录日期**: 2026-07-12
 
-Capability 内核继续保持协议和 ORM 无关，MCP 业务能力的最终授权由 `forge-plugin-capability-identity` 组合层实现，固定计算 `Token scope ∩ client grant ∩ 当前 LoginUser.permissions ∩ tenant/activeOrg`。默认 Forge 权限映射为 `ai:capability:discover:{capabilityCode}` 和 `ai:capability:invoke:{capabilityCode}`；后续安全动作可以替换映射 Bean，但不能从客户端参数推导权限。
+Capability 内核继续保持协议和 ORM 无关，MCP 业务能力的最终授权由 `forge-plugin-capability-platform` 中的 Identity 组合层实现，固定计算 `Token scope ∩ client grant ∩ 当前 LoginUser.permissions ∩ tenant/activeOrg`。默认 Forge 权限映射为 `ai:capability:discover:{capabilityCode}` 和 `ai:capability:invoke:{capabilityCode}`；后续安全动作可以替换映射 Bean，但不能从客户端参数推导权限。
 
 `capability.ping` 是阶段 2.0 唯一统一授权例外，仍必须先通过短期 Token scope 和可信执行身份校验。MCP Server 显式锁定 `type=SYNC + protocol=STREAMABLE + stdio=false`；用户、grant、权限或组织变化后由每请求实时身份加载与授权决策失败关闭。
 
@@ -479,3 +479,112 @@ DDL 失败不删除已提交的表单设计和托管对象，下一次保存按�
 页面可以局部配置查询字段、查询组件、查询方式和映射字段，但不反向修改共享业务对象的查询设计。用户输入继续使用平铺业务参数；查询方式通过保留控制参数 `_searchTypes` 随列表和导出请求传输，Controller 必须将其与业务字段隔离。
 
 服务端只允许动态配置已经公开在 `searchSchema`、`columnsSchema`、`editSchema` 的字段以及 `id` 进入页面查询，并继续通过真实列映射生成命名参数 SQL。页面只能从固定操作符集合覆盖当前字段的默认查询方式；非法字段、非法操作符和损坏元数据不进入 SQL。没有页面级配置的传统动态页面继续使用对象原始 `searchSchema` 协议。
+
+## 52. 能力发布控制面与外部执行开关解耦
+
+**记录日期**: 2026-08-01
+
+能力来源校验、发布和目录管理属于管理控制面，只要 Admin 引入对应插件就应装配，由权限、租户和发布模型校验限制。`forge.capability.secure-actions.enabled` 和 `forge.capability.flow-actions.enabled` 只控制 MCP/REST 真实执行目录、Handler 与执行适配器；关闭时仍必须失败关闭，但不得删除控制面路由。
+
+## 53. 外围用户调用采用受信 Token Exchange，不绑定客户端服务账号
+
+**记录日期**: 2026-08-01
+
+`USER_DELEGATION` 客户端不绑定 Forge 服务账号或固定组织，只允许机密 OAuth 客户端提交受信 OIDC/JWT 做 RFC 8693 Token Exchange。首次认证按已验签 JWT 手机号唯一匹配现有 Forge 用户并固化 `issuer + sub` 映射，后续每次实时校验用户、租户、组织、角色和权限；平台不自动创建用户。`SERVICE/HYBRID` 保留原有绑定语义，HMAC 签名仅用于服务身份。
+
+## 54. Capability Pepper 纳入外部稳定密钥自动引导
+
+**记录日期**: 2026-08-01
+
+Capability Client、Access Token 和 Authorization Code 三个 Pepper 复用 Starter Crypto 的启动前密钥引导。首次生成三个独立 32 字节随机 Base64Url 值并写入外部 `crypto.properties`，后续稳定复用；已有旧密钥文件在文件锁内原子补齐缺失项，不改动既有 Crypto 密钥。
+
+非空环境变量/JVM 参数对每个 Pepper 独立优先，仓库不提交真实值。生产多实例必须通过共享 Secret Manager 或共享安全卷保持节点一致；显式关闭 Crypto Bootstrap 后不提供 Pepper 时，Capability 启动校验继续失败关闭。
+
+## 55. 应用发布以实时物理表映射作为数据库门禁事实
+
+**记录日期**: 2026-08-01
+
+应用对象列表中的数据库同步状态只用于轻量展示，整体设计版本变化时不得据此断言物理表失步。应用发布检查必须通过 `BusinessObjectTableMappingService` 读取目标数据源的实时表、列、类型、索引与 DDL 预览，并以该结果作为数据库门禁事实。
+
+Forge 标准系统列属于框架管理列：未在业务字段模型中重复声明时仍可在结构视图只读展示，但不算未映射业务列。自定义额外列、缺失业务列、类型不一致、表不存在、结构检查失败和待执行 DDL 继续失败关闭；发布问题消息必须给出可操作的具体差异，不能只返回 `OUT_OF_SYNC` 状态码。
+
+## 56. 无统一 OIDC 的外围系统采用客户端签名用户断言与预绑定
+
+**记录日期**: 2026-08-02
+
+没有统一 OIDC 的外围系统不允许通过“加密 Forge userId”直接冒充真实用户。每个 USER_DELEGATION/HYBRID OAuth 客户端使用独立 RSA-2048 密钥对，Forge 只保存公钥、`kid` 和版本，私钥只在生成/轮换时通过加密响应展示一次。
+
+管理员预先把外围稳定 `sub` 绑定到当前租户 Forge 普通用户，数据库只保存 `issuer/sub` SHA-256 和脱敏提示。外围系统签发最长两分钟的 RS256 JWT，通过专用 `urn:forge:params:oauth:token-type:user-assertion+jwt` 做 Token Exchange；Forge 固定校验签名、claims、Redis `jti` 防重放和预绑定关系，并每次重新加载用户组织、角色和权限。受信 OIDC JWT 保留原标准 token type，两种验签路径禁止模糊回退。
+
+## 57. 已发布能力通过显式新版本升级，固定授权不自动漂移
+
+**记录日期**: 2026-08-03
+
+能力目录不提供对已发布版本的原地编辑。管理员通过“发布新版本”读取当前不可变快照，锁定能力编码、来源类型和来源标识，由受控发布器重新读取最新业务对象、流程绑定或系统服务配置，并发布严格递增的语义版本。旧版本继续保留，避免外围系统契约被静默改写。
+
+`PINNED` 授权不会随能力发布自动漂移。授权管理提供显式修改入口，管理员可切换基准版本或改用 `FOLLOW_MAJOR`；服务端按目标版本重新校验字段和流程操作白名单，不能通过版本升级扩大既有客户端权限。
+
+调用指南必须同时展示能力当前版本、授权基准版本和实际解析版本，并按实际解析版本生成请求示例。流程授权旧版本的 `bindingId/flowModelKey/publishedObjectVersion` 已与当前版本不一致时，在线测试前直接阻断并说明 `FLOW_BINDING_MISMATCH`；管理员可在指南中显式切换到当前版本，平台继续禁止发布动作静默修改授权。
+
+## 58. 流程 START 能力只启动已保存业务记录
+
+**记录日期**: 2026-08-03
+
+`FLOW_ACTION/START` 的 `recordId` 必须指向绑定业务对象中已经保存的真实记录，START 不承担业务数据创建职责。记录查询继续使用实际委托用户的租户、组织和数据权限，不允许开放网关为了测试便利绕过权限或创建孤立流程实例。
+
+记录不存在与无权访问统一对外返回 HTTP 404 + `RESOURCE_NOT_FOUND`，避免泄露记录存在性；这类错误属于业务资源定位失败，不得映射成 `SCHEMA_INVALID`。调用指南和测试页面必须明确提示先保存记录并替换真实 ID，示例使用不可误认为真实数据的占位符。
+
+## 59. 外围业务申请使用 SUBMIT 组合能力，START 保持已有记录语义
+
+**记录日期**: 2026-08-03
+
+面向外围系统的“离职申请、请假申请”等业务语义使用 `FLOW_ACTION/SUBMIT`：调用方只传能力发布版本允许的业务字段，Forge 从可信 USER 委托身份生成申请人、租户、组织、审计、初始单据状态和流程发起人，并在一次调用中创建业务记录、启动主流程。`FLOW_ACTION/START` 继续作为高级集成动作，只启动已存在记录，不能根据任意外部数据隐式建单。
+
+SUBMIT 的字段契约来源于不可变业务对象发布模型；能力版本保存字段白名单和必填快照，客户端授权只能进一步收窄可写字段且不能移除模型必填字段，调用指南按实际授权生成示例。运行时重新核对当前发布对象、流程绑定并经过低代码写入管线二次校验。相同 `Idempotency-Key` 下，业务记录创建和本地 `recordId` 检查点必须在同一独立事务提交，流程失败重试只能复用该记录。
+
+当前仅主库低代码运行对象支持该原子组合能力。外部运行数据源无法和本地能力执行日志共享事务，注册、发布和执行都必须失败关闭；未来只有引入事务消息/Outbox 和可恢复状态机后才能放开，不能以“尽量写日志”替代幂等证据。
+
+## 60. 业务动作只有通过发布快照步骤白名单才能开放
+
+**记录日期**: 2026-08-03
+
+业务动作的“启用”只表示设计态允许运行，不代表它已具备可安全开放的执行语义。开放候选必须从不可变业务对象发布快照读取，并通过与真实发布、运行时相同的 `SecureActionStepValidator` 校验。
+
+当前中等风险受控动作只允许顶层 `UPDATE_FIELD` 和 `CREATE_RECORD`，空步骤、嵌套步骤、流程、消息、领域动作和其它未审核类型继续失败关闭。管理端不复制该白名单规则，由服务端返回 `publishable/unavailableReason/stepTypes` 诊断；页面只负责提前禁用并说明修正方式，直接 API 调用仍必须经过服务端安全校验。
+
+## 61. 登录密码 RSA 与通用 API 传输加密采用独立策略
+
+**记录日期**：2026-08-04
+
+Forge 的通用 API 传输加密继续由配置中心 `crypto` 分组和匿名 `/crypto/config` 统一控制；Admin、H5、报表端只保留服务端配置的运行时镜像，不再维护产品级独立开关。
+
+登录密码 RSA 改由 `login.enablePasswordEncryption` 独立控制，默认启用，并通过 `/auth/loginConfig` 下发。后端普通密码和密码验证码认证共享统一解码器：开启时 RSA 解密失败关闭，关闭时才接收应用层明文；客户端 `encrypted` 标记不作为信任依据。浏览器/H5/报表属于公共客户端，不保存或发送固定 AppSecret，生产环境无论是否启用密码 RSA 都必须使用 HTTPS。
+
+## 62. Capability 使用专属父模块并收敛为四层依赖
+
+**记录日期**：2026-08-04
+
+Capability 不再以 7 个同级小插件散落在 `forge-plugin-parent` 下，统一由 `forge-plugin-capability-parent` 聚合四个子模块：`core`、`platform`、`actions`、`high-risk-approval`。父模块只负责 Maven 聚合，不放业务代码。
+
+依赖方向固定为 `core ← platform ← actions ← high-risk-approval`。控制面、Identity 和 Open Gateway 归入 platform；Secure Actions 与 Flow Actions 归入 actions；高风险审批继续独立并默认关闭。开放网关只依赖 core 中的通用执行 SPI，通过 Spring 收集 actions 提供的适配器，禁止 platform 反向依赖 actions、generator 或 flow-client。Java 业务包、REST 路径、配置前缀和数据库表保持兼容。
+
+## 63. 业务域删除显式清理孤立业务对象
+
+**记录日期**：2026-08-04
+
+删除业务应用继续保留业务对象，便于对象被同一业务域内其他应用复用；不能为了让业务域可删而改变应用删除语义。业务域已无子域、业务应用和访问入口，仅剩未被有效应用引用的业务对象时，删除入口必须明确展示对象数量和清理边界，并显式传入孤立对象清理意图。
+
+后端默认不级联，收到显式清理意图后在同一事务内再次校验有效应用引用，物理清理 `ai_business_object_relation` 关系重建数据，按主键墓碑逻辑删除 `ai_business_object` 和 `ai_business_suite`。动态业务数据表、设计/发布历史和运行日志不做物理删除；存在有效应用引用时失败关闭。
+
+## 64. 后端数据库性能优化模式（P1 归档）
+
+**记录日期**：2026-08-05
+
+后端分页查询性能优化遵循以下固定模式，后续 P2/P3 变更继续复用：
+
+1. **N+1 查询消除**：分页后循环单条查询改为一次 IN 批量查询 + Map 组装。新增 Mapper 方法返回聚合统计 VO（如 `ReceiverStatVO`），XML 用 `GROUP BY` + `SUM(CASE WHEN ...)` 一次聚合。
+2. **LIKE 逗号列表匹配改 FIND_IN_SET**：`column = userId OR column LIKE 'userId,%' OR column LIKE '%,userId' OR column LIKE '%,userId,%'` 统一改为 `FIND_IN_SET(#{userId}, column)`，单条件替代 4 路 LIKE。
+3. **JOIN OR 索引失效消除**：`LEFT JOIN t c ON c.id = m.col OR c.code = m.col` 统一存储为 ID，JOIN 条件改为 `c.id = m.col`。存量数据用 Flyway `UPDATE ... INNER JOIN ... SET` 迁移。
+4. **全量加载改按需查询**：`service.list()` 全量加载改为按需 `listByIds` / `lambdaQuery().eq()`。需要祖先链补齐时用 `loadResourcesWithAncestors` 迭代查询模式（`listByIds` + 收集 parentId + 循环直到无新 ID，`put` 返回非 null 防死循环）。
+5. **子查询改 LEFT JOIN 派生表聚合**：分页中每行相关子查询（COUNT/SUM）改为 `LEFT JOIN (SELECT session_id, COUNT(*) ... GROUP BY session_id) r ON r.session_id = s.id`，派生表先聚合再 JOIN，避免结果集膨胀。
+6. **统计查询加时间范围**：全表 COUNT/SUM 统计增加 `WHERE create_time >= DATE_SUB(NOW(), INTERVAL 90 DAY)` 时间过滤，减少扫描行数。前端文案需同步标注时间范围。

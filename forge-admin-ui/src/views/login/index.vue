@@ -378,6 +378,7 @@ import loginCarouselImage from '@/assets/images/login-carousel-platform.png'
 import defaultLogoUrl from '@/assets/images/logo_text.png'
 import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
+import { loadRuntimeCryptoConfig } from '@/utils/crypto/crypto-config'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
 import { normalizePageTitle } from '@/utils/page-title'
@@ -842,19 +843,21 @@ async function handleLogin() {
     loading.value = true
     $message.loading('正在验证，请稍后...', { key: 'login' })
 
-    // 对密码进行 RSA 加密
-    const encryptedPassword = await encryptPassword(password, request)
+    await loadRuntimeCryptoConfig()
+
+    // 登录密码 RSA 与通用 API 传输加密相互独立，以服务端登录配置为准。
+    const passwordEncryptionEnabled = loginConfig.value?.enablePasswordEncryption !== false
+    const submittedPassword = await encryptPassword(password, request, passwordEncryptionEnabled)
 
     // 构造登录参数 - 使用新的后端接口格式
     const params = {
       username,
-      password: encryptedPassword, // 使用加密后的密码
+      password: submittedPassword,
       code,
       codeKey,
       phone, // 短信验证码时需要
       tenantId,
       authType: captchaEnabled.value ? 'password_captcha' : 'password',
-      encrypted: true, // 标记密码已加密
       userClient,
       appId: import.meta.env.VITE_APP_ID || 'forge_pc_001', // 客户端AppId
     }

@@ -75,28 +75,53 @@ public class LoginRequest implements Serializable {
     private String authCode;
 
     /**
-     * 三方平台类型
+     * 一次性三方登录票据（OAuth2 登录唯一入参，由 /social/callback 签发）
      */
+    private String socialTicket;
+
+    /**
+     * 连接编码（OAuth2 登录时携带，用于审计与前端展示）
+     */
+    private String connectionCode;
+
+    /**
+     * 三方平台类型
+     *
+     * @deprecated 登录身份改由 socialTicket 服务端取回，禁止信任前端自报
+     */
+    @Deprecated
     private String socialPlatform;
 
     /**
      * 三方用户唯一标识
+     *
+     * @deprecated 登录身份改由 socialTicket 服务端取回，禁止信任前端自报
      */
+    @Deprecated
     private String socialUuid;
 
     /**
      * 三方用户昵称
+     *
+     * @deprecated 同 socialUuid，改由票据取回
      */
+    @Deprecated
     private String socialNickname;
 
     /**
      * 三方用户头像
+     *
+     * @deprecated 同 socialUuid，改由票据取回
      */
+    @Deprecated
     private String socialAvatar;
 
     /**
      * 三方用户邮箱
+     *
+     * @deprecated 同 socialUuid，改由票据取回
      */
+    @Deprecated
     private String socialEmail;
 
     /**

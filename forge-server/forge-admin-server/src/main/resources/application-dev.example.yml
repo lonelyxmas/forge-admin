@@ -63,11 +63,23 @@ spring.data:
         nettyThreads: 32
 
 # MCP Server 默认关闭且只允许 Streamable HTTP。开启后长期 fcp_ 密钥只能换取短期 fdu_ Token。
-# FORGE_MCP_ENABLED=true 时必须同时配置 issuer/resource 以及三个互不相同的 Pepper：
+# 开发环境的三个 Pepper 会首次自动生成到 ~/.forge/secrets/crypto.properties 并在重启后复用。
+# 生产多实例应通过共享 Secret Manager 显式提供三个互不相同的 Pepper：
 # FORGE_CAPABILITY_CLIENT_PEPPER（至少16字符）、FORGE_CAPABILITY_TOKEN_PEPPER（至少32字符）、
-# FORGE_CAPABILITY_AUTH_CODE_PEPPER（至少32字符）。生产 issuer/resource 必须使用 HTTPS。
+# FORGE_CAPABILITY_AUTH_CODE_PEPPER（至少32字符）；生产 issuer/resource 必须使用 HTTPS。
+# MCP 与 REST 使用不同 resource：FORGE_CAPABILITY_MCP_RESOURCE 对应 /mcp，
+# FORGE_CAPABILITY_OPENAPI_RESOURCE 对应统一 REST 开放网关，两个 Token 不可交叉使用。
+# 显式关闭 FORGE_CRYPTO_BOOTSTRAP_ENABLED 时必须手工提供，否则能力身份模块失败关闭。
 # 浏览器型 MCP 客户端还应通过 FORGE_CAPABILITY_MCP_ALLOWED_ORIGINS 配置精确 Origin 白名单。
 # 受控业务动作默认跟随 FORGE_MCP_ENABLED，可用 FORGE_CAPABILITY_SECURE_ACTIONS_ENABLED=false 单独关闭。
+# 外部用户委托无需在机器客户端上绑定 Forge 账号，但仍需配置受信 OIDC：
+# FORGE_CAPABILITY_OIDC_PROVIDER_ENABLED=true
+# FORGE_CAPABILITY_OIDC_ISSUER=https://idp.example.com
+# FORGE_CAPABILITY_OIDC_JWK_SET_URI=https://idp.example.com/.well-known/jwks.json
+# FORGE_CAPABILITY_OIDC_AUDIENCE=forge-capability
+# FORGE_CAPABILITY_OIDC_TENANT_ID=1
+# 首次登录按已验签 JWT 的 phone_number 唯一匹配现有 Forge 用户，后续固定使用 issuer + sub；
+# 不自动创建 Forge 用户，生产 issuer/JWK Set URI 必须使用 HTTPS。
 config:
   datasource:
     url: ${spring.datasource.dynamic.datasource.master.url}

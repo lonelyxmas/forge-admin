@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.crypto.config;
 
+import com.mdframe.forge.starter.crypto.crypto.CryptoAlgorithm;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.env.EnvironmentPostProcessor;
@@ -24,6 +25,7 @@ import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -39,7 +41,7 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
     static final String PROPERTY_SOURCE_NAME = "forgeCryptoBootstrap";
     static final String BOOTSTRAP_ENABLED_PROPERTY = "forge.crypto.bootstrap.enabled";
     static final String BOOTSTRAP_FILE_PROPERTY = "forge.crypto.bootstrap.file";
-    static final String CRYPTO_ENABLED_PROPERTY = "forge.crypto.enabled";
+    static final String ALGORITHM_PROPERTY = "forge.crypto.algorithm";
     static final String SECRET_KEY_PROPERTY = "forge.crypto.secret-key";
     static final String PERSISTENCE_ENABLED_PROPERTY = "forge.crypto.persistence.enabled";
     static final String WRITE_VERSIONED_PROPERTY = "forge.crypto.persistence.write-versioned";
@@ -48,8 +50,16 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
     static final String ACTIVE_KEY_ID_PROPERTY = "forge.crypto.persistence.active-key-id";
     static final String ACTIVE_KEY_PROPERTY = "forge.crypto.persistence.active-key";
     static final String HISTORICAL_KEY_PREFIX = "forge.crypto.persistence.keys.";
+    static final String CAPABILITY_CLIENT_PEPPER_PROPERTY = "forge.capability.client-pepper";
+    static final String CAPABILITY_TOKEN_PEPPER_PROPERTY = "forge.capability.identity.token-pepper";
+    static final String CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY =
+            "forge.capability.identity.authorization-code-pepper";
 
     private static final Pattern KEY_ID_PATTERN = Pattern.compile("[A-Za-z0-9_-]{1,32}");
+    private static final int CAPABILITY_CLIENT_PEPPER_MIN_LENGTH = 16;
+    private static final int CAPABILITY_IDENTITY_PEPPER_MIN_LENGTH = 32;
+    private static final int SM4_KEY_LENGTH = 16;
+    private static final int AES_256_KEY_LENGTH = 32;
     private static final Set<String> FIXED_PROPERTIES = Set.of(
             SECRET_KEY_PROPERTY,
             PERSISTENCE_ENABLED_PROPERTY,
@@ -57,7 +67,10 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
             LEGACY_READ_ENABLED_PROPERTY,
             LEGACY_KEY_PROPERTY,
             ACTIVE_KEY_ID_PROPERTY,
-            ACTIVE_KEY_PROPERTY
+            ACTIVE_KEY_PROPERTY,
+            CAPABILITY_CLIENT_PEPPER_PROPERTY,
+            CAPABILITY_TOKEN_PEPPER_PROPERTY,
+            CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY
     );
     private static final Set<PosixFilePermission> DIRECTORY_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
@@ -82,15 +95,21 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (!getBoolean(environment, BOOTSTRAP_ENABLED_PROPERTY, true)
-                || !getBoolean(environment, CRYPTO_ENABLED_PROPERTY, true)
-                || StringUtils.hasText(environment.getProperty(SECRET_KEY_PROPERTY))) {
+        // 持久化密钥自举不依赖 forge.crypto.enabled（传输加密开关），仅受 bootstrap.enabled 控制
+        if (!getBoolean(environment, BOOTSTRAP_ENABLED_PROPERTY, true)) {
+            return;
+        }
+        CryptoAlgorithm algorithm = resolveAlgorithm(environment);
+        if (areAllBootstrapSecretsExplicitlyConfigured(environment)) {
+            validateExplicitSecrets(environment, algorithm);
             return;
         }
 
         Path secretFile = resolveSecretFile(environment);
-        Map<String, Object> fileProperties = loadOrCreate(secretFile);
+        Map<String, Object> fileProperties = loadOrCreate(secretFile, algorithm);
         Map<String, Object> effectiveProperties = applyExternalOverrides(environment, fileProperties);
+        validateCryptoKeys(effectiveProperties, algorithm);
+        validateCapabilityPeppers(effectiveProperties);
 
         environment.getPropertySources().remove(PROPERTY_SOURCE_NAME);
         environment.getPropertySources().addFirst(
@@ -107,6 +126,38 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
         return StringUtils.hasText(value) ? Boolean.parseBoolean(value.trim()) : defaultValue;
     }
 
+    private boolean areAllBootstrapSecretsExplicitlyConfigured(ConfigurableEnvironment environment) {
+        return hasExternalOverride(environment, SECRET_KEY_PROPERTY)
+                && hasExternalOverride(environment, CAPABILITY_CLIENT_PEPPER_PROPERTY)
+                && hasExternalOverride(environment, CAPABILITY_TOKEN_PEPPER_PROPERTY)
+                && hasExternalOverride(environment, CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY);
+    }
+
+    private boolean hasExternalOverride(ConfigurableEnvironment environment, String key) {
+        return StringUtils.hasText(findExternalOverride(environment, key));
+    }
+
+    private void validateExplicitSecrets(ConfigurableEnvironment environment, CryptoAlgorithm algorithm) {
+        validateBase64Key(SECRET_KEY_PROPERTY, findExternalOverride(environment, SECRET_KEY_PROPERTY), algorithm);
+        Map<String, Object> explicitPeppers = new LinkedHashMap<>();
+        explicitPeppers.put(CAPABILITY_CLIENT_PEPPER_PROPERTY,
+                findExternalOverride(environment, CAPABILITY_CLIENT_PEPPER_PROPERTY));
+        explicitPeppers.put(CAPABILITY_TOKEN_PEPPER_PROPERTY,
+                findExternalOverride(environment, CAPABILITY_TOKEN_PEPPER_PROPERTY));
+        explicitPeppers.put(CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY,
+                findExternalOverride(environment, CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY));
+        validateCapabilityPeppers(explicitPeppers);
+    }
+
+    private CryptoAlgorithm resolveAlgorithm(ConfigurableEnvironment environment) {
+        String configured = environment.getProperty(ALGORITHM_PROPERTY, CryptoAlgorithm.SM4.getCode());
+        try {
+            return CryptoAlgorithm.fromCode(configured.trim());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(ALGORITHM_PROPERTY + " 配置不受支持: " + configured, e);
+        }
+    }
+
     private Path resolveSecretFile(ConfigurableEnvironment environment) {
         String configured = environment.getProperty(BOOTSTRAP_FILE_PROPERTY);
         Path path = StringUtils.hasText(configured)
@@ -115,7 +166,7 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
         return path.toAbsolutePath().normalize();
     }
 
-    private Map<String, Object> loadOrCreate(Path secretFile) {
+    private Map<String, Object> loadOrCreate(Path secretFile, CryptoAlgorithm algorithm) {
         Object jvmLock = JVM_FILE_LOCKS.computeIfAbsent(secretFile, ignored -> new Object());
         synchronized (jvmLock) {
             try {
@@ -134,9 +185,17 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
                     tightenPermissions(lockFile, FILE_PERMISSIONS);
                     try (var ignored = lockChannel.lock()) {
                         if (Files.exists(secretFile, LinkOption.NOFOLLOW_LINKS)) {
-                            return readAndValidate(secretFile);
+                            Map<String, Object> existing = readProperties(secretFile);
+                            if (addMissingCapabilityPeppers(existing)) {
+                                validateProperties(existing, algorithm);
+                                writeAtomically(secretFile, existing);
+                            } else {
+                                validateProperties(existing, algorithm);
+                            }
+                            return existing;
                         }
-                        Map<String, Object> generated = generateProperties();
+                        Map<String, Object> generated = generateProperties(algorithm);
+                        validateProperties(generated, algorithm);
                         writeAtomically(secretFile, generated);
                         return generated;
                     }
@@ -147,15 +206,61 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
         }
     }
 
-    private Map<String, Object> generateProperties() {
+    private Map<String, Object> generateProperties(CryptoAlgorithm algorithm) {
         Map<String, Object> generated = new LinkedHashMap<>();
-        generated.put(SECRET_KEY_PROPERTY, generateBase64Key());
+        generated.put(SECRET_KEY_PROPERTY, generateBase64Key(algorithm));
         generated.put(PERSISTENCE_ENABLED_PROPERTY, "true");
         generated.put(WRITE_VERSIONED_PROPERTY, "true");
         generated.put(LEGACY_READ_ENABLED_PROPERTY, "false");
         generated.put(ACTIVE_KEY_ID_PROPERTY, generateKeyId());
-        generated.put(ACTIVE_KEY_PROPERTY, generateBase64Key());
+        generated.put(ACTIVE_KEY_PROPERTY, generateBase64Key(algorithm));
+        addMissingCapabilityPeppers(generated);
         return generated;
+    }
+
+    private boolean addMissingCapabilityPeppers(Map<String, Object> properties) {
+        boolean changed = false;
+        Set<String> existingValues = new HashSet<>();
+        addExistingValue(properties, CAPABILITY_CLIENT_PEPPER_PROPERTY, existingValues);
+        addExistingValue(properties, CAPABILITY_TOKEN_PEPPER_PROPERTY, existingValues);
+        addExistingValue(properties, CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY, existingValues);
+
+        changed |= addCapabilityPepperIfMissing(
+                properties, CAPABILITY_CLIENT_PEPPER_PROPERTY, existingValues);
+        changed |= addCapabilityPepperIfMissing(
+                properties, CAPABILITY_TOKEN_PEPPER_PROPERTY, existingValues);
+        changed |= addCapabilityPepperIfMissing(
+                properties, CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY, existingValues);
+        return changed;
+    }
+
+    private void addExistingValue(Map<String, Object> properties, String key, Set<String> existingValues) {
+        Object value = properties.get(key);
+        if (value != null && StringUtils.hasText(String.valueOf(value))) {
+            existingValues.add(String.valueOf(value).trim());
+        }
+    }
+
+    private boolean addCapabilityPepperIfMissing(Map<String, Object> properties,
+                                                 String key,
+                                                 Set<String> existingValues) {
+        if (properties.containsKey(key)) {
+            return false;
+        }
+        String pepper = generateCapabilityPepper(existingValues);
+        properties.put(key, pepper);
+        existingValues.add(pepper);
+        return true;
+    }
+
+    private String generateCapabilityPepper(Set<String> existingValues) {
+        String value;
+        do {
+            byte[] secret = new byte[32];
+            secureRandom.nextBytes(secret);
+            value = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+        } while (existingValues.contains(value));
+        return value;
     }
 
     private String generateKeyId() {
@@ -164,13 +269,14 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
         return "bootstrap-" + Base64.getUrlEncoder().withoutPadding().encodeToString(suffix);
     }
 
-    private String generateBase64Key() {
-        byte[] key = new byte[16];
+    private String generateBase64Key(CryptoAlgorithm algorithm) {
+        int keyLength = algorithm == CryptoAlgorithm.SM4 ? SM4_KEY_LENGTH : AES_256_KEY_LENGTH;
+        byte[] key = new byte[keyLength];
         secureRandom.nextBytes(key);
         return Base64.getEncoder().encodeToString(key);
     }
 
-    private Map<String, Object> readAndValidate(Path secretFile) throws IOException {
+    private Map<String, Object> readProperties(Path secretFile) throws IOException {
         if (!Files.isRegularFile(secretFile, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalStateException("自动密钥路径不是普通文件: " + secretFile);
         }
@@ -188,13 +294,17 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
             }
             result.put(key, properties.getProperty(key));
         }
-        validateProperties(result);
         return result;
     }
 
-    private void validateProperties(Map<String, Object> properties) {
+    private void validateProperties(Map<String, Object> properties, CryptoAlgorithm algorithm) {
+        validateCryptoKeys(properties, algorithm);
+        validateCapabilityPeppers(properties);
+    }
+
+    private void validateCryptoKeys(Map<String, Object> properties, CryptoAlgorithm algorithm) {
         String transportKey = required(properties, SECRET_KEY_PROPERTY);
-        validateBase64Key(SECRET_KEY_PROPERTY, transportKey);
+        validateBase64Key(SECRET_KEY_PROPERTY, transportKey, algorithm);
         boolean persistenceEnabled = requiredBoolean(properties, PERSISTENCE_ENABLED_PROPERTY);
         boolean writeVersioned = requiredBoolean(properties, WRITE_VERSIONED_PROPERTY);
         boolean legacyReadEnabled = requiredBoolean(properties, LEGACY_READ_ENABLED_PROPERTY);
@@ -204,12 +314,12 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
             if (!KEY_ID_PATTERN.matcher(activeKeyId).matches()) {
                 throw new IllegalStateException(ACTIVE_KEY_ID_PROPERTY + " 必须匹配 [A-Za-z0-9_-]{1,32}");
             }
-            validateBase64Key(ACTIVE_KEY_PROPERTY, required(properties, ACTIVE_KEY_PROPERTY));
+            validateBase64Key(ACTIVE_KEY_PROPERTY, required(properties, ACTIVE_KEY_PROPERTY), algorithm);
         }
         if (properties.containsKey(LEGACY_KEY_PROPERTY)) {
-            validateBase64Key(LEGACY_KEY_PROPERTY, required(properties, LEGACY_KEY_PROPERTY));
+            validateBase64Key(LEGACY_KEY_PROPERTY, required(properties, LEGACY_KEY_PROPERTY), algorithm);
         } else if (persistenceEnabled && (legacyReadEnabled || !writeVersioned)) {
-            validateBase64Key(SECRET_KEY_PROPERTY, transportKey);
+            validateBase64Key(SECRET_KEY_PROPERTY, transportKey, algorithm);
         }
         properties.forEach((key, value) -> {
             if (key.startsWith(HISTORICAL_KEY_PREFIX)) {
@@ -217,9 +327,35 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
                 if (!KEY_ID_PATTERN.matcher(keyId).matches()) {
                     throw new IllegalStateException("历史密钥 keyId 非法: " + keyId);
                 }
-                validateBase64Key(key, String.valueOf(value));
+                validateBase64Key(key, String.valueOf(value), algorithm);
             }
         });
+    }
+
+    private void validateCapabilityPeppers(Map<String, Object> properties) {
+        String clientPepper = validateCapabilityPepper(
+                properties, CAPABILITY_CLIENT_PEPPER_PROPERTY, CAPABILITY_CLIENT_PEPPER_MIN_LENGTH);
+        String tokenPepper = validateCapabilityPepper(
+                properties, CAPABILITY_TOKEN_PEPPER_PROPERTY, CAPABILITY_IDENTITY_PEPPER_MIN_LENGTH);
+        String authorizationCodePepper = validateCapabilityPepper(
+                properties,
+                CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY,
+                CAPABILITY_IDENTITY_PEPPER_MIN_LENGTH);
+        Set<String> peppers = new HashSet<>();
+        peppers.add(clientPepper);
+        peppers.add(tokenPepper);
+        peppers.add(authorizationCodePepper);
+        if (peppers.size() != 3) {
+            throw new IllegalStateException("Forge Capability 三个 Pepper 必须互不相同");
+        }
+    }
+
+    private String validateCapabilityPepper(Map<String, Object> properties, String key, int minLength) {
+        String value = required(properties, key);
+        if (value.length() < minLength) {
+            throw new IllegalStateException(key + " 长度不能少于 " + minLength + " 位");
+        }
+        return value;
     }
 
     private boolean requiredBoolean(Map<String, Object> properties, String key) {
@@ -238,10 +374,15 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
         return String.valueOf(value).trim();
     }
 
-    private void validateBase64Key(String keyName, String value) {
+    private void validateBase64Key(String keyName, String value, CryptoAlgorithm algorithm) {
         try {
-            if (Base64.getDecoder().decode(value.trim()).length != 16) {
-                throw new IllegalStateException(keyName + " 必须是 Base64 编码的 16 字节密钥");
+            int length = Base64.getDecoder().decode(value.trim()).length;
+            boolean valid = algorithm == CryptoAlgorithm.SM4
+                    ? length == SM4_KEY_LENGTH
+                    : length == 16 || length == 24 || length == AES_256_KEY_LENGTH;
+            if (!valid) {
+                String expected = algorithm == CryptoAlgorithm.SM4 ? "16" : "16、24 或 32";
+                throw new IllegalStateException(keyName + " 必须是 Base64 编码的 " + expected + " 字节密钥");
             }
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException(keyName + " 必须是合法 Base64 编码", e);
@@ -263,11 +404,12 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
     private String findExternalOverride(ConfigurableEnvironment environment, String key) {
         for (PropertySource<?> propertySource : environment.getPropertySources()) {
             String name = propertySource.getName();
-            if (PROPERTY_SOURCE_NAME.equals(name) || isConfigDataSource(name)) {
+            if (PROPERTY_SOURCE_NAME.equals(name) || isConfigDataSource(name) || isAggregatedSource(name)) {
                 continue;
             }
             Object value = propertySource.getProperty(key);
-            if (value != null && StringUtils.hasText(String.valueOf(value))) {
+            if (value != null && StringUtils.hasText(String.valueOf(value))
+                    && !isUnresolvedPlaceholder(String.valueOf(value))) {
                 return String.valueOf(value);
             }
         }
@@ -276,6 +418,18 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
 
     private boolean isConfigDataSource(String name) {
         return name.startsWith("Config resource '") || name.startsWith("applicationConfig:");
+    }
+
+    /**
+     * ConfigurationPropertySources.attach 注入的 configurationProperties 聚合源会透传全部底层源
+     * （含 yml 配置的原始占位符值），必须跳过，否则占位符字符串会覆盖自举文件中的真实密钥。
+     */
+    private boolean isAggregatedSource(String name) {
+        return "configurationProperties".equals(name);
+    }
+
+    private boolean isUnresolvedPlaceholder(String value) {
+        return value.contains("${");
     }
 
     private void writeAtomically(Path secretFile, Map<String, Object> values) throws IOException {
@@ -294,9 +448,11 @@ public final class CryptoSecretEnvironmentPostProcessor implements EnvironmentPo
                 channel.force(true);
             }
             try {
-                Files.move(temporary, secretFile, StandardCopyOption.ATOMIC_MOVE);
+                Files.move(temporary, secretFile,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temporary, secretFile);
+                Files.move(temporary, secretFile, StandardCopyOption.REPLACE_EXISTING);
             }
             tightenPermissions(secretFile, FILE_PERMISSIONS);
         } finally {

@@ -23,4 +23,9 @@ public interface SysNoticeReadRecordMapper extends BaseMapper<SysNoticeReadRecor
      * 查询指定公告的未读用户列表
      */
     List<NoticeReadUserVO> selectUnreadUserList(@Param("noticeId") Long noticeId);
+
+    /**
+     * 批量查询用户已读的公告ID集合
+     */
+    List<Long> selectReadNoticeIds(@Param("userId") Long userId, @Param("noticeIds") List<Long> noticeIds);
 }

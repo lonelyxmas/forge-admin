@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.capability.opengateway.mapper.OpenGatewayCatalogMapper">
+
+    <!-- 网关目录：相对 MCP 受控目录放开 visibility 与来源/行为白名单，
+         但 HIGH 风险能力延续禁止授权策略（spec 规则 8 纵深防御） -->
+    <select id="selectGrantedCapability" resultType="com.mdframe.forge.plugin.capability.opengateway.catalog.OpenGatewayCatalogRow">
+        SELECT
+            c.id AS capability_id,
+            c.capability_code,
+            c.capability_name,
+            c.description,
+            v.source_type,
+            v.source_key,
+            v.source_version,
+            v.behavior,
+            v.version,
+            v.input_schema,
+            v.output_schema,
+            v.policy_snapshot,
+            g.field_policy,
+            v.risk_level,
+            v.required_actor_type
+        FROM ai_capability_grant g
+        INNER JOIN ai_capability c
+          ON c.tenant_id = g.tenant_id
+         AND c.id = g.capability_id
+         AND c.del_flag = 0
+         AND c.enabled = 1
+         AND c.publish_status = 'PUBLISHED'
+         AND c.risk_level &lt;&gt; 'HIGH'
+        INNER JOIN ai_capability_client cli
+          ON cli.tenant_id = g.tenant_id
+         AND cli.id = g.client_id
+         AND cli.del_flag = 0
+         AND cli.status = 'ENABLED'
+         AND (cli.expires_at IS NULL OR cli.expires_at &gt; NOW())
+        INNER JOIN ai_capability_version v
+          ON v.tenant_id = c.tenant_id
+         AND v.capability_id = c.id
+         AND v.del_flag = 0
+         AND v.status = 'PUBLISHED'
+         AND v.risk_level = c.risk_level
+         AND v.source_type = c.source_type
+         AND v.behavior = c.behavior
+         AND v.required_actor_type = c.required_actor_type
+         AND v.version = CASE
+              WHEN g.version_strategy = 'FOLLOW_MAJOR'
+               AND SUBSTRING_INDEX(c.current_version, '.', 1) = SUBSTRING_INDEX(g.fixed_version, '.', 1)
+              THEN c.current_version
+              ELSE g.fixed_version
+             END
+        WHERE g.tenant_id = #{tenantId}
+          AND g.client_id = #{clientId}
+          AND g.del_flag = 0
+          AND g.status = 'ENABLED'
+          AND (g.expires_at IS NULL OR g.expires_at &gt; NOW())
+          AND c.capability_code = #{capabilityCode}
+        LIMIT 1
+    </select>
+</mapper>

@@ -7,6 +7,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.MapPropertySource;
@@ -14,12 +15,14 @@ import org.springframework.core.env.StandardEnvironment;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -45,8 +48,19 @@ class CryptoSecretEnvironmentPostProcessorTest {
 
         String firstTransportKey = first.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY);
         String firstPersistenceKey = first.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY);
+        String firstClientPepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY);
+        String firstTokenPepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY);
+        String firstAuthorizationCodePepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY);
         assertThat(Base64.getDecoder().decode(firstTransportKey)).hasSize(16);
         assertThat(Base64.getDecoder().decode(firstPersistenceKey)).hasSize(16);
+        assertThat(Base64.getUrlDecoder().decode(firstClientPepper)).hasSize(32);
+        assertThat(Base64.getUrlDecoder().decode(firstTokenPepper)).hasSize(32);
+        assertThat(Base64.getUrlDecoder().decode(firstAuthorizationCodePepper)).hasSize(32);
+        assertThat(List.of(firstClientPepper, firstTokenPepper, firstAuthorizationCodePepper))
+                .doesNotHaveDuplicates();
         assertThat(firstPersistenceKey).isNotEqualTo(firstTransportKey);
         assertThat(first.getProperty(CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY)).isEqualTo("true");
         assertThat(first.getProperty(CryptoSecretEnvironmentPostProcessor.LEGACY_READ_ENABLED_PROPERTY)).isEqualTo("false");
@@ -64,11 +78,70 @@ class CryptoSecretEnvironmentPostProcessorTest {
                 .isEqualTo(firstTransportKey);
         assertThat(second.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY))
                 .isEqualTo(firstPersistenceKey);
+        assertThat(second.getProperty(CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY))
+                .isEqualTo(firstClientPepper);
+        assertThat(second.getProperty(CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY))
+                .isEqualTo(firstTokenPepper);
+        assertThat(second.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY))
+                .isEqualTo(firstAuthorizationCodePepper);
     }
 
     @Test
-    void shouldNotCreateFileWhenTransportKeyIsExplicitlyConfigured() {
+    void shouldGenerateAes256KeysForNewBootstrapFile() {
+        Path secretFile = tempDir.resolve("aes/secrets/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.ALGORITHM_PROPERTY, "AES_GCM"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))).hasSize(32);
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY))).hasSize(32);
+    }
+
+    @Test
+    void shouldKeepAcceptingLegacyAes128BootstrapKeys() throws IOException {
+        Path secretFile = tempDir.resolve("aes-legacy/crypto.properties");
+        writeLegacySecretFile(secretFile);
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.ALGORITHM_PROPERTY, "AES"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))).hasSize(16);
+        assertThat(Base64.getDecoder().decode(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY))).hasSize(16);
+    }
+
+    @Test
+    void shouldNotCreateFileWhenTransportAndCapabilitySecretsAreExplicitlyConfigured() {
         Path secretFile = tempDir.resolve("explicit/crypto.properties");
+        String explicitKey = Base64.getEncoder().encodeToString(new byte[16]);
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY, explicitKey,
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY,
+                "explicit-client-pepper-1234567890",
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY,
+                "explicit-token-pepper-12345678901234567890",
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY,
+                "explicit-code-pepper-123456789012345678901"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))
+                .isEqualTo(explicitKey);
+        assertThat(secretFile).doesNotExist();
+    }
+
+    @Test
+    void shouldGenerateCapabilityPeppersWhenOnlyTransportKeyIsExplicitlyConfigured() {
+        Path secretFile = tempDir.resolve("explicit-transport-only/crypto.properties");
         String explicitKey = Base64.getEncoder().encodeToString(new byte[16]);
         StandardEnvironment environment = environment(secretFile, Map.of(
                 CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY, explicitKey));
@@ -78,7 +151,40 @@ class CryptoSecretEnvironmentPostProcessorTest {
 
         assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY))
                 .isEqualTo(explicitKey);
-        assertThat(secretFile).doesNotExist();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY)).isNotBlank();
+        assertThat(secretFile).isRegularFile();
+    }
+
+    @Test
+    void shouldLetExplicitCapabilityPepperOverridesWinIndependently() {
+        Path secretFile = tempDir.resolve("pepper-overrides/crypto.properties");
+        String explicitClientPepper = "external-client-pepper-1234567890";
+        String explicitTokenPepper = "external-token-pepper-12345678901234567890";
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY,
+                explicitClientPepper,
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY,
+                explicitTokenPepper));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY))
+                .isEqualTo(explicitClientPepper);
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY))
+                .isEqualTo(explicitTokenPepper);
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY))
+                .isNotBlank()
+                .isNotIn(explicitClientPepper, explicitTokenPepper);
+        assertThat(secretFile).isRegularFile();
     }
 
     @Test
@@ -93,6 +199,118 @@ class CryptoSecretEnvironmentPostProcessorTest {
 
         assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY)).isNotBlank();
         assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY)).isNotBlank();
+    }
+
+    @Test
+    void shouldIgnorePlaceholderValuesExposedByAttachedConfigurationSource() {
+        Path secretFile = tempDir.resolve("attached/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of());
+        // 模拟 application.yml 中的占位符默认值（config data 源）
+        environment.getPropertySources().addLast(new MapPropertySource(
+                "Config resource 'class path resource [application.yml]' via location 'optional:classpath:/'",
+                Map.of(
+                        CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY,
+                        "${FORGE_CRYPTO_SECRET_KEY:}",
+                        CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY,
+                        "${FORGE_CRYPTO_PERSISTENCE_WRITE_VERSIONED:false}",
+                        CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY,
+                        "${FORGE_CRYPTO_PERSISTENCE_ACTIVE_KEY:}",
+                        CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY,
+                        "${FORGE_CAPABILITY_CLIENT_PEPPER:}",
+                        CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY,
+                        "${FORGE_CAPABILITY_TOKEN_PEPPER:}",
+                        CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY,
+                        "${FORGE_CAPABILITY_AUTH_CODE_PEPPER:}")));
+        // 模拟 SpringApplication.prepareEnvironment 在 EPP 之前挂载的聚合源
+        ConfigurationPropertySources.attach(environment);
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        String transportKey = environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY);
+        String activeKey = environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY);
+        assertThat(Base64.getDecoder().decode(transportKey)).hasSize(16);
+        assertThat(Base64.getDecoder().decode(activeKey)).hasSize(16);
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY))
+                .isEqualTo("true");
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY)).isNotBlank();
+    }
+
+    @Test
+    void shouldBootstrapEvenWhenTransportCryptoDisabled() {
+        Path secretFile = tempDir.resolve("disabled/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of("forge.crypto.enabled", "false"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY)).isNotBlank();
+        assertThat(environment.getProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY)).isNotBlank();
+        assertThat(secretFile).isRegularFile();
+    }
+
+    @Test
+    void shouldKeepFailClosedBehaviorWhenBootstrapIsExplicitlyDisabled() {
+        Path secretFile = tempDir.resolve("bootstrap-disabled/crypto.properties");
+        StandardEnvironment environment = environment(secretFile, Map.of(
+                CryptoSecretEnvironmentPostProcessor.BOOTSTRAP_ENABLED_PROPERTY, "false"));
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                environment, new SpringApplication(Object.class));
+
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY)).isNull();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY)).isNull();
+        assertThat(environment.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY)).isNull();
+        assertThat(secretFile).doesNotExist();
+    }
+
+    @Test
+    void shouldUpgradeLegacyCryptoFileWithStableCapabilityPeppers() throws IOException {
+        Path secretFile = tempDir.resolve("legacy/crypto.properties");
+        writeLegacySecretFile(secretFile);
+        StandardEnvironment first = environment(secretFile, Map.of());
+
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                first, new SpringApplication(Object.class));
+
+        String clientPepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY);
+        String tokenPepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY);
+        String authorizationCodePepper = first.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY);
+        assertThat(List.of(clientPepper, tokenPepper, authorizationCodePepper)).doesNotHaveDuplicates();
+
+        Properties persisted = new Properties();
+        try (InputStream input = Files.newInputStream(secretFile)) {
+            persisted.load(input);
+        }
+        assertThat(persisted.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY)).isEqualTo(clientPepper);
+        assertThat(persisted.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY)).isEqualTo(tokenPepper);
+        assertThat(persisted.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY))
+                .isEqualTo(authorizationCodePepper);
+
+        StandardEnvironment second = environment(secretFile, Map.of());
+        new CryptoSecretEnvironmentPostProcessor().postProcessEnvironment(
+                second, new SpringApplication(Object.class));
+        assertThat(second.getProperty(CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY))
+                .isEqualTo(clientPepper);
+        assertThat(second.getProperty(CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY))
+                .isEqualTo(tokenPepper);
+        assertThat(second.getProperty(
+                CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY))
+                .isEqualTo(authorizationCodePepper);
     }
 
     @Test
@@ -179,7 +397,31 @@ class CryptoSecretEnvironmentPostProcessorTest {
                     CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY)).isNotBlank();
             assertThat(context.getEnvironment().getProperty(
                     CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY)).isNotBlank();
+            assertThat(context.getEnvironment().getProperty(
+                    CryptoSecretEnvironmentPostProcessor.CAPABILITY_CLIENT_PEPPER_PROPERTY)).isNotBlank();
+            assertThat(context.getEnvironment().getProperty(
+                    CryptoSecretEnvironmentPostProcessor.CAPABILITY_TOKEN_PEPPER_PROPERTY)).isNotBlank();
+            assertThat(context.getEnvironment().getProperty(
+                    CryptoSecretEnvironmentPostProcessor.CAPABILITY_AUTHORIZATION_CODE_PEPPER_PROPERTY)).isNotBlank();
             assertThat(secretFile).isRegularFile();
+        }
+    }
+
+    private void writeLegacySecretFile(Path secretFile) throws IOException {
+        Files.createDirectories(secretFile.getParent());
+        Properties properties = new Properties();
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.SECRET_KEY_PROPERTY,
+                Base64.getEncoder().encodeToString(new byte[16]));
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.PERSISTENCE_ENABLED_PROPERTY, "true");
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.WRITE_VERSIONED_PROPERTY, "true");
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.LEGACY_READ_ENABLED_PROPERTY, "false");
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_ID_PROPERTY, "legacy-key");
+        byte[] activeKey = new byte[16];
+        activeKey[0] = 1;
+        properties.setProperty(CryptoSecretEnvironmentPostProcessor.ACTIVE_KEY_PROPERTY,
+                Base64.getEncoder().encodeToString(activeKey));
+        try (OutputStream output = Files.newOutputStream(secretFile)) {
+            properties.store(output, "legacy Forge crypto bootstrap");
         }
     }
 

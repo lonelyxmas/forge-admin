@@ -203,4 +203,19 @@
         ORDER BY sort ASC, id ASC
     </select>
 
+    <!-- 协同目录同步：仅更新同步拥有的组织字段（名称/父级/层级/排序），不触碰负责人等手工资产 -->
+    <update id="updateOrgSyncFields">
+        UPDATE sys_org
+        <set>
+            <if test="orgName != null and orgName != ''">org_name = #{orgName},</if>
+            <if test="parentId != null">parent_id = #{parentId},</if>
+            <if test="ancestors != null and ancestors != ''">ancestors = #{ancestors},</if>
+            <if test="sort != null">sort = #{sort},</if>
+            update_time = NOW()
+        </set>
+        WHERE id = #{orgId}
+          AND tenant_id = #{tenantId}
+          AND del_flag = 0
+    </update>
+
 </mapper>

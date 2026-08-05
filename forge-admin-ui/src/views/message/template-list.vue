@@ -128,9 +128,7 @@
             <div class="template-preview-title">
               {{ renderTemplatePreview(formData.titleTemplate) || '标题预览' }}
             </div>
-            <div class="template-preview-content">
-              {{ renderTemplatePreview(formData.contentTemplate) || '内容预览' }}
-            </div>
+            <div class="template-preview-content" v-html="renderTemplatePreviewHtml(formData.contentTemplate) || '内容预览'" />
           </div>
         </section>
       </div>
@@ -568,6 +566,22 @@ function renderTemplatePreview(content) {
   })
 }
 
+/**
+ * 清理预览 HTML，移除可执行/危险标签与事件，避免 v-html 引入 XSS。
+ * 保留 div/span/class/style 等卡片常用标签，仅拦截 script/iframe 等与 on* 事件、javascript: 协议。
+ */
+function sanitizePreviewHtml(html) {
+  return String(html || '')
+    .replace(/<\s*(script|iframe|object|embed|link|meta|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|iframe|object|embed|link|meta|style)\b[^>]*\/?\s*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi, '$1="#"')
+}
+
+function renderTemplatePreviewHtml(content) {
+  return sanitizePreviewHtml(renderTemplatePreview(content))
+}
+
 function hasUnsupportedAtVariables(...contents) {
   return contents.some(content => /@[a-z_]\w*/i.test(String(content || '')))
 }
@@ -770,6 +784,28 @@ function handleDelete(row) {
   line-height: 20px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 企业卡片（textcard）常用样式类，v-html 注入内容为非 scoped，需用 :deep 穿透 */
+.template-preview-content :deep(div) {
+  margin: 2px 0;
+}
+
+.template-preview-content :deep(.gray) {
+  color: #9ca3af;
+}
+
+.template-preview-content :deep(.normal) {
+  color: #4b5563;
+}
+
+.template-preview-content :deep(.highlight) {
+  color: #2563eb;
+}
+
+.template-preview-content :deep(a) {
+  color: #2563eb;
+  text-decoration: none;
 }
 
 @media (max-width: 900px) {

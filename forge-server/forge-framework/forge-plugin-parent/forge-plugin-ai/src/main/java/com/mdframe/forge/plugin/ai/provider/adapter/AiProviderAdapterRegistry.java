@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.ai.provider.adapter;
 
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
+import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,9 @@ import java.util.Map;
 public class AiProviderAdapterRegistry {
 
     private final Map<String, AiProviderAdapter> adapters;
+    private final AiSecretCrypto aiSecretCrypto;
 
-    public AiProviderAdapterRegistry(List<AiProviderAdapter> adapterList) {
+    public AiProviderAdapterRegistry(List<AiProviderAdapter> adapterList, AiSecretCrypto aiSecretCrypto) {
         Map<String, AiProviderAdapter> registered = new LinkedHashMap<>();
         for (AiProviderAdapter adapter : adapterList) {
             String code = AiProviderAdapterCode.require(adapter.adapterCode()).getCode();
@@ -27,6 +29,7 @@ public class AiProviderAdapterRegistry {
             }
         }
         this.adapters = Map.copyOf(registered);
+        this.aiSecretCrypto = aiSecretCrypto;
     }
 
     /**
@@ -46,6 +49,7 @@ public class AiProviderAdapterRegistry {
 
     /**
      * 按固定的选择、校验、创建顺序构建模型。
+     * 在构造前解密 apiKey（存储层为密文，使用时需明文）。
      *
      * @param provider 供应商配置
      * @param options 通用运行参数
@@ -58,8 +62,26 @@ public class AiProviderAdapterRegistry {
         if (options == null) {
             throw new BusinessException("AI模型运行参数不能为空");
         }
-        AiProviderAdapter adapter = getRequired(provider.getAdapterCode());
-        adapter.validate(provider, options);
-        return adapter.createChatModel(provider, options);
+        // 解密 apiKey：存储层为密文，构造 ChatModel 需要明文
+        AiProvider decryptedProvider = provider;
+        if (AiSecretCrypto.isEncrypted(provider.getApiKey())) {
+            decryptedProvider = new AiProvider();
+            decryptedProvider.setId(provider.getId());
+            decryptedProvider.setTenantId(provider.getTenantId());
+            decryptedProvider.setProviderName(provider.getProviderName());
+            decryptedProvider.setProviderType(provider.getProviderType());
+            decryptedProvider.setAdapterCode(provider.getAdapterCode());
+            decryptedProvider.setLogo(provider.getLogo());
+            decryptedProvider.setApiKey(aiSecretCrypto.decrypt(provider.getApiKey()));
+            decryptedProvider.setBaseUrl(provider.getBaseUrl());
+            decryptedProvider.setModels(provider.getModels());
+            decryptedProvider.setDefaultModel(provider.getDefaultModel());
+            decryptedProvider.setIsDefault(provider.getIsDefault());
+            decryptedProvider.setStatus(provider.getStatus());
+            decryptedProvider.setRemark(provider.getRemark());
+        }
+        AiProviderAdapter adapter = getRequired(decryptedProvider.getAdapterCode());
+        adapter.validate(decryptedProvider, options);
+        return adapter.createChatModel(decryptedProvider, options);
     }
 }

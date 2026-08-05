@@ -7,5 +7,7 @@ public enum ChannelType {
     
     EMAIL,
     SMS,
-    WEB
+    WEB,
+    /** 企业协同渠道（企业微信等，按连接路由到具体 Provider） */
+    COLLABORATION
 }

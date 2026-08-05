@@ -17,6 +17,8 @@ public class BusinessApplicationAssetSelectionVO {
 
     private List<Long> extensionIds = new ArrayList<>();
 
+    private List<Long> processIds = new ArrayList<>();
+
     private List<Long> autoIncludedObjectIds = new ArrayList<>();
 
     private List<String> dependencyMessages = new ArrayList<>();

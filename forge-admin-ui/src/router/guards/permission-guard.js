@@ -5,6 +5,7 @@ import { getPermissions, getUserInfo } from '@/store/helper'
 import { initWebSocketClient, lStorage, request } from '@/utils'
 import { initKeyExchange } from '@/utils/crypto/key-exchange'
 import { applyTenantConfig } from '@/utils/tenant-config'
+import { recoverFromAuthBootstrapFailure } from './auth-bootstrap-recovery'
 
 const AUTH_ROUTE_ALLOWLIST = new Set([
   '/',
@@ -191,7 +192,10 @@ export function createPermissionGuard(router) {
         }
         catch (error) {
           console.error('获取用户信息或菜单数据失败:', error)
-          // 即使获取失败也继续，避免阻塞页面访问
+          if (!userStore.userInfo) {
+            recoverFromAuthBootstrapFailure({ authStore, appStore, to, next })
+            return
+          }
         }
 
         // unplugin-vue-router 自动处理路由，无需手动注册

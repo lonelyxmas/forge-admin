@@ -342,3 +342,36 @@
 - 后端生成器 reactor 29 个模块 `test-compile` 成功并编译 94 个测试源；`DynamicCrudControllerTest`、`DynamicCrudServiceAutoGenerationTest` 共 6 个 JUnit，0 failure、0 error、0 skipped。Controller 覆盖控制参数隔离和损坏 JSON 回退，Service 覆盖公开字段白名单及非法操作符拒绝。
 - Vite 生产构建成功：8792 个模块，`built in 2m 19s`；仅保留仓库既有的组件重名、动态/静态导入和 CSS `//` 注释警告。`git diff --check` 无输出。
 - 未启动 MySQL、Flyway、后端、Vite 或浏览器，未执行真实查询、DDL 或发布；真实请求中的业务字段、`_searchTypes` 及数据库筛选结果由用户重启当前环境后验收。
+
+## 20. 2026-08-01 应用发布数据库同步误判增量验证
+
+### 20.1 自动化范围
+
+- 对象草稿版本因页面或表单变化递增时，不再直接伪造 `OUT_OF_SYNC`，对象摘要降为 `UNKNOWN` 等待实时检查。
+- 未在模型字段中重复声明的 Forge 标准系统列继续展示，但不计入未同步业务变更；自定义额外列、缺失业务列和类型不一致继续阻断。
+- 应用发布门禁必须调用实时表映射检查覆盖旧摘要，并在阻断消息中列出具体列、设计/数据库类型或待执行 DDL 数量。
+
+### 20.2 执行结果
+
+- 生成器 reactor `test-compile`：30 个模块 `BUILD SUCCESS`，生成器编译 95 个测试源。
+- 定向 JUnit：`BusinessApplicationObjectServiceTest`、`BusinessObjectTableMappingServiceTest`、`BusinessApplicationReadinessServiceTest`、`BusinessObjectDatabaseSyncServiceTest`、`BusinessApplicationFormDataServiceTest` 共 33 个用例，0 failure、0 error、0 skipped。
+- Admin 聚合 `package -DskipTests`：47 个模块全部 `BUILD SUCCESS`，包含当前未提交的 Capability 插件装配。
+- 首次带 `-am` 定向 `test` 在上游 `forge-starter-datascope` 因缺少对应 JUnit engine 失败，生成器未执行；随后在已完成 reactor `test-compile` 的生成器模块直接运行定向测试并通过，未将首次失败记为测试通过。
+- `git diff --check` 无输出。未启动或重启 MySQL、Flyway、Admin、Flow、Vite 或浏览器，未执行真实 DDL/发布；用户现有服务保持不变，真实“离职申请”发布由用户重启 Admin 后验收。
+
+## 21. 2026-08-01 数据库保留列与逻辑删除类型兼容增量验证
+
+### 21.1 自动化范围
+
+- `del_flag` 为系统逻辑删除字段时，设计 `char(1)` 与数据库 `tinyint/int/bigint/varchar` 的 `0/1` 存储语义兼容，不制造发布阻断。
+- 未映射数据库列继续显示；可空、有默认值、`auto_increment` 或生成列不阻断，`NOT NULL` 且无默认值、不能自动生成的列继续阻断。
+- 发布提示只列出真正阻断的差异，并给出“添加字段映射或调整数据库默认值”的处理建议。
+- “按数据库校准字段”只针对已有映射的非系统字段，不能因系统字段类型差异显示无效按钮。
+
+### 21.2 执行结果
+
+- 先补测试并得到预期编译红灯：`BusinessObjectTableFieldMappingVO` 尚无 `blockingDifference` 访问器；首次实现后旧用例仍要求可空额外列阻断，得到 1 个预期行为冲突并更新旧断言。
+- 生成器模块 `test-compile` 成功，编译 558 个主源码和 95 个测试源码；定向执行发布链路 5 个测试类共 37 个 JUnit，0 failure、0 error、0 skipped。
+- 前端目标组件 ESLint 最终 0 error、0 warning；Admin 聚合 `package -DskipTests` 47 个模块全部 `BUILD SUCCESS`。
+- Node `v20.19.0` 前端生产构建退出码 0，Vite 转换 8818 个模块，`built in 5m 39s`；仅保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
+- 未启动或重启 MySQL、Flyway、Admin、Flow、Vite 或浏览器，未执行真实 DDL/发布；真实列可空性和最终发布结果由用户重启 Admin 后验收。

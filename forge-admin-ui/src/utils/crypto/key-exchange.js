@@ -253,10 +253,11 @@ export async function initKeyExchange(axios, sessionId) {
  * 为登录请求加密密码
  * @param {string} password 明文密码
  * @param {object} axios axios 实例
- * @returns {Promise<string>} 加密后的密码
+ * @param {boolean} enabled 是否启用登录密码 RSA 加密
+ * @returns {Promise<string>} 按登录策略处理后的密码
  */
-export async function encryptPassword(password, axios) {
-  if (!cryptoConfig.enabled) {
+export async function encryptPassword(password, axios, enabled = true) {
+  if (!enabled) {
     return password
   }
   try {
@@ -268,7 +269,6 @@ export async function encryptPassword(password, axios) {
   }
   catch (error) {
     console.error('密码加密失败:', error)
-    // 加密失败时返回原密码（降级方案）
-    return password
+    throw new Error('密码加密服务暂不可用，请刷新后重试')
   }
 }

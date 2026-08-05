@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.collaboration.mapper.SocialDirectoryMappingMapper">
+
+    <resultMap id="OrgMappingResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialOrgMapping">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="externalDeptId" column="external_dept_id"/>
+        <result property="externalParentId" column="external_parent_id"/>
+        <result property="externalDeptName" column="external_dept_name"/>
+        <result property="orgId" column="org_id"/>
+        <result property="sourceHash" column="source_hash"/>
+        <result property="lastSeenRunId" column="last_seen_run_id"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="delFlag" column="del_flag"/>
+    </resultMap>
+
+    <resultMap id="PostMappingResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialPostMapping">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="externalPostCode" column="external_post_code"/>
+        <result property="externalPostName" column="external_post_name"/>
+        <result property="postId" column="post_id"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="delFlag" column="del_flag"/>
+    </resultMap>
+
+    <resultMap id="TagResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialTag">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="externalTagId" column="external_tag_id"/>
+        <result property="tagName" column="tag_name"/>
+        <result property="status" column="status"/>
+        <result property="sourceHash" column="source_hash"/>
+        <result property="lastSeenRunId" column="last_seen_run_id"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="delFlag" column="del_flag"/>
+    </resultMap>
+
+    <resultMap id="TagMemberResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialTagMember">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="tagId" column="tag_id"/>
+        <result property="memberType" column="member_type"/>
+        <result property="externalMemberId" column="external_member_id"/>
+        <result property="localTargetId" column="local_target_id"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <!-- 用户绑定投影：不返回 access_token/refresh_token（安全红线） -->
+    <resultMap id="UserBindingResult" type="com.mdframe.forge.starter.social.domain.entity.SysUserSocial">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="platform" column="platform"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="externalEnterpriseId" column="external_enterprise_id"/>
+        <result property="managedBySync" column="managed_by_sync"/>
+        <result property="externalStatus" column="external_status"/>
+        <result property="sourceHash" column="source_hash"/>
+        <result property="lastSyncTime" column="last_sync_time"/>
+        <result property="uuid" column="uuid"/>
+        <result property="username" column="username"/>
+        <result property="nickname" column="nickname"/>
+        <result property="avatar" column="avatar"/>
+        <result property="email" column="email"/>
+        <result property="bindTime" column="bind_time"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="delFlag" column="del_flag"/>
+    </resultMap>
+
+    <!-- ==================== 部门映射 ==================== -->
+
+    <select id="selectOrgMappings" resultMap="OrgMappingResult">
+        SELECT id, tenant_id, connection_id, external_dept_id, external_parent_id, external_dept_name,
+               org_id, source_hash, last_seen_run_id, status, create_time, update_time, del_flag
+        FROM sys_social_org_mapping
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND del_flag = 0
+        <if test="externalIds != null and !externalIds.isEmpty()">
+            AND external_dept_id IN
+            <foreach collection="externalIds" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+    </select>
+
+    <insert id="insertOrgMappings">
+        INSERT INTO sys_social_org_mapping
+            (tenant_id, connection_id, external_dept_id, external_parent_id, external_dept_name,
+             org_id, source_hash, last_seen_run_id, status, create_time, update_time, del_flag)
+        VALUES
+        <foreach collection="list" item="m" separator=",">
+            (#{m.tenantId}, #{m.connectionId}, #{m.externalDeptId}, #{m.externalParentId}, #{m.externalDeptName},
+             #{m.orgId}, #{m.sourceHash}, #{m.lastSeenRunId}, #{m.status}, NOW(), NOW(), 0)
+        </foreach>
+    </insert>
+
+    <update id="updateOrgMappingByExternalId">
+        UPDATE sys_social_org_mapping
+        SET external_parent_id = #{m.externalParentId},
+            external_dept_name = #{m.externalDeptName},
+            org_id = #{m.orgId},
+            source_hash = #{m.sourceHash},
+            last_seen_run_id = #{m.lastSeenRunId},
+            status = #{m.status},
+            update_time = NOW()
+        WHERE tenant_id = #{m.tenantId}
+          AND connection_id = #{m.connectionId}
+          AND external_dept_id = #{m.externalDeptId}
+          AND del_flag = 0
+    </update>
+
+    <update id="markOrgSeen">
+        UPDATE sys_social_org_mapping
+        SET last_seen_run_id = #{runId},
+            source_hash = #{sourceHash},
+            status = 'ACTIVE',
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND external_dept_id = #{externalId}
+          AND del_flag = 0
+    </update>
+
+    <update id="markUnseenOrgInactive">
+        UPDATE sys_social_org_mapping
+        SET status = 'INACTIVE',
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND status = 'ACTIVE'
+          AND (last_seen_run_id IS NULL OR last_seen_run_id &lt; #{completedRunId})
+          AND del_flag = 0
+    </update>
+
+    <!-- ==================== 岗位映射 ==================== -->
+
+    <select id="selectPostMappings" resultMap="PostMappingResult">
+        SELECT id, tenant_id, connection_id, external_post_code, external_post_name,
+               post_id, status, create_time, update_time, del_flag
+        FROM sys_social_post_mapping
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND del_flag = 0
+    </select>
+
+    <insert id="insertPostMappings">
+        INSERT INTO sys_social_post_mapping
+            (tenant_id, connection_id, external_post_code, external_post_name,
+             post_id, status, create_time, update_time, del_flag)
+        VALUES
+        <foreach collection="list" item="m" separator=",">
+            (#{m.tenantId}, #{m.connectionId}, #{m.externalPostCode}, #{m.externalPostName},
+             #{m.postId}, #{m.status}, NOW(), NOW(), 0)
+        </foreach>
+    </insert>
+
+    <!-- ==================== 标签 ==================== -->
+
+    <select id="selectTags" resultMap="TagResult">
+        SELECT id, tenant_id, connection_id, external_tag_id, tag_name,
+               status, source_hash, last_seen_run_id, create_time, update_time, del_flag
+        FROM sys_social_tag
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND del_flag = 0
+    </select>
+
+    <insert id="insertTags">
+        INSERT INTO sys_social_tag
+            (tenant_id, connection_id, external_tag_id, tag_name,
+             status, source_hash, last_seen_run_id, create_time, update_time, del_flag)
+        VALUES
+        <foreach collection="list" item="t" separator=",">
+            (#{t.tenantId}, #{t.connectionId}, #{t.externalTagId}, #{t.tagName},
+             #{t.status}, #{t.sourceHash}, #{t.lastSeenRunId}, NOW(), NOW(), 0)
+        </foreach>
+    </insert>
+
+    <update id="updateTagByExternalId">
+        UPDATE sys_social_tag
+        SET tag_name = #{t.tagName},
+            status = #{t.status},
+            source_hash = #{t.sourceHash},
+            last_seen_run_id = #{t.lastSeenRunId},
+            update_time = NOW()
+        WHERE tenant_id = #{t.tenantId}
+          AND connection_id = #{t.connectionId}
+          AND external_tag_id = #{t.externalTagId}
+          AND del_flag = 0
+    </update>
+
+    <update id="markTagSeen">
+        UPDATE sys_social_tag
+        SET last_seen_run_id = #{runId},
+            status = 'ACTIVE',
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND external_tag_id = #{externalTagId}
+          AND del_flag = 0
+    </update>
+
+    <update id="markUnseenTagInactive">
+        UPDATE sys_social_tag
+        SET status = 'INACTIVE',
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND status = 'ACTIVE'
+          AND (last_seen_run_id IS NULL OR last_seen_run_id &lt; #{completedRunId})
+          AND del_flag = 0
+    </update>
+
+    <!-- ==================== 标签成员（可重建关系表，物理替换） ==================== -->
+
+    <select id="selectTagMembers" resultMap="TagMemberResult">
+        SELECT id, tenant_id, connection_id, tag_id, member_type, external_member_id, local_target_id, create_time
+        FROM sys_social_tag_member
+        WHERE tenant_id = #{tenantId}
+          AND tag_id = #{tagId}
+    </select>
+
+    <delete id="deleteTagMembersByTagId">
+        DELETE FROM sys_social_tag_member
+        WHERE tenant_id = #{tenantId}
+          AND tag_id = #{tagId}
+    </delete>
+
+    <insert id="insertTagMembers">
+        INSERT INTO sys_social_tag_member
+            (tenant_id, connection_id, tag_id, member_type, external_member_id, local_target_id, create_time)
+        VALUES
+        <foreach collection="list" item="m" separator=",">
+            (#{m.tenantId}, #{m.connectionId}, #{m.tagId}, #{m.memberType},
+             #{m.externalMemberId}, #{m.localTargetId}, NOW())
+        </foreach>
+    </insert>
+
+    <!-- ==================== 用户绑定（sys_user_social 目录同步维度） ==================== -->
+
+    <select id="selectSyncManagedUserBindings" resultMap="UserBindingResult">
+        SELECT id, user_id, platform, connection_id, external_enterprise_id, managed_by_sync,
+               external_status, source_hash, last_sync_time, uuid, username, nickname, avatar,
+               email, bind_time, tenant_id, del_flag
+        FROM sys_user_social
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND managed_by_sync = 1
+          AND del_flag = 0
+    </select>
+
+    <update id="markUserSeen">
+        UPDATE sys_user_social
+        SET source_hash = #{sourceHash},
+            last_sync_time = NOW(),
+            external_status = 'ACTIVE'
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND uuid = #{uuid}
+          AND managed_by_sync = 1
+          AND del_flag = 0
+    </update>
+
+    <update id="updateUserExternalStatus">
+        UPDATE sys_user_social
+        SET external_status = #{externalStatus},
+            last_sync_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND connection_id = #{connectionId}
+          AND uuid = #{uuid}
+          AND managed_by_sync = 1
+          AND del_flag = 0
+    </update>
+</mapper>

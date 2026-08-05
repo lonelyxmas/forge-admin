@@ -65,28 +65,21 @@
       :style="dropdownStyle"
       role="menu"
       @mouseenter="cancelCloseDropdown"
+      @focusin="cancelCloseDropdown"
       @mouseleave="scheduleCloseDropdown"
     >
-      <button
-        v-for="child in activeDropdownChildren"
-        :key="child.key"
-        class="forge-top-menu-dropdown-item"
-        type="button"
-        role="menuitem"
-        :class="{ 'is-active': isItemActive(child) }"
-        @click="handleItemClick(child)"
-      >
-        <span v-if="child.icon" class="forge-top-menu-dropdown-icon">
-          <component :is="child.icon" />
-        </span>
-        <span class="forge-top-menu-dropdown-label">{{ child.label }}</span>
-      </button>
+      <TopMenuDropdown
+        :items="activeDropdownChildren"
+        :active-key="activeKey"
+        @select="handleItemClick"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import TopMenuDropdown from './TopMenuDropdown.vue'
 
 const props = defineProps({
   items: {
@@ -265,7 +258,7 @@ watch(() => props.activeKey, () => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 10px;
 }
 
 .forge-top-menu-node {
@@ -370,58 +363,6 @@ watch(() => props.activeKey, () => {
   background: var(--bg-primary);
   box-shadow: var(--shadow-lg);
   animation: forge-top-menu-dropdown-in var(--transition-fast) ease-out;
-}
-
-.forge-top-menu-dropdown-item {
-  width: 100%;
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  background: transparent;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.forge-top-menu-dropdown-item:hover,
-.forge-top-menu-dropdown-item.is-active {
-  color: var(--side-menu-text-color-active);
-  background: var(--side-menu-bg-color-active);
-}
-
-.forge-top-menu-dropdown-item:hover {
-  transform: translateX(3px);
-}
-
-.forge-top-menu-dropdown-item:active {
-  transform: translateX(1px) scale(0.985);
-}
-
-.forge-top-menu-dropdown-icon {
-  width: 18px;
-  height: 18px;
-  transform: scale(1);
-  transition: transform var(--transition-fast);
-}
-
-.forge-top-menu-dropdown-item:hover .forge-top-menu-dropdown-icon {
-  transform: scale(1.12);
-}
-
-.forge-top-menu-dropdown-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .forge-top-menu-scroll {

@@ -50,4 +50,14 @@ public interface SysOrgMapper extends BaseMapper<SysOrg> {
      * 按组织ID集合查询当前租户内启用组织。
      */
     List<SysOrg> selectEnabledOrgsByIds(@Param("tenantId") Long tenantId, @Param("orgIds") List<Long> orgIds);
+
+    /**
+     * 协同目录同步：仅更新同步拥有的组织字段（名称/父级/层级/排序），不触碰负责人等手工资产
+     */
+    int updateOrgSyncFields(@Param("tenantId") Long tenantId,
+                            @Param("orgId") Long orgId,
+                            @Param("orgName") String orgName,
+                            @Param("parentId") Long parentId,
+                            @Param("ancestors") String ancestors,
+                            @Param("sort") Integer sort);
 }

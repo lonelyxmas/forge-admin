@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.collaboration.mapper.CollaborationDeliveryMapper">
+
+    <!-- 协同渠道逐人投递分页：输出投递状态、接收人身份与完整推送正文，供运维排障 -->
+    <select id="selectDeliveryPage" resultType="com.mdframe.forge.plugin.collaboration.vo.CollaborationDeliveryVO">
+        SELECT r.id,
+               r.message_id,
+               r.user_id,
+               u.username AS user_account,
+               u.real_name AS user_name,
+               m.connection_id,
+               m.platform,
+               m.title,
+               m.content AS message_content,
+               r.delivery_status,
+               r.delivery_attempts,
+               r.external_id,
+               r.last_error_code,
+               r.last_attempt_time,
+               r.next_retry_time,
+               r.create_time
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON m.id = r.message_id AND m.tenant_id = r.tenant_id
+        LEFT JOIN sys_user u ON u.id = r.user_id
+        WHERE r.tenant_id = #{tenantId}
+          AND m.send_channel = 'COLLABORATION'
+          AND r.delivery_status IS NOT NULL
+        <if test="connectionId != null">
+            AND m.connection_id = #{connectionId}
+        </if>
+        <if test="platform != null and platform != ''">
+            AND m.platform = #{platform}
+        </if>
+        <if test="deliveryStatus != null and deliveryStatus != ''">
+            AND r.delivery_status = #{deliveryStatus}
+        </if>
+        <if test="messageId != null">
+            AND r.message_id = #{messageId}
+        </if>
+        ORDER BY r.id DESC
+    </select>
+
+    <!-- 装载重试所需的消息与接收人信息（显式租户校验） -->
+    <select id="selectRetryRecordById" resultType="com.mdframe.forge.plugin.collaboration.domain.model.DeliveryRetryRecord">
+        SELECT r.id,
+               r.tenant_id,
+               r.message_id,
+               r.user_id,
+               m.connection_id,
+               m.title,
+               m.content,
+               r.delivery_status,
+               r.delivery_attempts
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON m.id = r.message_id AND m.tenant_id = r.tenant_id
+        WHERE r.id = #{id}
+          AND r.tenant_id = #{tenantId}
+          AND m.send_channel = 'COLLABORATION'
+    </select>
+
+    <!-- 扫描到期待补偿的失败投递（补偿任务跨租户执行，记录自带租户维度） -->
+    <select id="selectDueRetryRecords" resultType="com.mdframe.forge.plugin.collaboration.domain.model.DeliveryRetryRecord">
+        SELECT r.id,
+               r.tenant_id,
+               r.message_id,
+               r.user_id,
+               m.connection_id,
+               m.title,
+               m.content,
+               r.delivery_status,
+               r.delivery_attempts
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON m.id = r.message_id AND m.tenant_id = r.tenant_id
+        WHERE m.send_channel = 'COLLABORATION'
+          AND r.delivery_status = 'FAILED'
+          AND r.next_retry_time IS NOT NULL
+          AND r.next_retry_time &lt;= #{now}
+        ORDER BY r.next_retry_time ASC
+        LIMIT #{limitSize}
+    </select>
+
+    <!-- 回写重试结果：尝试次数原子自增，nextRetryTime 为空表示停止自动重试 -->
+    <update id="updateRetryResult">
+        UPDATE sys_message_receiver
+        SET delivery_status = #{deliveryStatus},
+            delivery_attempts = IFNULL(delivery_attempts, 0) + 1,
+            external_id = #{externalId},
+            last_error_code = #{lastErrorCode},
+            last_attempt_time = #{lastAttemptTime},
+            next_retry_time = #{nextRetryTime}
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+    </update>
+</mapper>

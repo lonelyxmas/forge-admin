@@ -193,6 +193,9 @@ export function resetKeyExchange() {
 }
 
 export async function initKeyExchange(axios, sessionId) {
+  if (!cryptoConfig.enabled || !cryptoConfig.enableApiCrypto) {
+    return true
+  }
   if (!cryptoConfig.enableDynamicKey) {
     return true
   }

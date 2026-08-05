@@ -107,6 +107,7 @@ public class FlowTaskController {
      * 签收任务
      */
     @PostMapping("/claim")
+    @ApiPermissionIgnore
     public RespInfo<Void> claim(@RequestParam String taskId, @RequestParam String userId) {
         flowTaskService.claimTask(taskId, userId);
         return RespInfo.success("签收成功", null);
@@ -116,6 +117,7 @@ public class FlowTaskController {
      * 审批通过
      */
     @PostMapping("/approve")
+    @ApiPermissionIgnore
     public RespInfo<Void> approve(@RequestBody Map<String, Object> params) {
         String taskId = String.valueOf(params.get("taskId"));
         String userId = resolveTrustedUser(params.get("userId"));
@@ -136,6 +138,7 @@ public class FlowTaskController {
      * 审批驳回
      */
     @PostMapping("/reject")
+    @ApiPermissionIgnore
     public RespInfo<Void> reject(@RequestBody Map<String, Object> params) {
         String taskId = String.valueOf(params.get("taskId"));
         String userId = resolveTrustedUser(params.get("userId"));
@@ -187,6 +190,7 @@ public class FlowTaskController {
      * 转办
      */
     @PostMapping("/delegate")
+    @ApiPermissionIgnore
     public RespInfo<Void> delegate(@RequestBody Map<String, Object> params) {
         String taskId = String.valueOf(params.get("taskId"));
         String userId = String.valueOf(params.get("userId"));
@@ -272,6 +276,7 @@ public class FlowTaskController {
      * 获取任务详情
      */
     @GetMapping("/{taskId}")
+    @ApiPermissionIgnore
     public RespInfo<FlowTask> getById(@PathVariable String taskId) {
         FlowTask task = flowTaskService.getTaskDetail(taskId);
         return RespInfo.success(task);
@@ -281,6 +286,7 @@ public class FlowTaskController {
      * 获取流程图（高亮当前节点）
      */
     @GetMapping("/diagram/{processInstanceId}")
+    @ApiPermissionIgnore
     public ResponseEntity<byte[]> getProcessDiagram(@PathVariable String processInstanceId) {
         byte[] diagram = flowTaskService.getProcessDiagram(processInstanceId);
         
@@ -300,6 +306,7 @@ public class FlowTaskController {
      * 获取流程图详情（包含节点信息，用于交互式展示）
      */
     @GetMapping("/diagram-info/{processInstanceId}")
+    @ApiPermissionIgnore
     public RespInfo<ProcessDiagramInfo> getProcessDiagramInfo(
             @PathVariable String processInstanceId,
             @RequestParam(defaultValue = "false") boolean includeImage) {
@@ -344,6 +351,7 @@ public class FlowTaskController {
      * 包含表单类型、表单配置、流程变量等
      */
     @GetMapping("/form/{taskId}")
+    @ApiPermissionIgnore
     public RespInfo<TaskFormInfo> getTaskFormInfo(@PathVariable String taskId) {
         TaskFormInfo formInfo = flowTaskService.getTaskFormInfo(taskId);
         return RespInfo.success(formInfo);
@@ -354,6 +362,7 @@ public class FlowTaskController {
      * 用于已办、抄送、流程历史等没有运行中任务的只读查看场景。
      */
     @GetMapping("/form")
+    @ApiPermissionIgnore
     public RespInfo<TaskFormInfo> getProcessFormInfo(@RequestParam(required = false) String processInstanceId,
                                                      @RequestParam(required = false) String businessKey,
                                                      @RequestParam(required = false) String processDefKey,

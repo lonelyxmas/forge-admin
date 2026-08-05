@@ -145,9 +145,10 @@ public class FlowTimeoutServiceImpl implements FlowTimeoutService {
                     break;
                     
                 case "notify":
-                    // 发送通知
-                    sendTimeoutNotification(taskId, "system");
-                    log.info("超时任务已发送通知: taskId={}", taskId);
+                    if (!sendTimeoutNotification(taskId, "system")) {
+                        log.warn("超时通知渠道尚不可用: taskId={}", taskId);
+                        return false;
+                    }
                     break;
                     
                 default:
@@ -181,35 +182,13 @@ public class FlowTimeoutServiceImpl implements FlowTimeoutService {
             assignee = String.join(",", candidates);
         }
         
-        String message = String.format("您的审批任务【%s】即将超时，请及时处理！", task.getName());
-        
-        try {
-            switch (notifyType) {
-                case "email":
-                    // TODO: 发送邮件通知
-                    log.info("发送邮件超时通知: to={}, message={}", assignee, message);
-                    break;
-                    
-                case "sms":
-                    // TODO: 发送短信通知
-                    log.info("发送短信超时通知: to={}, message={}", assignee, message);
-                    break;
-                    
-                case "system":
-                    // TODO: 发送系统消息
-                    log.info("发送系统超时通知: to={}, message={}", assignee, message);
-                    break;
-                    
-                default:
-                    log.warn("未知的通知类型: {}", notifyType);
-                    return false;
-            }
-            
-            return true;
-        } catch (Exception e) {
-            log.error("发送超时通知失败: taskId={}, notifyType={}", taskId, notifyType, e);
+        if (!Set.of("email", "sms", "system").contains(notifyType)) {
+            log.warn("未知的通知类型: {}", notifyType);
             return false;
         }
+        log.warn("流程超时通知渠道尚未接入，拒绝返回伪成功: taskId={}, notifyType={}, recipientCount={}",
+                taskId, notifyType, assignee.split(",").length);
+        return false;
     }
 
     @Override

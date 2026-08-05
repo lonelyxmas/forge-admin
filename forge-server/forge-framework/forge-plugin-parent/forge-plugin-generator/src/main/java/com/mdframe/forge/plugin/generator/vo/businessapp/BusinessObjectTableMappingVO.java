@@ -45,6 +45,9 @@ public class BusinessObjectTableMappingVO {
 
     private Integer unsyncedChangeCount;
 
+    /** 当前设计与物理表之间待执行的 DDL 语句数量。 */
+    private Integer pendingDdlCount;
+
     private String lastSyncStatus;
 
     private LocalDateTime lastSyncTime;

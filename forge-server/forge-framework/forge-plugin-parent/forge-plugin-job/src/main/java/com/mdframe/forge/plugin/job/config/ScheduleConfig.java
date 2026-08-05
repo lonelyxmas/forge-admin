@@ -3,10 +3,13 @@ package com.mdframe.forge.plugin.job.config;
 import com.baomidou.dynamic.datasource.DynamicRoutingDataSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 
 import javax.sql.DataSource;
 import java.util.Properties;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 定时任务配置
@@ -58,6 +61,25 @@ public class ScheduleConfig {
         factory.setAutoStartup(true);
 
         return factory;
+    }
+
+    /**
+     * 启动恢复专用线程池：将“恢复数据库定时任务配置”从主启动线程移出，
+     * 避免任务量大时阻塞应用启动。单线程串行执行，保证恢复顺序与原同步逻辑一致。
+     */
+    @Bean("jobStartupExecutor")
+    public Executor jobStartupExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setThreadNamePrefix("job-startup-");
+        executor.setKeepAliveSeconds(30);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
     }
 
     private int normalizeThreadPoolSize(JobProperties jobProperties) {

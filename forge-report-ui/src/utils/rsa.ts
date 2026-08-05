@@ -51,15 +51,17 @@ export function rsaEncrypt(data: string, publicKey: string): string {
 }
 
 /**
- * 加密密码（先获取公钥再加密，返回 Base64 密文）
+ * 按登录配置处理密码。启用时先获取公钥并返回 Base64 密文。
  */
-export async function encryptPassword(password: string): Promise<string> {
+export async function encryptPassword(password: string, enabled = true): Promise<string> {
+  if (!enabled) return password
+
   try {
     const publicKey = await fetchPublicKey()
     return rsaEncrypt(password, publicKey)
   } catch (error) {
-    console.warn('[RSA] 密码加密失败，使用明文（降级方案）:', error)
-    return password
+    console.error('[RSA] 密码加密失败，已阻止明文降级:', error)
+    throw new Error('密码加密服务暂不可用，请刷新后重试')
   }
 }
 

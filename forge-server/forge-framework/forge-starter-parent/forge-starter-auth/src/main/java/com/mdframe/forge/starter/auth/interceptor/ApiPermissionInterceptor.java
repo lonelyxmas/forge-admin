@@ -49,21 +49,8 @@ public class ApiPermissionInterceptor implements HandlerInterceptor {
         }
 
         HandlerMethod handlerMethod = (HandlerMethod) handler;
-        enforcePasswordChange(request);
 
-        // 0. 检查是否启用API权限校验
-        if (authProperties.getEnableApiPermission() == null || !authProperties.getEnableApiPermission()) {
-            log.debug("API权限校验已禁用");
-            return true;
-        }
-        
-        ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
-        if (apiConfig != null && !apiConfig.getNeedAuth()) {
-            log.debug("匿名访问接口: {}", request.getRequestURI());
-            return true;
-        }
-        
-        // 2. 检查是否有@SaIgnore注解（匿名访问）
+        // 2. 先检查注解豁免（@SaIgnore / @ApiPermissionIgnore），豁免接口不受改密拦截
         SaIgnore anonymous = handlerMethod.getMethodAnnotation(SaIgnore.class);
         if (anonymous == null) {
             anonymous = handlerMethod.getBeanType().getAnnotation(SaIgnore.class);
@@ -72,8 +59,29 @@ public class ApiPermissionInterceptor implements HandlerInterceptor {
         if (apiPermissionIgnore == null) {
             apiPermissionIgnore = handlerMethod.getBeanType().getAnnotation(ApiPermissionIgnore.class);
         }
-        if (anonymous != null || apiPermissionIgnore != null || request.getRequestURI().startsWith("/ws")) {
+        boolean annotationExempt = anonymous != null || apiPermissionIgnore != null
+                || request.getRequestURI().startsWith("/ws");
+
+        // 3. 强制改密拦截（仅对非豁免接口生效）
+        if (!annotationExempt) {
+            enforcePasswordChange(request);
+        }
+
+        // 4. 检查是否启用API权限校验
+        if (authProperties.getEnableApiPermission() == null || !authProperties.getEnableApiPermission()) {
+            log.debug("API权限校验已禁用");
+            return true;
+        }
+
+        ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
+        if (apiConfig != null && !apiConfig.getNeedAuth()) {
             log.debug("匿名访问接口: {}", request.getRequestURI());
+            return true;
+        }
+
+        // 注解豁免直接放行
+        if (annotationExempt) {
+            log.debug("注解豁免接口: {}", request.getRequestURI());
             return true;
         }
 

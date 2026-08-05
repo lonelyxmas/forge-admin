@@ -7,6 +7,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApplicationObj
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessObject;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationObjectDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessApplicationObjectMapper;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("BusinessApplicationObjectService")
 class BusinessApplicationObjectServiceTest {
+
+    @Test
+    @DisplayName("draft version changes do not pretend the database is out of sync")
+    void draftVersionChangesDoNotPretendDatabaseOutOfSync() throws Exception {
+        StubApplicationService applicationService = new StubApplicationService(application());
+        StubObjectService objectService = new StubObjectService(Map.of());
+        BusinessApplicationObjectVO object = new BusinessApplicationObjectVO();
+        object.setObjectId(1L);
+        object.setDesignVersion(8);
+        object.setDesignerOptions("{\"databaseSync\":{\"status\":\"IN_SYNC\",\"designVersion\":7}}");
+        BusinessApplicationObjectMapper mapper = proxy((method, args) ->
+                "selectByApplicationId".equals(method) ? List.of(object) : defaultValue(method, args));
+        BusinessApplicationObjectService service = service(applicationService, objectService, mapper);
+
+        List<BusinessApplicationObjectVO> objects = service.list(10L);
+
+        assertEquals("UNKNOWN", objects.get(0).getSyncStatus());
+    }
 
     @Test
     @DisplayName("a sole association is automatically normalized to primary")

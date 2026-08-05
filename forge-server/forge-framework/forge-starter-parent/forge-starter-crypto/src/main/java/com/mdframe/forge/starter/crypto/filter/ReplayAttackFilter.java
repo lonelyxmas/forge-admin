@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.starter.crypto.cache.ReplayTokenCache;
 import com.mdframe.forge.starter.core.context.CryptoProperties;
+import com.mdframe.forge.starter.crypto.support.InternalCallRequestVerifier;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -27,6 +28,7 @@ public class ReplayAttackFilter implements Filter {
     private final CryptoProperties properties;
     private final ReplayTokenCache tokenCache;
     private final ObjectMapper objectMapper;
+    private final InternalCallRequestVerifier internalCallRequestVerifier;
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
@@ -46,7 +48,7 @@ public class ReplayAttackFilter implements Filter {
             return;
         }
         
-        if ("true".equalsIgnoreCase(httpRequest.getHeader("X-Inner-Call"))) {
+        if (internalCallRequestVerifier.isTrustedInternalCall(httpRequest)) {
             chain.doFilter(request, response);
             return;
         }
@@ -71,7 +73,11 @@ public class ReplayAttackFilter implements Filter {
             // 1. 验证时间戳（在时间窗口内）
             long requestTime = Long.parseLong(timestamp);
             long currentTime = System.currentTimeMillis();
-            long timeWindow = properties.getReplayTimeWindow() * 1000;
+            long replayWindowSeconds = properties.getReplayTimeWindow();
+            if (replayWindowSeconds <= 0) {
+                throw new IllegalStateException("防重放时间窗口必须大于0秒");
+            }
+            long timeWindow = Math.multiplyExact(replayWindowSeconds, 1000L);
 
             if (Math.abs(currentTime - requestTime) > timeWindow) {
                 log.warn("请求已过期, 请求时间: {}, 当前时间: {}, 时间窗口: {}ms",
@@ -80,15 +86,13 @@ public class ReplayAttackFilter implements Filter {
                 return;
             }
 
-            // 2. 验证nonce（是否已使用）
-            if (tokenCache.exists(nonce)) {
+            // 2. 原子登记 nonce。缓存覆盖时间戳允许的完整正负窗口，避免边界重放。
+            long nonceTtlSeconds = Math.multiplyExact(replayWindowSeconds, 2L);
+            if (!tokenCache.markIfAbsent(nonce, nonceTtlSeconds)) {
                 log.warn("检测到重复请求, nonce: {}", nonce);
                 sendError(httpResponse, "重复的请求");
                 return;
             }
-
-            // 3. 缓存nonce，防止重放
-            tokenCache.cache(nonce, properties.getReplayTimeWindow());
 
             // 验证通过，继续处理
             chain.doFilter(request, response);

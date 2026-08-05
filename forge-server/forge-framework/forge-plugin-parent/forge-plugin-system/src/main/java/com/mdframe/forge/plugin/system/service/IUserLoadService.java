@@ -42,6 +42,14 @@ public interface IUserLoadService {
     LoginUser loadUserByPhone(String phone, Long tenantId, Long preferredActiveOrgId);
 
     /**
+     * 根据身份提供方已验证的手机号唯一加载用户。
+     *
+     * <p>该方法用于外部身份首次映射；没有匹配或存在多个有效候选时均拒绝认证。</p>
+     */
+    LoginUser loadUniqueUserByVerifiedPhone(
+            String phone, Long tenantId, Long preferredActiveOrgId);
+
+    /**
      * 根据邮箱加载用户信息
      *
      * @param email    邮箱

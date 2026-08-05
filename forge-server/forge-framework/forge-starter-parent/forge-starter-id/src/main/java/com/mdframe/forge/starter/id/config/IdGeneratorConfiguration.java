@@ -3,6 +3,7 @@ package com.mdframe.forge.starter.id.config;
 import com.mdframe.forge.starter.id.generator.FusionDisposableWorkerIdAssigner;
 import com.mdframe.forge.starter.id.properties.UidCacheGeneratorProperties;
 import com.mdframe.forge.starter.id.properties.UidDefaultGeneratorProperties;
+import com.mdframe.forge.starter.id.service.IWorkNodePOAtomicService;
 import com.xfvape.uid.impl.CachedUidGenerator;
 import com.xfvape.uid.impl.DefaultUidGenerator;
 import com.xfvape.uid.worker.WorkerIdAssigner;
@@ -27,9 +28,15 @@ public class IdGeneratorConfiguration {
     @Autowired
     private UidDefaultGeneratorProperties uidDefaultGeneratorProperties;
 
+    @Autowired
+    private IWorkNodePOAtomicService workNodeService;
+
     @Bean
     public WorkerIdAssigner disposableWorkerIdAssigner() {
-        return new FusionDisposableWorkerIdAssigner();
+        int workerBits = Math.min(
+                uidCacheGeneratorProperties.getWorkerBits(),
+                uidDefaultGeneratorProperties.getWorkerBits());
+        return new FusionDisposableWorkerIdAssigner(workNodeService, workerBits);
     }
 
     @Bean(name = "cachedUidGenerator")

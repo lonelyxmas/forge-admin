@@ -1,9 +1,17 @@
 import { resolveResError } from './helpers'
 import { useAuthStore } from '@/store'
-import { decryptResponse, encryptRequest, shouldEncrypt } from '@/utils/crypto'
+import { cryptoConfig, decryptResponse, encryptRequest, matchPath, shouldEncrypt } from '@/utils/crypto'
 import { initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
 
 let refreshTokenPromise = null
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.random() * 16 | 0
+    const value = character === 'x' ? random : (random & 0x3 | 0x8)
+    return value.toString(16)
+  })
+}
 
 export function setupInterceptors(axiosInstance) {
   const SUCCESS_CODES = [0, 200]
@@ -193,7 +201,19 @@ async function reqResolve(config, axiosInstance) {
     config.headers.Authorization = `${authStore.tokenType || 'Bearer'} ${authStore.accessToken}`
   }
 
-  if (config.encrypt === true || shouldEncrypt(config.url)) {
+  if (cryptoConfig.enabled && cryptoConfig.enableReplay && config.replay !== false) {
+    const path = (config.url || '').split('?')[0]
+    const excluded = cryptoConfig.replayExcludePaths.some(pattern => matchPath(path, pattern))
+    const included = !cryptoConfig.replayIncludePaths.length
+      || cryptoConfig.replayIncludePaths.some(pattern => matchPath(path, pattern))
+    if (!excluded && included) {
+      config.headers['X-Timestamp'] = Date.now().toString()
+      config.headers['X-Nonce'] = generateUUID()
+    }
+  }
+
+  // 即使请求体无需加密，也要为可能的加密响应准备会话密钥。
+  if (shouldEncrypt(config.url)) {
     const exchanged = await initKeyExchange(axiosInstance, authStore.accessToken || '')
     if (!exchanged) {
       return Promise.reject({ code: 'CRYPTO_EXCHANGE_FAILED', message: '安全通道初始化失败', config })

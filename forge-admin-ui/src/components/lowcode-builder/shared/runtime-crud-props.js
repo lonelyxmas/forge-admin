@@ -162,7 +162,9 @@ export function buildCrudSearchTypeRequestParams(searchSchema = []) {
  * 预览结果状态会写回 block.props，但它不属于请求条件，不能因此再次加载列表。
  */
 export function resolveCrudPreviewReloadKey(block = {}, runtimeCrudProps = {}) {
-  const blockProps = block.props || {}
+  const sourceBlock = block || {}
+  const runtimeProps = runtimeCrudProps || {}
+  const blockProps = sourceBlock.props || {}
   const previewLiveData = blockProps.previewLiveData === true
   return JSON.stringify({
     enabled: previewLiveData,
@@ -170,8 +172,8 @@ export function resolveCrudPreviewReloadKey(block = {}, runtimeCrudProps = {}) {
     recordId: String(blockProps.previewRecordId ?? ''),
     listApi: blockProps.listApi
       || blockProps.api
-      || runtimeCrudProps.apiConfig?.list
-      || runtimeCrudProps.api
+      || runtimeProps.apiConfig?.list
+      || runtimeProps.api
       || '',
   })
 }

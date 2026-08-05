@@ -15,6 +15,11 @@ public class MessageManageVO {
     
     private String channel;
     
+    /**
+     * 企业协同平台编码：WECHAT_ENTERPRISE/DINGTALK/FEISHU 等，非协同渠道为空
+     */
+    private String platform;
+    
     private Integer status;
     
     private Integer receiverCount;

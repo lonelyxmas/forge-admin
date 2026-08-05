@@ -61,6 +61,13 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-message</artifactId>
         </dependency>
+
+        <!-- 企业协同插件：提供企微工作台/移动端免登接口与连接器；job 依赖为 optional 不传递，
+             本服务不引入 forge-plugin-job，故不启 Quartz 调度器，3 个协同 Job Handler 因 @ConditionalOnClass 自动跳过 -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-collaboration</artifactId>
+        </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>

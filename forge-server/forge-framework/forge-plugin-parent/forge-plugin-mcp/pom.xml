@@ -15,7 +15,7 @@
     <dependencies>
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-capability</artifactId>
+            <artifactId>forge-plugin-capability-core</artifactId>
         </dependency>
 
         <dependency>

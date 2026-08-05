@@ -1,18 +1,14 @@
 <template>
   <view class="home-page">
-    <view class="page-glow page-glow-blue" />
-    <view class="page-glow page-glow-indigo" />
-    <view class="grid-layer" />
-
     <view class="home-content">
-      <view class="home-header animate-in">
+      <view class="home-header">
         <view class="user-block" @click="goMine">
           <view class="avatar-wrap">
             <AiAuthImage class="avatar-image" :src="rawAvatarUrl" :fallback="DEFAULT_AVATAR_URL" mode="aspectFill" />
           </view>
           <view class="user-copy">
             <text class="hello-title">Hi, {{ authStore.displayName }}</text>
-            <text class="hello-subtitle">欢迎回来，继续探索 Forge H5</text>
+            <text class="hello-subtitle">今天的工作已为你整理好</text>
           </view>
         </view>
         <button class="bell-button" @click="goMessages">
@@ -23,39 +19,55 @@
         </button>
       </view>
 
-      <view class="feature-card animate-in delay-1">
-        <view class="feature-inner">
-          <view class="feature-top">
-            <view class="feature-title-block">
-              <text class="feature-label">服务概览</text>
-              <text class="feature-desc">同步 {{ lastSyncText }}</text>
-            </view>
-            <button class="feature-refresh" @click="refreshWorkspace">
-              <AiIcon icon="/static/icons/ai-icon/refresh-cw.svg" color="#ffffff" size="sm" />
-            </button>
+      <view class="workbench-panel">
+        <view class="attention-head">
+          <view class="attention-title-wrap">
+            <view class="attention-title-mark" />
+            <text class="attention-title">处理中心</text>
           </view>
-          <view class="feature-metrics">
-            <view class="metric-item">
-              <text class="metric-value">{{ backendMenuCount }}</text>
-              <text class="metric-label">菜单</text>
+          <button class="attention-refresh" @click="refreshWorkspace">
+            <AiIcon icon="/static/icons/ai-icon/refresh-cw.svg" color="#2563eb" size="sm" />
+          </button>
+        </view>
+        <view class="attention-grid">
+          <button class="attention-card" @click="goTodo">
+            <view class="attention-card-top">
+              <view class="attention-icon">
+                <AiIcon icon="/static/icons/ai-icon/check-square.svg" color="#2563eb" size="sm" />
+              </view>
+              <text class="attention-label">待办</text>
             </view>
-            <view class="metric-item">
-              <text class="metric-value">{{ unreadCount }}</text>
-              <text class="metric-label">未读</text>
+            <view class="attention-count-line">
+              <text class="attention-count">{{ todoCount > 99 ? '99+' : todoCount }}</text>
+              <text class="attention-unit">项</text>
             </view>
-            <view class="metric-item">
-              <text class="metric-value">{{ permissionCount }}</text>
-              <text class="metric-label">权限</text>
+            <text class="attention-desc">{{ todoCount > 0 ? '等待你处理' : '暂时已清空' }}</text>
+            <view class="attention-link">
+              <text>{{ todoCount > 0 ? '去处理' : '查看待办' }}</text>
+              <AiIcon icon="/static/icons/ai-icon/arrow-right.svg" color="#2563eb" size="sm" />
             </view>
-            <view class="metric-item metric-status">
-              <text class="metric-value">{{ syncStatusText }}</text>
-              <text class="metric-label">状态</text>
+          </button>
+          <button class="attention-card" @click="goMessages">
+            <view class="attention-card-top">
+              <view class="attention-icon">
+                <AiIcon icon="/static/icons/ai-icon/bell.svg" color="#2563eb" size="sm" />
+              </view>
+              <text class="attention-label">消息</text>
             </view>
-          </view>
+            <view class="attention-count-line">
+              <text class="attention-count">{{ unreadCount > 99 ? '99+' : unreadCount }}</text>
+              <text class="attention-unit">条</text>
+            </view>
+            <text class="attention-desc">{{ unreadCount > 0 ? '有未读提醒' : '已全部查看' }}</text>
+            <view class="attention-link">
+              <text>{{ unreadCount > 0 ? '查看消息' : '查看全部' }}</text>
+              <AiIcon icon="/static/icons/ai-icon/arrow-right.svg" color="#2563eb" size="sm" />
+            </view>
+          </button>
         </view>
       </view>
 
-      <view class="shortcut-grid animate-in delay-2">
+      <view class="shortcut-grid">
         <view
           v-for="item in menuItems"
           :key="item.key"
@@ -69,38 +81,7 @@
         </view>
       </view>
 
-      <view class="workbench-panel animate-in delay-3">
-        <view class="workbench-head">
-          <view>
-            <text class="section-title">今日工作台</text>
-            <text class="section-subtitle">{{ authStore.userInfo?.deptName || authStore.userInfo?.tenantName || '移动端' }}</text>
-          </view>
-          <button class="section-link" @click="openMenuSheet">
-            <text>全部应用</text>
-            <view class="icon-mask arrow-icon" :style="iconMask('/static/icons/ai-icon/arrow-right.svg', '#2563eb')" />
-          </button>
-        </view>
-        <view class="workbench-grid">
-          <view
-            v-for="item in workbenchItems"
-            :key="item.key"
-            class="workbench-card"
-            :class="item.tone"
-            @click="handleWorkbench(item)"
-          >
-            <view class="workbench-icon">
-              <AiIcon :icon="item.icon" :color="item.color" size="md" />
-            </view>
-            <view class="workbench-copy">
-              <text class="workbench-title">{{ item.label }}</text>
-              <text class="workbench-desc">{{ item.desc }}</text>
-            </view>
-            <text v-if="item.badge" class="workbench-badge">{{ item.badge }}</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="feed-section animate-in delay-4">
+      <view class="feed-section">
         <view class="section-head">
           <text class="section-title">最新提醒</text>
           <button class="section-link" @click="goMessages">
@@ -159,49 +140,39 @@
         </button>
       </view>
 
-      <view class="menu-browser">
-        <scroll-view class="menu-group-pane" scroll-y :show-scrollbar="false">
-          <view
-            v-for="group in filteredMenuGroups"
-            :key="group.key"
-            class="menu-group-item"
-            :class="{ active: group.key === activeMenuGroupKey }"
-            @click="selectMenuGroup(group.key)"
-          >
-            <text class="menu-group-name">{{ group.label }}</text>
-          </view>
-        </scroll-view>
-
-        <scroll-view class="menu-list-pane" scroll-y :show-scrollbar="false">
-          <view class="menu-list-head">
-            <text class="menu-list-title">{{ activeMenuGroup.label }}</text>
-          </view>
-
-          <view v-if="activeMenuGroup.items.length" class="menu-list-grid">
-            <view
-              v-for="item in activeMenuGroup.items"
-              :key="item.key"
-              class="menu-list-card"
-              @click="openMenuEntry(item)"
-            >
-              <view class="menu-list-icon" :style="menuIconTileStyle(item)">
-                <AiIcon :icon="item.icon" :color="item.color" size="lg" />
-              </view>
-              <view class="menu-list-copy">
-                <text class="menu-list-name">{{ item.label }}</text>
-              </view>
+      <scroll-view class="menu-browser" scroll-y :show-scrollbar="false">
+        <view v-if="filteredMenuGroups.length" class="menu-module-list">
+          <view v-for="group in filteredMenuGroups" :key="group.key" class="menu-module">
+            <view class="menu-module-head">
+              <text class="menu-module-title">{{ group.label }}</text>
+            </view>
+            <view class="menu-list-grid">
+              <button
+                v-for="item in group.items"
+                :key="item.key"
+                class="menu-list-card"
+                @click="openMenuEntry(item)"
+              >
+                <view class="menu-list-icon">
+                  <AiIcon :icon="item.icon" :color="item.color" size="md" />
+                </view>
+                <view class="menu-list-copy">
+                  <text class="menu-list-name">{{ item.label }}</text>
+                  <text class="menu-list-desc">打开功能</text>
+                </view>
+                <AiIcon icon="/static/icons/ai-icon/chevron-right.svg" color="#94a3b8" size="sm" />
+              </button>
             </view>
           </view>
-
-          <view v-else class="menu-empty">
-            <view class="menu-empty-icon">
-              <AiIcon icon="/static/icons/ai-icon/inbox.svg" color="#94a3b8" size="lg" />
-            </view>
-            <text class="menu-empty-title">{{ menuSearchKeyword ? '暂无匹配' : '暂无菜单' }}</text>
-            <text class="menu-empty-desc">{{ menuSearchKeyword ? '换个关键词再试试' : '该模块下还没有可访问的 H5 页面' }}</text>
+        </view>
+        <view v-else class="menu-empty">
+          <view class="menu-empty-icon">
+            <AiIcon icon="/static/icons/ai-icon/inbox.svg" color="#94a3b8" size="lg" />
           </view>
-        </scroll-view>
-      </view>
+          <text class="menu-empty-title">{{ menuSearchKeyword ? '暂无匹配' : '暂无菜单' }}</text>
+          <text class="menu-empty-desc">{{ menuSearchKeyword ? '换个关键词再试试' : '当前还没有可用的应用菜单' }}</text>
+        </view>
+      </scroll-view>
     </AiPopupSheet>
 
     <AiTabBar active="home" />
@@ -209,7 +180,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AiAuthImage from '@/components/AiAuthImage.vue'
 import AiIcon from '@/components/AiIcon.vue'
@@ -224,12 +195,10 @@ import { toast } from '@/utils/notify'
 
 const authStore = useAuthStore()
 
-const userClientLabel = (import.meta.env.VITE_USER_CLIENT || 'app').toUpperCase()
-const lastSyncAt = ref('')
 const unreadCount = ref(0)
+const todoCount = ref(0)
 const latestMessages = ref([])
 const menuSheetVisible = ref(false)
-const activeMenuGroupKey = ref('')
 const menuSearchKeyword = ref('')
 
 const rawAvatarUrl = computed(() => authStore.userInfo?.avatar || '')
@@ -317,89 +286,7 @@ const filteredMenuGroups = computed(() => {
     })
     .filter(group => group.items.length)
 })
-const activeMenuGroup = computed(() => {
-  return filteredMenuGroups.value.find(group => group.key === activeMenuGroupKey.value) || filteredMenuGroups.value[0] || {
-    key: 'empty',
-    label: '全部应用',
-    items: [],
-  }
-})
-const backendMenuCount = computed(() => flattenMenus(authStore.menus).length)
-const permissionCount = computed(() => Array.isArray(authStore.permissions) ? authStore.permissions.length : 0)
-const syncStatusText = computed(() => backendMenuCount.value ? '已接入' : '待接入')
-const lastSyncText = computed(() => lastSyncAt.value || '未同步')
-const todoBadgeText = computed(() => unreadCount.value > 0 ? `${unreadCount.value}` : '')
-const workbenchItems = computed(() => [
-  {
-    key: 'todo',
-    label: '流程待办',
-    desc: '审批任务',
-    icon: '/static/icons/ai-icon/check-square.svg',
-    color: '#0f766e',
-    tone: 'tone-teal',
-  },
-  {
-    key: 'messages',
-    label: '消息中心',
-    desc: unreadCount.value ? '有未读提醒' : '暂无未读',
-    icon: '/static/icons/ai-icon/bell.svg',
-    color: '#2563eb',
-    tone: 'tone-blue',
-    badge: todoBadgeText.value,
-  },
-  {
-    key: 'apps',
-    label: '全部应用',
-    desc: `${backendMenuCount.value || 0} 个入口`,
-    icon: '/static/icons/ai-icon/grid.svg',
-    color: '#7c3aed',
-    tone: 'tone-purple',
-  },
-  {
-    key: 'profile',
-    label: '资料维护',
-    desc: authStore.userInfo?.phone ? '信息完整' : '补全账号',
-    icon: '/static/icons/ai-icon/user.svg',
-    color: '#d97706',
-    tone: 'tone-amber',
-  },
-])
-const fallbackMessages = computed(() => [
-  {
-    id: 'fallback-system',
-    title: '系统更新',
-    desc: 'Forge H5 模板已准备好登录、鉴权和用户端基础页面。',
-    time: '刚刚',
-    icon: '/static/icons/ai-icon/activity.svg',
-    color: '#3b82f6',
-    bgClass: 'bg-blue',
-    unread: true,
-  },
-  {
-    id: 'fallback-login',
-    title: '登录成功',
-    desc: `${authStore.displayName} 已通过 ${userClientLabel} 客户端完成安全登录。`,
-    time: '2小时前',
-    icon: '/static/icons/ai-icon/credit-card.svg',
-    color: '#10b981',
-    bgClass: 'bg-emerald',
-    unread: false,
-  },
-  {
-    id: 'fallback-welcome',
-    title: '欢迎使用 Forge',
-    desc: '这里可以继续接入订单、权益、消息、服务等用户端 H5 功能。',
-    time: '1天前',
-    icon: '/static/icons/ai-icon/message-square.svg',
-    color: '#8b5cf6',
-    bgClass: 'bg-purple',
-    unread: false,
-  },
-])
-
-const messages = computed(() => {
-  return latestMessages.value.length ? latestMessages.value.slice(0, 2) : fallbackMessages.value.slice(0, 2)
-})
+const messages = computed(() => latestMessages.value.slice(0, 2))
 
 function flattenMenus(menus = []) {
   const result = []
@@ -413,7 +300,9 @@ function flattenMenus(menus = []) {
           walk(children)
           return
         }
-        result.push(normalizeMenuEntry(menu, result.length))
+        if (isNavigableMenu(menu)) {
+          result.push(normalizeMenuEntry(menu, result.length))
+        }
       })
   }
 
@@ -456,7 +345,7 @@ function buildMenuGroups(menus = []) {
     groups.push({
       key: 'template',
       label: '模板',
-      items: [componentDemoItem, ...fallbackMenuItems],
+      items: fallbackMenuItems,
     })
   }
 
@@ -494,7 +383,19 @@ function isVisibleMenu(menu) {
 }
 
 function isNavigableMenu(menu) {
-  return !!(menu?.path || menu?.component || menu?.isExternal === 1)
+  return Boolean(String(menu?.component || menu?.path || '').trim())
+}
+
+function isRegisteredH5Route(path) {
+  const normalized = String(path || '').split('?')[0].replace(/^\//, '')
+  return [
+    'pages/index/index',
+    'pages/message/index',
+    'pages/todo',
+    'pages/mine/index',
+    'pages/demo/loading/index',
+    'pages/app-entry',
+  ].includes(normalized)
 }
 
 function normalizeMenuEntry(menu, index = 0) {
@@ -519,12 +420,6 @@ function normalizeMenuIcon(icon, fallbackIcon) {
 function normalizeSearchText(value) {
   return String(value || '').trim().toLowerCase()
 }
-
-watch(filteredMenuGroups, (groups) => {
-  if (!groups.some(group => group.key === activeMenuGroupKey.value)) {
-    activeMenuGroupKey.value = groups[0]?.key || ''
-  }
-}, { immediate: true })
 
 onShow(async () => {
   hideNativeTabBar()
@@ -554,26 +449,6 @@ function iconMask(icon, color) {
   }
 }
 
-function menuIconTileStyle(item) {
-  const color = item?.color || '#2563eb'
-  return {
-    background: `linear-gradient(135deg, ${hexToRgba(color, 0.16)}, ${hexToRgba(color, 0.07)})`,
-    borderColor: hexToRgba(color, 0.18),
-    boxShadow: `0 8rpx 18rpx ${hexToRgba(color, 0.08)}`,
-  }
-}
-
-function hexToRgba(hex, alpha = 1) {
-  const value = String(hex || '').replace('#', '').trim()
-  if (!/^[\da-f]{6}$/i.test(value)) {
-    return `rgba(37, 99, 235, ${alpha})`
-  }
-  const r = Number.parseInt(value.slice(0, 2), 16)
-  const g = Number.parseInt(value.slice(2, 4), 16)
-  const b = Number.parseInt(value.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
 function goMine() {
   uni.switchTab({ url: '/pages/mine/index' })
 }
@@ -583,17 +458,7 @@ function goMessages() {
 }
 
 function goTodo() {
-  uni.navigateTo({ url: '/pages/todo' })
-}
-
-function handleWorkbench(item) {
-  const actionMap = {
-    todo: goTodo,
-    messages: goMessages,
-    apps: openMenuSheet,
-    profile: goMine,
-  }
-  actionMap[item.key]?.()
+  uni.switchTab({ url: '/pages/todo' })
 }
 
 function handleShortcut(item) {
@@ -601,12 +466,12 @@ function handleShortcut(item) {
     openMenuSheet()
     return
   }
-  if (item.key === 'component-demo') {
-    uni.navigateTo({ url: '/pages/demo/loading/index' })
-    return
-  }
   if (item.key === 'account') {
     goMine()
+    return
+  }
+  if (item.key === 'component-demo') {
+    uni.navigateTo({ url: '/pages/demo/loading/index' })
     return
   }
   if (item.fromBackend) {
@@ -618,18 +483,11 @@ function handleShortcut(item) {
 
 function openMenuSheet() {
   menuSearchKeyword.value = ''
-  if (!filteredMenuGroups.value.some(group => group.key === activeMenuGroupKey.value)) {
-    activeMenuGroupKey.value = filteredMenuGroups.value[0]?.key || ''
-  }
   menuSheetVisible.value = true
 }
 
 function clearMenuSearch() {
   menuSearchKeyword.value = ''
-}
-
-function selectMenuGroup(key) {
-  activeMenuGroupKey.value = key
 }
 
 function openMenuEntry(item) {
@@ -642,11 +500,16 @@ function openMenuEntry(item) {
 
 function openBackendMenu(item) {
   const path = item.component || item.path
+  if (String(path || '').split('?')[0] === '/pages/todo') {
+    uni.switchTab({ url: '/pages/todo' })
+    return
+  }
   if (path && path.startsWith('/pages/')) {
-    uni.navigateTo({
-      url: path,
-      fail: () => toast(`${item.label}页面未注册`, { type: 'warning' }),
-    })
+    if (isRegisteredH5Route(path)) {
+      uni.navigateTo({ url: path })
+      return
+    }
+    uni.navigateTo({ url: `/pages/app-entry?title=${encodeURIComponent(item.label)}&path=${encodeURIComponent(path)}` })
     return
   }
   toast(`${item.label}页面待接入`, { type: 'info' })
@@ -666,14 +529,31 @@ async function refreshWorkspace(options = {}) {
       authStore.fetchUserInfo(),
       authStore.fetchAccessSnapshot(),
       fetchMessageSummary(),
+      fetchTodoSummary(),
     ])
-    lastSyncAt.value = formatCurrentTime()
     if (!options.silent) {
       toast('已同步', { type: 'success' })
     }
   }
   catch (error) {
     console.error('刷新首页信息失败:', error)
+  }
+}
+
+async function fetchTodoSummary() {
+  const user = authStore.userInfo || {}
+  const userId = user.id || user.userId || user.user_id
+  if (!userId) {
+    todoCount.value = 0
+    return
+  }
+  try {
+    const res = await api.getTodoTasks({ pageNum: 1, pageSize: 1, userId })
+    todoCount.value = Number(res?.data?.total || 0)
+  }
+  catch (error) {
+    todoCount.value = 0
+    console.error('加载待办摘要失败:', error)
   }
 }
 
@@ -769,12 +649,6 @@ function parseMessageDate(value) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function formatCurrentTime() {
-  const now = new Date()
-  const hour = `${now.getHours()}`.padStart(2, '0')
-  const minute = `${now.getMinutes()}`.padStart(2, '0')
-  return `${hour}:${minute}`
-}
 </script>
 
 <style lang="scss" scoped>
@@ -965,118 +839,6 @@ function formatCurrentTime() {
   line-height: 1;
 }
 
-.feature-card {
-  position: relative;
-  overflow: hidden;
-  border: 1rpx solid rgba(147, 197, 253, 0.32);
-  border-radius: 30rpx;
-  background:
-    radial-gradient(circle at 12% -12%, rgba(191, 219, 254, 0.5), transparent 36%),
-    radial-gradient(circle at 96% 18%, rgba(125, 211, 252, 0.28), transparent 38%),
-    linear-gradient(135deg, #1d4ed8 0%, #2563eb 52%, #0f766e 100%);
-  box-shadow: 0 18rpx 42rpx rgba(37, 99, 235, 0.22);
-  backdrop-filter: blur(22rpx);
-}
-
-.feature-inner {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-  padding: 24rpx;
-  box-sizing: border-box;
-}
-
-.feature-label {
-  color: #ffffff;
-  font-size: 28rpx;
-  font-weight: 950;
-}
-
-.feature-title-block {
-  min-width: 0;
-  flex: 1;
-}
-
-.feature-refresh {
-  display: flex;
-  width: 58rpx;
-  height: 58rpx;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0;
-  border: 1rpx solid rgba(255, 255, 255, 0.34);
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.08);
-}
-
-.feature-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: center;
-  gap: 10rpx;
-}
-
-.metric-item {
-  min-width: 0;
-  padding: 14rpx 8rpx;
-  border-radius: 20rpx;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.18);
-}
-
-.metric-value,
-.metric-label {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.metric-value {
-  color: #ffffff;
-  font-size: 27rpx;
-  font-weight: 950;
-  line-height: 1.05;
-}
-
-.metric-label {
-  margin-top: 8rpx;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 20rpx;
-  font-weight: 750;
-}
-
-.metric-status .metric-value {
-  color: #bbf7d0;
-  font-size: 24rpx;
-}
-
-.feature-desc {
-  display: block;
-  margin-top: 6rpx;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 22rpx;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workbench-panel {
-  padding: 26rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.86);
-  border-radius: 34rpx;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.045);
-  backdrop-filter: blur(24rpx);
-}
-
 .workbench-head {
   display: flex;
   align-items: center;
@@ -1095,109 +857,6 @@ function formatCurrentTime() {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.workbench-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
-}
-
-.workbench-card {
-  position: relative;
-  display: flex;
-  min-height: 118rpx;
-  align-items: center;
-  gap: 18rpx;
-  overflow: hidden;
-  padding: 20rpx;
-  border: 1rpx solid rgba(226, 232, 240, 0.78);
-  border-radius: 26rpx;
-  background: #ffffff;
-  box-sizing: border-box;
-}
-
-.workbench-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.72;
-}
-
-.tone-blue::before {
-  background: linear-gradient(135deg, rgba(219, 234, 254, 0.95), transparent 72%);
-}
-
-.tone-teal::before {
-  background: linear-gradient(135deg, rgba(204, 251, 241, 0.95), transparent 72%);
-}
-
-.tone-purple::before {
-  background: linear-gradient(135deg, rgba(243, 232, 255, 0.95), transparent 72%);
-}
-
-.tone-amber::before {
-  background: linear-gradient(135deg, rgba(254, 243, 199, 0.95), transparent 72%);
-}
-
-.workbench-icon {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 62rpx;
-  height: 62rpx;
-  flex: 0 0 62rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20rpx;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.workbench-copy {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  flex: 1;
-}
-
-.workbench-title,
-.workbench-desc {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workbench-title {
-  color: #1e293b;
-  font-size: 27rpx;
-  font-weight: 900;
-}
-
-.workbench-desc {
-  margin-top: 8rpx;
-  color: #64748b;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.workbench-badge {
-  position: absolute;
-  top: 12rpx;
-  right: 12rpx;
-  z-index: 2;
-  min-width: 30rpx;
-  height: 30rpx;
-  padding: 0 8rpx;
-  border: 3rpx solid #ffffff;
-  border-radius: 999rpx;
-  color: #ffffff;
-  font-size: 18rpx;
-  font-weight: 950;
-  line-height: 24rpx;
-  text-align: center;
-  background: #ef4444;
-  box-sizing: border-box;
 }
 
 .shortcut-grid {
@@ -1685,6 +1344,289 @@ function formatCurrentTime() {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* 首页保留工作信息，不保留与任务无关的视觉特效。 */
+.page-glow,
+.grid-layer {
+  display: none;
+}
+
+.home-page,
+.home-page::before {
+  background: var(--page-bg);
+}
+
+.home-content {
+  gap: 24rpx;
+  padding: calc(28rpx + env(safe-area-inset-top)) 24rpx 180rpx;
+}
+
+.workbench-panel,
+.feed-section,
+.message-card,
+.shortcut-item {
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
+.shortcut-icon {
+  background: #e8f3ff !important;
+}
+
+.workbench-panel {
+  overflow: hidden;
+  padding: 0;
+  border-radius: 22rpx;
+  background: #fff;
+}
+
+.attention-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 20rpx 14rpx;
+}
+
+.attention-title-wrap,
+.attention-card-top,
+.attention-count-line,
+.attention-link {
+  display: flex;
+  align-items: center;
+}
+
+.attention-title-wrap {
+  gap: 10rpx;
+}
+
+.attention-title-mark {
+  width: 6rpx;
+  height: 26rpx;
+  border-radius: 6rpx;
+  background: #2563eb;
+}
+
+.attention-title {
+  color: var(--text-strong);
+  font-size: 29rpx;
+  font-weight: 750;
+}
+
+.attention-refresh {
+  display: flex;
+  width: 48rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 1rpx solid var(--border-color);
+  border-radius: 14rpx;
+  background: #fff;
+}
+
+.attention-refresh::after,
+.attention-card::after {
+  border: 0;
+}
+
+.attention-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  padding: 0 20rpx 20rpx;
+}
+
+.attention-card {
+  display: flex;
+  min-width: 0;
+  min-height: 176rpx;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0;
+  padding: 16rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 16rpx;
+  text-align: left;
+  background: #f9fbff;
+  box-sizing: border-box;
+}
+
+.attention-card:active {
+  border-color: #b9d5ff;
+  background: #f2f7ff;
+}
+
+.attention-card-top {
+  gap: 8rpx;
+}
+
+.attention-icon {
+  display: flex;
+  width: 42rpx;
+  height: 42rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  background: #eaf3ff;
+}
+
+.attention-label {
+  color: #4e5969;
+  font-size: 22rpx;
+  font-weight: 650;
+}
+
+.menu-search-bar {
+  height: 68rpx;
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+  padding: 0 16rpx;
+  border-color: var(--border-color);
+  border-radius: 12rpx;
+  background: #fff;
+  box-shadow: none;
+}
+
+.menu-search-input {
+  height: 66rpx;
+  font-size: 25rpx;
+  font-weight: 500;
+}
+
+.menu-browser {
+  display: block;
+  height: calc(96vh - 244rpx - env(safe-area-inset-bottom));
+  min-height: 620rpx;
+}
+
+.menu-module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding-bottom: 20rpx;
+}
+
+.menu-module-head {
+  display: flex;
+  align-items: center;
+  min-height: 36rpx;
+  padding-left: 10rpx;
+  border-left: 6rpx solid #2563eb;
+}
+
+.menu-module-title {
+  color: var(--text-strong);
+  font-size: 27rpx;
+  font-weight: 750;
+}
+
+.menu-list-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  padding: 14rpx 0 0;
+}
+
+.menu-list-card {
+  width: 100%;
+  min-height: 112rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12rpx;
+  padding: 16rpx;
+  border-color: var(--border-color);
+  border-radius: 16rpx;
+  text-align: left;
+  background: #fff;
+  box-shadow: none;
+}
+
+.menu-list-card::after {
+  border: 0;
+}
+
+.menu-list-card:active {
+  border-color: #b9d5ff;
+  background: #f7faff;
+}
+
+.menu-list-icon {
+  width: 52rpx;
+  height: 52rpx;
+  flex-basis: 52rpx;
+  border: 0;
+  border-radius: 14rpx;
+  background: #eaf3ff;
+}
+
+.menu-list-copy {
+  min-width: 0;
+  flex: 1;
+  width: auto;
+}
+
+.menu-list-name,
+.menu-list-desc {
+  display: block;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-list-name {
+  color: var(--text-strong);
+  font-size: 24rpx;
+  font-weight: 650;
+}
+
+.menu-list-desc {
+  margin-top: 5rpx;
+  color: var(--text-muted);
+  font-size: 20rpx;
+}
+
+.attention-count-line {
+  gap: 5rpx;
+  margin-top: 12rpx;
+}
+
+.attention-count {
+  color: var(--text-strong);
+  font-size: 48rpx;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.attention-unit {
+  margin-top: 12rpx;
+  color: #86909c;
+  font-size: 20rpx;
+}
+
+.attention-desc {
+  display: block;
+  margin-top: 8rpx;
+  color: var(--text-muted);
+  font-size: 20rpx;
+  font-weight: 500;
+}
+
+.attention-link {
+  display: flex;
+  gap: 4rpx;
+  margin-top: auto;
+  padding-top: 12rpx;
+  color: #2563eb;
+  font-size: 20rpx;
+  font-weight: 650;
+}
+
+.animate-in {
+  animation: none;
 }
 
 @keyframes floatGlow {

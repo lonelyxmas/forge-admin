@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicy;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicyResolver;
+import com.mdframe.forge.plugin.system.auth.LoginPasswordEncryptionPolicy;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.mapper.*;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -63,6 +64,7 @@ public class SystemAuthServiceImpl implements IAuthService {
     private final IClientService clientService;
     private final ICacheService cacheService;
     private final LoginCaptchaPolicyResolver captchaPolicyResolver;
+    private final LoginPasswordEncryptionPolicy passwordEncryptionPolicy;
     private final SysTenantMapper tenantMapper;
 
     // ==================== 核心认证方法 ====================
@@ -283,7 +285,11 @@ public class SystemAuthServiceImpl implements IAuthService {
 
     private LoginResult issueTokenForUser(LoginUser loginUser, SysClient client, String userClient) {
         String resolvedClient = StrUtil.blankToDefault(userClient, DEFAULT_USER_CLIENT);
-        handleSameAccountLogin(loginUser.getUserId(), client, resolvedClient);
+        if (loginUser.getTenantId() == null) {
+            throw new IllegalStateException("登录用户缺少租户信息");
+        }
+        executeWithRequiredTenant(loginUser.getTenantId(),
+                () -> handleSameAccountLogin(loginUser.getUserId(), client, resolvedClient));
         applyClientTokenConfig(client);
 
         loginUser.setLoginTime(System.currentTimeMillis());
@@ -489,6 +495,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         SysTenant tenant = selectLoginTenantConfig(tenantId);
 
         return LoginConfigResult.builder()
+                .enablePasswordEncryption(passwordEncryptionPolicy.isEnabled(config))
                 .enableCaptcha(captchaPolicy.getEnableCaptcha())
                 .captchaType(captchaPolicy.getCaptchaType())
                 .userClient(captchaPolicy.getUserClient())
@@ -737,6 +744,20 @@ public class SystemAuthServiceImpl implements IAuthService {
             return;
         }
         tokenValues.forEach(onlineUserService::kickoutUser);
+    }
+
+    private void executeWithRequiredTenant(Long tenantId, Runnable action) {
+        Boolean previousIgnore = TenantContextHolder.getIgnoreValue();
+        try {
+            TenantContextHolder.setIgnore(false);
+            TenantContextHolder.executeWithTenant(tenantId, action);
+        } finally {
+            if (previousIgnore == null) {
+                TenantContextHolder.clearIgnore();
+            } else {
+                TenantContextHolder.setIgnore(previousIgnore);
+            }
+        }
     }
 
     @Override

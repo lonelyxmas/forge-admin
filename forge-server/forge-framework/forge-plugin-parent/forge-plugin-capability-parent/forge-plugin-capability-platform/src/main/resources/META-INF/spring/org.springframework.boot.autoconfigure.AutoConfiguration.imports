@@ -1,0 +1,3 @@
+com.mdframe.forge.plugin.capability.controlplane.config.CapabilityControlPlaneAutoConfiguration
+com.mdframe.forge.plugin.capability.identity.config.CapabilityIdentityAutoConfiguration
+com.mdframe.forge.plugin.capability.opengateway.config.OpenGatewayAutoConfiguration

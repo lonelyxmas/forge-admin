@@ -78,6 +78,8 @@
     "@unocss/preset-rem-to-px": "^66.6.8",
     "@unocss/preset-uno": "^66.6.8",
     "@vue/runtime-core": "^3.4.21",
+    "glob": "^11.0.3",
+    "sass": "^1.93.2",
     "unocss": "^66.6.8",
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.0.0",

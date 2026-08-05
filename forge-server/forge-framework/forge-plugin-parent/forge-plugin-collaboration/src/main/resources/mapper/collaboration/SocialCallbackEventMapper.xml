@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.collaboration.mapper.SocialCallbackEventMapper">
+
+    <resultMap id="SocialCallbackEventResult" type="com.mdframe.forge.plugin.collaboration.domain.entity.SocialCallbackEvent">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="connectionId" column="connection_id"/>
+        <result property="appConfigId" column="app_config_id"/>
+        <result property="eventId" column="event_id"/>
+        <result property="dedupHash" column="dedup_hash"/>
+        <result property="eventType" column="event_type"/>
+        <result property="eventTime" column="event_time"/>
+        <result property="signatureStatus" column="signature_status"/>
+        <result property="payloadCipher" column="payload_cipher"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="nextRetryTime" column="next_retry_time"/>
+        <result property="errorCode" column="error_code"/>
+        <result property="errorSummary" column="error_summary"/>
+        <result property="claimedBy" column="claimed_by"/>
+        <result property="claimTime" column="claim_time"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <!-- 批量领取待处理事件：PENDING 或到期重试的 FAILED，置为 PROCESSING 并绑定 Worker -->
+    <update id="claimPendingEvents">
+        UPDATE sys_social_callback_event
+        SET process_status = 'PROCESSING',
+            claimed_by = #{workerId},
+            claim_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND (process_status = 'PENDING'
+               OR (process_status = 'FAILED' AND next_retry_time IS NOT NULL AND next_retry_time &lt;= NOW()))
+        ORDER BY id
+        LIMIT #{batchSize}
+    </update>
+
+    <!-- 查询指定 Worker 当前已领取的事件 -->
+    <select id="selectClaimedEvents" resultMap="SocialCallbackEventResult">
+        SELECT id, tenant_id, connection_id, app_config_id, event_id, dedup_hash,
+               event_type, event_time, signature_status, payload_cipher, process_status,
+               retry_count, next_retry_time, error_code, error_summary,
+               claimed_by, claim_time, create_time, update_time
+        FROM sys_social_callback_event
+        WHERE tenant_id = #{tenantId}
+          AND process_status = 'PROCESSING'
+          AND claimed_by = #{workerId}
+        ORDER BY id
+    </select>
+
+    <!-- CAS 标记处理成功：仅允许当前 Worker 持有的 PROCESSING 记录 -->
+    <update id="markProcessed">
+        UPDATE sys_social_callback_event
+        SET process_status = 'PROCESSED',
+            error_code = NULL,
+            error_summary = NULL,
+            claimed_by = NULL,
+            claim_time = NULL
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND process_status = 'PROCESSING'
+          AND claimed_by = #{workerId}
+    </update>
+
+    <!-- CAS 标记处理失败：指数退避重试，超过上限置为 DISCARDED。
+         MySQL SET 子句从左到右生效，retry_count 必须最后自增，
+         前面的 CASE 判断统一使用 retry_count + 1 表达“本次失败后的次数”。 -->
+    <update id="markFailed">
+        UPDATE sys_social_callback_event
+        SET process_status = CASE WHEN retry_count + 1 &gt;= #{maxRetry} THEN 'DISCARDED' ELSE 'FAILED' END,
+            next_retry_time = CASE WHEN retry_count + 1 &gt;= #{maxRetry} THEN NULL
+                                   ELSE DATE_ADD(NOW(), INTERVAL LEAST(POW(2, retry_count + 1), 60) MINUTE) END,
+            error_code = #{errorCode},
+            error_summary = #{errorSummary},
+            claimed_by = NULL,
+            claim_time = NULL,
+            retry_count = retry_count + 1
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND process_status = 'PROCESSING'
+          AND claimed_by = #{workerId}
+    </update>
+
+    <!-- 回调事件元数据分页：不返回解密正文密文，供运维查询 -->
+    <select id="selectEventPage" resultType="com.mdframe.forge.plugin.collaboration.domain.entity.SocialCallbackEvent">
+        SELECT id, tenant_id, connection_id, app_config_id, event_id, event_type, event_time,
+               signature_status, process_status, retry_count, next_retry_time,
+               error_code, error_summary, create_time, update_time
+        FROM sys_social_callback_event
+        WHERE tenant_id = #{tenantId}
+        <if test="connectionId != null">
+            AND connection_id = #{connectionId}
+        </if>
+        <if test="eventType != null and eventType != ''">
+            AND event_type = #{eventType}
+        </if>
+        <if test="processStatus != null and processStatus != ''">
+            AND process_status = #{processStatus}
+        </if>
+        ORDER BY id DESC
+    </select>
+</mapper>

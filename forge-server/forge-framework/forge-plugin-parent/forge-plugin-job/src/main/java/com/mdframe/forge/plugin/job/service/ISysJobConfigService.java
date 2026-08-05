@@ -61,4 +61,9 @@ public interface ISysJobConfigService extends IService<SysJobConfig> {
      * 更新Cron表达式
      */
     void updateCron(Long id, String cronExpression);
+
+    /**
+     * 按任务名与分组查询未删除任务，供外部模块维护自管理的定时任务
+     */
+    SysJobConfig findByJobKey(String jobName, String jobGroup);
 }

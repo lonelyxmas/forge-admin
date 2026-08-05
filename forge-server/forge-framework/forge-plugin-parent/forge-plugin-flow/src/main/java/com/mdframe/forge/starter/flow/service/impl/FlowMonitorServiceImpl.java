@@ -118,11 +118,9 @@ public class FlowMonitorServiceImpl implements FlowMonitorService {
                 .count();
         result.put("candidateCount", candidateCount);
         
-        // 超时任务数量
-        long timeoutCount = taskService.createTaskQuery()
-                .active()
-                .count(); // TODO: 根据实际超时配置计算
-        result.put("timeoutCount", timeoutCount);
+        // 尚未接入节点超时配置计算，不能把全部活动任务误报为超时任务。
+        result.put("timeoutCount", null);
+        result.put("timeoutMetricsAvailable", false);
         
         return result;
     }
@@ -319,84 +317,41 @@ public class FlowMonitorServiceImpl implements FlowMonitorService {
 
     @Override
     public Map<String, Object> getTaskExecutionStats(String processDefinitionKey, String startTime, String endTime) {
-        Map<String, Object> result = new HashMap<>();
-        
-        // TODO: 实现任务执行统计
-        result.put("totalTasks", 0);
-        result.put("avgDuration", 0);
-        result.put("maxDuration", 0);
-        result.put("minDuration", 0);
-        
-        return result;
+        throw monitorCapabilityUnavailable("任务执行统计");
     }
 
     @Override
     public List<Map<String, Object>> getTimeoutTasks(String processDefinitionKey) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        
-        // TODO: 根据超时配置查询超时任务
-        List<Task> tasks = taskService.createTaskQuery()
-                .processDefinitionKey(processDefinitionKey)
-                .active()
-                .list();
-        
-        for (Task task : tasks) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("id", task.getId());
-            item.put("name", task.getName());
-            item.put("assignee", task.getAssignee());
-            item.put("createTime", task.getCreateTime());
-            item.put("processInstanceId", task.getProcessInstanceId());
-            result.add(item);
-        }
-        
-        return result;
+        throw monitorCapabilityUnavailable("超时任务查询");
     }
 
     @Override
     public List<Map<String, Object>> getUpcomingTimeoutTasks(String processDefinitionKey, int advanceMinutes) {
-        // TODO: 实现即将超时任务查询
-        return new ArrayList<>();
+        throw monitorCapabilityUnavailable("即将超时任务查询");
     }
 
     @Override
     public Map<String, Object> getProcessEfficiencyAnalysis(String processDefinitionKey, String startTime, String endTime) {
-        Map<String, Object> result = new HashMap<>();
-        
-        // TODO: 实现流程效率分析
-        result.put("avgCompletionTime", 0);
-        result.put("avgTaskTime", 0);
-        result.put("completionRate", 0);
-        result.put("timeoutRate", 0);
-        
-        return result;
+        throw monitorCapabilityUnavailable("流程效率分析");
     }
 
     @Override
     public List<Map<String, Object>> getNodeDurationStats(String processDefinitionKey, String startTime, String endTime) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        
-        // TODO: 实现节点耗时统计
-        return result;
+        throw monitorCapabilityUnavailable("节点耗时统计");
     }
 
     @Override
     public List<Map<String, Object>> getApproverEfficiencyStats(String userId, String startTime, String endTime) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        
-        // TODO: 实现审批人效率统计
-        return result;
+        throw monitorCapabilityUnavailable("审批人效率统计");
     }
 
     @Override
     public Map<String, Object> getProcessBottleneckAnalysis(String processDefinitionKey) {
-        Map<String, Object> result = new HashMap<>();
-        
-        // TODO: 实现流程瓶颈分析
-        result.put("bottleneckNodes", new ArrayList<>());
-        result.put("suggestions", new ArrayList<>());
-        
-        return result;
+        throw monitorCapabilityUnavailable("流程瓶颈分析");
+    }
+
+    private BusinessException monitorCapabilityUnavailable(String capability) {
+        return new BusinessException(capability + "尚未实现，当前接口已关闭以避免返回伪造统计结果");
     }
 
     @Override

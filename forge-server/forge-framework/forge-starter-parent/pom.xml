@@ -33,7 +33,9 @@
         <module>forge-starter-api-config</module>
         <module>forge-starter-social</module>
         <module>forge-starter-idempotent</module>
+        <module>forge-starter-openapi-security</module>
         <module>forge-starter-outbound</module>
+        <module>forge-starter-collaboration</module>
     </modules>
     
 </project>

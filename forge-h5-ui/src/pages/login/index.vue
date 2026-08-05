@@ -6,7 +6,20 @@
     <view class="mesh-layer mesh-layer-b" />
     <view class="mesh-layer mesh-layer-c" />
 
-    <view class="page-shell">
+    <!-- 企微免登 pending 时全屏 loading，不展示登录表单 -->
+    <view v-if="wecomPending" class="page-shell wecom-loading-shell">
+      <view class="wecom-loading-content">
+        <image class="wecom-loading-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
+        <text class="wecom-loading-text">正在登录...</text>
+        <view class="wecom-loading-dots">
+          <view class="dot dot-1" />
+          <view class="dot dot-2" />
+          <view class="dot dot-3" />
+        </view>
+      </view>
+    </view>
+
+    <view v-else class="page-shell">
       <view class="brand-bar">
         <view class="brand-main">
           <view class="brand-mark">
@@ -21,16 +34,12 @@
       </view>
 
       <view class="login-panel">
-        <view class="sweep-light" />
-        <view class="inner-glow inner-glow-a" />
-        <view class="inner-glow inner-glow-b" />
-
         <view class="panel-head">
           <view class="panel-seal">
             <image class="panel-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
           </view>
           <text class="panel-title">{{ title }}</text>
-          <text class="panel-subtitle">安全登录入口</text>
+          <text class="panel-subtitle">使用您的企业账号登录</text>
         </view>
 
         <view class="form-stack">
@@ -93,10 +102,6 @@
           <text class="button-arrow">→</text>
         </button>
 
-        <view class="panel-links">
-          <text>忘记密码？</text>
-          <text class="link-primary">注册账号</text>
-        </view>
       </view>
 
       <view class="login-foot">
@@ -113,6 +118,7 @@ import { useAuthStore } from '@/store'
 import api from '@/api'
 import { resolveStaticUrl } from '@/utils/assets'
 import { notify, toast } from '@/utils/notify'
+import { getWeComAutoLoginPromise, isWeComAutoLoginPending } from '@/utils/wecom'
 
 function normalizeLoginError(error) {
   const rawMessage = error?.message || error?.error?.message || error?.error?.msg || '登录失败，请稍后重试'
@@ -130,6 +136,7 @@ export default {
       requestPrefix: import.meta.env.VITE_REQUEST_PREFIX || '/',
       redirect: '/pages/index/index',
       loading: false,
+      wecomPending: false,
       showPassword: false,
       captcha: {
         loading: false,
@@ -149,6 +156,28 @@ export default {
     if (authStore.isLogin) {
       this.goTarget()
       return
+    }
+    // 企微客户端内正处于免登流程时，等待其结果，避免闪现账号密码登录表单
+    if (isWeComAutoLoginPending()) {
+      this.wecomPending = true
+      this.loading = true
+      const pending = getWeComAutoLoginPromise()
+      if (pending) {
+        pending.then((result) => {
+          if (result?.status === 'logged-in' || authStore.isLogin) {
+            this.goTarget()
+            return
+          }
+          if (result?.status === 'redirecting') {
+            return
+          }
+          // 免登跳过或失败：回退到常规账号密码登录
+          this.wecomPending = false
+          this.loading = false
+          this.loadCaptcha()
+        })
+        return
+      }
     }
     this.loadCaptcha()
   },
@@ -865,6 +894,69 @@ export default {
   }
 }
 
+/* 登录页保持静态、清晰和轻量，专业感来自品牌与表单层级而非装饰动画。 */
+.noise-layer,
+.grid-layer,
+.mesh-layer,
+.sweep-light,
+.inner-glow,
+.captcha-lines,
+.captcha-hover {
+  display: none;
+}
+
+.login-page {
+  background: #f5f6f8;
+}
+
+.page-shell {
+  justify-content: center;
+}
+
+.brand-bar,
+.login-panel,
+.panel-seal,
+.field,
+.login-button,
+.login-foot {
+  animation: none;
+}
+
+.login-panel {
+  max-width: 680rpx;
+  padding: 52rpx 40rpx 44rpx;
+  border: 1rpx solid var(--border-color);
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 35, 41, 0.05);
+}
+
+.panel-seal,
+.brand-mark {
+  border-radius: 12rpx;
+  box-shadow: none;
+  background: #fff;
+}
+
+.field,
+.captcha-image {
+  border-color: var(--border-color);
+  border-radius: 10rpx;
+  background: #fff;
+  box-shadow: none;
+}
+
+.login-button {
+  border-radius: 10rpx;
+  background: var(--primary-color);
+  box-shadow: none;
+}
+
+.login-button::before,
+.button-arrow {
+  display: none;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -902,6 +994,69 @@ export default {
   }
   50% {
     opacity: 0.78;
+  }
+}
+
+/* ===== 企微免登 loading 遮罩 ===== */
+.wecom-loading-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+.wecom-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32rpx;
+}
+
+.wecom-loading-logo {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 24rpx;
+}
+
+.wecom-loading-text {
+  font-size: 32rpx;
+  color: #475569;
+  font-weight: 500;
+}
+
+.wecom-loading-dots {
+  display: flex;
+  gap: 16rpx;
+}
+
+.wecom-loading-dots .dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: dotBounce 1.2s infinite ease-in-out;
+}
+
+.wecom-loading-dots .dot-1 {
+  animation-delay: 0s;
+}
+
+.wecom-loading-dots .dot-2 {
+  animation-delay: 0.2s;
+}
+
+.wecom-loading-dots .dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 </style>

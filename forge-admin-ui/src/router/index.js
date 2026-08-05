@@ -116,6 +116,12 @@ export const manualRoutes = [
     meta: { title: '应用工作台', skipTab: true, preserveOnQuery: true },
   },
   {
+    name: 'BusinessProcessDesigner',
+    path: '/app-center/business-process/:processId',
+    component: () => import('@/views/app-center/business-process.[processId].vue'),
+    meta: { title: '业务流程设计', layout: 'empty', skipTab: true, preserveOnQuery: true },
+  },
+  {
     name: 'BusinessApplicationPreview',
     path: '/app-center/application/:applicationCode/preview',
     component: () => import('@/views/app-center/application-preview.[applicationCode].vue'),

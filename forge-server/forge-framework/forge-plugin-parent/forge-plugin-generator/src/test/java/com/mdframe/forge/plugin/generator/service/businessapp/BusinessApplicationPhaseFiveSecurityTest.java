@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.constant.BusinessApplicationPublishStep;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +20,7 @@ class BusinessApplicationPhaseFiveSecurityTest {
     @DisplayName("snapshot recursively removes sensitive keys before hashing")
     void snapshotRemovesSensitiveKeys() {
         BusinessApplicationSnapshotService service = new BusinessApplicationSnapshotService(
-                new ObjectMapper(), null, null, null, null, null, null, null);
+                new ObjectMapper(), null, null, null, null, null, null, null, null);
 
         BusinessApplicationSnapshotService.SnapshotBundle bundle = service.bundle(Map.of(
                 "application", Map.of("name", "demo", "clientSecret", "must-not-persist"),
@@ -37,7 +38,34 @@ class BusinessApplicationPhaseFiveSecurityTest {
     @Test
     @DisplayName("publish steps have one deterministic order")
     void deterministicPublishSteps() {
-        assertEquals(List.of("PRECHECK", "SNAPSHOT", "OBJECTS", "ENTRIES", "EXTENSIONS", "COMMIT"),
+        assertEquals(List.of("PRECHECK", "SNAPSHOT", "PROCESSES", "OBJECTS", "ENTRIES",
+                        "PAGE_MENUS", "EXTENSIONS", "COMMIT"),
                 BusinessApplicationPublishStep.ORDERED_STEPS);
+    }
+
+    @Test
+    @DisplayName("application snapshot stores structured immutable process versions")
+    void snapshotStoresPublishedProcessVersions() {
+        BusinessApplicationSnapshotService service = new BusinessApplicationSnapshotService(
+                new ObjectMapper(), null, null, null, null, null, null, null, null);
+        BusinessProcessSnapshot process = new BusinessProcessSnapshot(
+                "1900000000000001001",
+                "2900000000000001001",
+                "leave_submit",
+                2,
+                5,
+                "1.0",
+                "a".repeat(64),
+                Map.of("schemaVersion", "1.0", "processCode", "leave_submit"),
+                Map.of("flowModels", List.of(Map.of(
+                        "modelKey", "leave_approval", "deploymentId", "deployment-2"))));
+
+        BusinessApplicationSnapshotService.SnapshotBundle bundle
+                = service.finalizeProcesses("{}", List.of(process));
+
+        assertTrue(bundle.json().contains("publishedProcessVersions"));
+        assertTrue(bundle.json().contains("2900000000000001001"));
+        assertTrue(bundle.json().contains("deployment-2"));
+        assertTrue(bundle.snapshot().containsKey("runtimeActions"));
     }
 }

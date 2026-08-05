@@ -1,8 +1,13 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.mdframe.forge.plugin.generator.constant.BusinessExtensionStatus;
+import com.mdframe.forge.plugin.generator.businessprocess.schema.BusinessProcessSchema;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessSchemaValidator;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContext;
+import com.mdframe.forge.plugin.generator.businessprocess.validation.BusinessProcessValidationContextResolver;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessExtension;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessProcess;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessApplicationPublishDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
@@ -11,9 +16,12 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPubl
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessIssueVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationReadinessVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableFieldMappingVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectTableMappingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPermissionSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckItemVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPublishCheckVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -44,6 +52,9 @@ public class BusinessApplicationReadinessService {
     private final BusinessPermissionService permissionService;
     private final BusinessBindingMapper bindingMapper;
     private final BusinessApplicationPageDependencyInspector pageDependencyInspector;
+    private final BusinessObjectTableMappingService tableMappingService;
+    private final BusinessProcessSchemaValidator processSchemaValidator;
+    private final BusinessProcessValidationContextResolver processValidationContextResolver;
 
     public BusinessApplicationReadinessVO check(Long applicationId) {
         BusinessApplicationVO application = applicationService.publishContext(applicationId);
@@ -152,18 +163,68 @@ public class BusinessApplicationReadinessService {
             }
         }
 
+        checkProcesses(application, resolved, selection, issues);
+
         List<AiBusinessBinding> bindings = null;
         if (Boolean.TRUE.equals(selection.getIncludeAutomation())) {
             bindings = bindingMapper.selectByApplication(resolveTenantId(), applicationId);
-            boolean hasFlow = bindings.stream().anyMatch(binding -> Integer.valueOf(1).equals(binding.getStatus())
-                    && ("FLOW".equals(binding.getBindingType()) || "APPROVAL".equals(binding.getBindingType())));
-            if (!hasFlow) {
-                issues.add(issue("FLOW_OPTIONAL", WARN, "尚未绑定应用级流程",
-                        "流程不是发布必需项；需要审批或自动流转时可继续配置。",
+            if (selection.getProcessIds().isEmpty()) {
+                issues.add(issue("PROCESS_OPTIONAL", WARN, "尚未配置应用级业务流程",
+                        "业务流程不是发布必需项；需要审批或自动流转时可在业务流程画布中配置。",
                         "automation", "automation", "APPLICATION", applicationId, application.getApplicationCode()));
             }
         }
         return new EvaluationResult(buildReadiness(issues), permissionSummaries, bindings, objectContexts);
+    }
+
+    private void checkProcesses(
+            BusinessApplicationVO application,
+            BusinessApplicationAssetSelectionService.ResolvedSelection resolved,
+            BusinessApplicationAssetSelectionVO selection,
+            List<BusinessApplicationReadinessIssueVO> issues) {
+        if (!Boolean.TRUE.equals(selection.getIncludeAutomation())) {
+            return;
+        }
+        Set<Long> selectedIds = new HashSet<>(selection.getProcessIds());
+        for (AiBusinessProcess process : resolved.processes()) {
+            if (!selectedIds.contains(process.getId())) {
+                continue;
+            }
+            String processName = StringUtils.defaultIfBlank(
+                    process.getProcessName(), process.getProcessCode());
+            if (!Integer.valueOf(1).equals(process.getStatus())) {
+                issues.add(issue("PROCESS_DISABLED", BLOCK, "业务流程已停用",
+                        processName + " 当前处于停用状态。", "automation", "automation", "PROCESS",
+                        process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessSchema schema;
+            try {
+                schema = processSchemaValidator.normalize(process.getDraftSchemaJson());
+            } catch (IllegalArgumentException exception) {
+                issues.add(issue("PROCESS_SCHEMA_INVALID", BLOCK, "业务流程协议无效",
+                        processName + "：" + StringUtils.abbreviate(exception.getMessage(), 300),
+                        "automation", "automation", "PROCESS", process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessValidationContext context;
+            try {
+                context = processValidationContextResolver.resolve(
+                        resolveTenantId(), application.getId(), process.getProcessCode(), schema);
+            } catch (RuntimeException exception) {
+                issues.add(issue("PROCESS_DEPENDENCY_CHECK_FAILED", BLOCK, "业务流程依赖检查失败",
+                        processName + "：无法解析当前应用的受治理依赖。",
+                        "automation", "automation", "PROCESS", process.getId(), process.getProcessCode()));
+                continue;
+            }
+            BusinessProcessValidationVO validation = processSchemaValidator.validate(schema, context);
+            validation.getIssues().stream()
+                    .filter(item -> "ERROR".equals(item.getLevel()))
+                    .forEach(item -> issues.add(issue(
+                            "PROCESS_" + item.getCode(), BLOCK, "业务流程发布检查未通过",
+                            processName + "：" + item.getMessage(),
+                            "automation", "automation", "PROCESS", process.getId(), process.getProcessCode())));
+        }
     }
 
     private void checkObject(BusinessApplicationObjectVO object,
@@ -182,16 +243,7 @@ public class BusinessApplicationReadinessService {
                     objectName + " 尚未绑定可发布的物理表。", "objects", "objects", "OBJECT",
                     object.getObjectId(), object.getObjectCode()));
         }
-        String syncStatus = StringUtils.defaultString(object.getSyncStatus()).toUpperCase();
-        if (Set.of("OUT_OF_SYNC", "TABLE_MISSING", "CHECK_FAILED", "FAILED").contains(syncStatus)) {
-            issues.add(issue("OBJECT_DATABASE_OUT_OF_SYNC", BLOCK, "数据库结构未同步",
-                    objectName + " 的数据库映射状态为 " + syncStatus + "。",
-                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
-        } else if ("UNKNOWN".equals(syncStatus)) {
-            issues.add(issue("OBJECT_DATABASE_UNKNOWN", WARN, "数据库同步状态未知",
-                    objectName + " 尚无最近同步证据，请在发布前复核。",
-                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
-        }
+        checkDatabaseMapping(object, objectName, issues);
         BusinessObjectPublishService.ResolvedObjectCheck resolvedObjectCheck = objectPublishService
                 .publishCheckResolved(object.getObjectId(), permissionSummary);
         objectContexts.put(object.getObjectId(), resolvedObjectCheck.context());
@@ -220,6 +272,98 @@ public class BusinessApplicationReadinessService {
                             + " 个应用复用，本次发布不会因此阻断，请按需评估其他应用的影响。",
                     "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
         }
+    }
+
+    private void checkDatabaseMapping(
+            BusinessApplicationObjectVO object,
+            String objectName,
+            List<BusinessApplicationReadinessIssueVO> issues) {
+        BusinessObjectTableMappingVO mapping;
+        try {
+            mapping = tableMappingService.getTableMapping(object.getObjectId());
+        } catch (RuntimeException e) {
+            issues.add(issue("OBJECT_DATABASE_CHECK_FAILED", BLOCK, "数据库结构检查失败",
+                    objectName + "：" + safeMessage(e),
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        String syncStatus = StringUtils.defaultString(mapping.getSyncStatus(), "UNKNOWN").toUpperCase();
+        if ("IN_SYNC".equals(syncStatus)) {
+            return;
+        }
+        if ("UNKNOWN".equals(syncStatus)) {
+            issues.add(issue("OBJECT_DATABASE_UNKNOWN", WARN, "数据库同步状态未知",
+                    objectName + " 尚无可用的实时结构检查结果，请在发布前复核。",
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        if ("CHECK_FAILED".equals(syncStatus) || "FAILED".equals(syncStatus)) {
+            issues.add(issue("OBJECT_DATABASE_CHECK_FAILED", BLOCK, "数据库结构检查失败",
+                    objectName + "：" + StringUtils.defaultIfBlank(
+                            mapping.getLastSyncMessage(), "无法读取目标数据库结构"),
+                    "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+            return;
+        }
+        issues.add(issue("OBJECT_DATABASE_OUT_OF_SYNC", BLOCK, "数据库结构未同步",
+                databaseDiffMessage(objectName, mapping),
+                "objects", "objects", "OBJECT", object.getObjectId(), object.getObjectCode()));
+    }
+
+    private String databaseDiffMessage(String objectName, BusinessObjectTableMappingVO mapping) {
+        if ("TABLE_MISSING".equalsIgnoreCase(mapping.getSyncStatus())
+                || Boolean.FALSE.equals(mapping.getTableExists())) {
+            return objectName + "：目标表 "
+                    + StringUtils.defaultIfBlank(mapping.getTableName(), "未配置") + " 不存在。";
+        }
+        List<String> details = new ArrayList<>();
+        for (BusinessObjectTableFieldMappingVO field : safeFields(mapping)) {
+            if (!Boolean.TRUE.equals(field.getBlockingDifference())) {
+                continue;
+            }
+            if (details.size() >= 3) {
+                break;
+            }
+            String columnName = StringUtils.defaultIfBlank(field.getColumnName(), field.getFieldCode());
+            String fieldName = StringUtils.defaultIfBlank(field.getBusinessName(), columnName);
+            if ("MISSING_DATABASE_COLUMN".equals(field.getSyncStatus())) {
+                details.add("缺少数据库列 " + columnName);
+            } else if ("TYPE_MISMATCH".equals(field.getSyncStatus())) {
+                details.add(fieldName + "类型不一致（设计 " + configuredType(field)
+                        + "，数据库 " + StringUtils.defaultIfBlank(field.getDatabaseType(), "未知") + "）");
+            } else if ("UNMAPPED_DATABASE_COLUMN".equals(field.getSyncStatus())) {
+                details.add("存在未映射业务列 " + columnName
+                        + "（数据库为必填且无默认值，请添加字段映射或调整数据库默认值）");
+            }
+        }
+        int pendingDdlCount = mapping.getPendingDdlCount() == null ? 0 : mapping.getPendingDdlCount();
+        if (details.size() < 3 && pendingDdlCount > 0) {
+            details.add("待执行 " + pendingDdlCount + " 条数据库变更");
+        }
+        if (details.isEmpty()) {
+            details.add("实时检查发现未同步的数据库结构差异");
+        }
+        return objectName + "：" + String.join("；", details) + "。";
+    }
+
+    private List<BusinessObjectTableFieldMappingVO> safeFields(BusinessObjectTableMappingVO mapping) {
+        return mapping.getFields() == null ? List.of() : mapping.getFields();
+    }
+
+    private String configuredType(BusinessObjectTableFieldMappingVO field) {
+        String dataType = StringUtils.defaultIfBlank(field.getDataType(), "未知");
+        if (field.getLength() == null) {
+            return dataType;
+        }
+        if ("decimal".equalsIgnoreCase(dataType)) {
+            int precision = field.getPrecision() == null ? 2 : field.getPrecision();
+            return dataType + "(" + field.getLength() + "," + precision + ")";
+        }
+        return dataType + "(" + field.getLength() + ")";
+    }
+
+    private String safeMessage(Throwable error) {
+        return StringUtils.abbreviate(
+                StringUtils.defaultIfBlank(error.getMessage(), "无法读取目标数据库结构"), 300);
     }
 
     private BusinessApplicationReadinessVO buildReadiness(List<BusinessApplicationReadinessIssueVO> issues) {

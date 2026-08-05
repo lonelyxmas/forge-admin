@@ -75,7 +75,7 @@
     <!-- 依赖声明 -->
     <dependencyManagement>
         <dependencies>
-            
+
             <!-- SpringBoot的依赖配置-->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -326,6 +326,12 @@
             
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-starter-openapi-security</artifactId>
+                <version>${revision}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
                 <artifactId>forge-starter-auth</artifactId>
                 <version>${revision}</version>
             </dependency>
@@ -369,6 +375,12 @@
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
                 <artifactId>forge-starter-outbound</artifactId>
+                <version>${revision}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-starter-collaboration</artifactId>
                 <version>${revision}</version>
             </dependency>
             
@@ -448,6 +460,12 @@
             
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-plugin-collaboration</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
                 <artifactId>forge-plugin-generator</artifactId>
                 <version>${revision}</version>
             </dependency>
@@ -466,31 +484,19 @@
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability</artifactId>
+                <artifactId>forge-plugin-capability-core</artifactId>
                 <version>${revision}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-control-plane</artifactId>
+                <artifactId>forge-plugin-capability-platform</artifactId>
                 <version>${revision}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-identity</artifactId>
-                <version>${revision}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-secure-actions</artifactId>
-                <version>${revision}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.mdframe.forge</groupId>
-                <artifactId>forge-plugin-capability-flow-actions</artifactId>
+                <artifactId>forge-plugin-capability-actions</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>

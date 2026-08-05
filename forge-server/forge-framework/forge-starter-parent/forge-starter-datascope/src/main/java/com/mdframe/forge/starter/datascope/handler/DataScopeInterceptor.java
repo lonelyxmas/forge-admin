@@ -1,11 +1,11 @@
 package com.mdframe.forge.starter.datascope.handler;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.extra.spring.SpringUtil;
 import com.baomidou.mybatisplus.core.toolkit.PluginUtils;
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.mdframe.forge.starter.datascope.context.DataScopeContext;
 import com.mdframe.forge.starter.datascope.context.DataScopeContextHolder;
+import com.mdframe.forge.starter.datascope.config.DataScopeProperties;
 import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
 import com.mdframe.forge.starter.datascope.enums.DataScopeType;
 import com.mdframe.forge.starter.datascope.service.IDataScopeService;
@@ -32,7 +32,10 @@ import org.apache.ibatis.session.RowBounds;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 数据权限拦截器 基于 MyBatis Plus InnerInterceptor 实现
@@ -41,7 +44,27 @@ import java.util.Set;
 public class DataScopeInterceptor implements InnerInterceptor {
 
     private static final String DATA_SCOPE_MAPPER_PACKAGE = "com.mdframe.forge.starter.datascope.mapper.";
-    
+
+    private final Supplier<IDataScopeService> dataScopeServiceSupplier;
+    private final DataScopeProperties properties;
+    private final Set<String> warnedUnconfiguredMappers = ConcurrentHashMap.newKeySet();
+
+    public DataScopeInterceptor(IDataScopeService dataScopeService, DataScopeProperties properties) {
+        this(() -> dataScopeService, properties);
+    }
+
+    /**
+     * 延迟获取数据权限服务，避免 MyBatis-Plus 创建拦截器时提前实例化 Mapper，
+     * 形成 Interceptor -> Service -> Mapper -> SqlSessionFactory 的启动循环依赖。
+     */
+    public DataScopeInterceptor(
+            Supplier<IDataScopeService> dataScopeServiceSupplier,
+            DataScopeProperties properties) {
+        this.dataScopeServiceSupplier = Objects.requireNonNull(
+                dataScopeServiceSupplier, "dataScopeServiceSupplier 不能为空");
+        this.properties = Objects.requireNonNull(properties, "properties 不能为空");
+    }
+
     @Override
     public void beforeQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds,
             ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
@@ -68,10 +91,14 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         // 4. 查询该方法的数据权限配置
-        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
+        IDataScopeService dataScopeService = dataScopeService();
         SysDataScopeConfig config = dataScopeService.getDataScopeConfig(actualMapperId);
-        if (config == null || config.getEnabled() == 0) {
-            log.debug("数据权限拦截器：方法 {} 未配置数据权限或已禁用", actualMapperId);
+        if (config == null) {
+            handleUnconfiguredMapper(actualMapperId);
+            return;
+        }
+        if (!Integer.valueOf(1).equals(config.getEnabled())) {
+            log.debug("数据权限拦截器：方法 {} 的数据权限已显式禁用", actualMapperId);
             return;
         }
 
@@ -80,13 +107,12 @@ public class DataScopeInterceptor implements InnerInterceptor {
         try {
             context = dataScopeService.getCurrentUserDataScope();
         } catch (Exception e) {
-            // 获取用户上下文失败（可能是后台任务），跳过权限控制
-            //log.debug("数据权限拦截器：获取用户上下文失败，可能是后台任务，跳过权限控制", e);
+            handleConfiguredFailure("获取当前用户数据权限上下文失败: " + actualMapperId, e);
             return;
         }
 
         if (context == null || context.getUserId() == null) {
-            log.debug("数据权限拦截器：未获取到用户信息，跳过权限控制");
+            handleConfiguredFailure("已配置数据权限但未获取到用户信息: " + actualMapperId, null);
             return;
         }
         
@@ -95,7 +121,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
                 context.getMinDataScope(),
                 context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty());
         if (scopeType == null) {
-            log.warn("数据权限拦截器：未知的数据权限类型 {}", context.getMinDataScope());
+            handleConfiguredFailure("未知的数据权限类型: " + context.getMinDataScope(), null);
             return;
         }
         
@@ -123,7 +149,24 @@ public class DataScopeInterceptor implements InnerInterceptor {
             
         } catch (Exception e) {
             log.error("数据权限拦截器：SQL改写失败", e);
+            handleConfiguredFailure("数据权限 SQL 改写失败: " + actualMapperId, e);
         }
+    }
+
+    private void handleUnconfiguredMapper(String mapperId) throws SQLException {
+        if (properties.getUnconfiguredPolicy() == DataScopeProperties.UnconfiguredPolicy.DENY) {
+            throw new SQLException("Mapper 未配置数据权限，严格策略已拒绝执行: " + mapperId);
+        }
+        if (warnedUnconfiguredMappers.add(mapperId)) {
+            log.warn("Mapper 未配置数据权限，当前按兼容策略放行，请显式配置或确认无需数据权限: {}", mapperId);
+        }
+    }
+
+    private void handleConfiguredFailure(String message, Exception cause) throws SQLException {
+        if (Boolean.TRUE.equals(properties.getFailClosedOnError())) {
+            throw cause == null ? new SQLException(message) : new SQLException(message, cause);
+        }
+        log.error("{}；当前配置为兼容放行", message, cause);
     }
     
     /**
@@ -135,13 +178,13 @@ public class DataScopeInterceptor implements InnerInterceptor {
         // 解析SQL
         Statement statement = CCJSqlParserUtil.parse(originalSql);
         if (!(statement instanceof Select)) {
-            return originalSql;
+            throw new IllegalArgumentException("数据权限只支持 SELECT 语句");
         }
         
         Select select = (Select) statement;
         PlainSelect plainSelect = resolveDataScopeTarget(select.getSelectBody());
         if (plainSelect == null) {
-            return originalSql;
+            throw new IllegalArgumentException("无法定位需要追加数据权限的 SELECT");
         }
         Expression where = plainSelect.getWhere();
         
@@ -192,8 +235,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
         String userIdColumn = config.getUserIdColumn();
         String orgIdColumn = config.getOrgIdColumn();
         String tenantIdColumn = config.getTenantIdColumn();
-        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
-        
+
         switch (scopeType) {
             case SELF:
                 // 本人数据权限
@@ -209,7 +251,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
             
             case ORG_AND_CHILD:
                 // 本组织及子组织数据权限
-                Set<Long> allOrgIds = dataScopeService.getOrgAndChildIds(context.getOrgIds());
+                Set<Long> allOrgIds = dataScopeService().getOrgAndChildIds(context.getOrgIds());
                 if (allOrgIds != null && !allOrgIds.isEmpty()) {
                     return buildColumnCondition(tableAlias, orgIdColumn, context, scopeType, new ArrayList<>(allOrgIds), null);
                 }
@@ -373,8 +415,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
 
         // 替换 #{regionCodes}，供业务数据源场景避免在业务库 SQL 中引用 sys_region_code。
         if (context.getRegionCode() != null) {
-            IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
-            Set<String> regionCodes = dataScopeService.getRegionAndChildCodes(context.getRegionCode());
+            Set<String> regionCodes = dataScopeService().getRegionAndChildCodes(context.getRegionCode());
             result = result.replace("#{regionCodes}", quoteSqlStrings(regionCodes));
         } else {
             result = result.replace("#{regionCodes}", "NULL");
@@ -481,8 +522,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
      * 构建本级和下级行政区划条件。区划编码已由数据权限服务从平台库快照解析，业务 SQL 不再引用 sys_region_code。
      */
     private Expression buildRegionWithChildCondition(String fullColumnName, String regionCode) {
-        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
-        Set<String> regionCodes = dataScopeService.getRegionAndChildCodes(regionCode);
+        Set<String> regionCodes = dataScopeService().getRegionAndChildCodes(regionCode);
         if (regionCodes == null || regionCodes.isEmpty() || regionCodes.size() == 1) {
             return buildStringEqualsCondition(fullColumnName, regionCode);
         }
@@ -554,5 +594,13 @@ public class DataScopeInterceptor implements InnerInterceptor {
                 .filter(StrUtil::isNotBlank)
                 .map(value -> "'" + value.replace("'", "''") + "'")
                 .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private IDataScopeService dataScopeService() {
+        IDataScopeService service = dataScopeServiceSupplier.get();
+        if (service == null) {
+            throw new IllegalStateException("数据权限服务尚未就绪");
+        }
+        return service;
     }
 }

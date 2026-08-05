@@ -40,6 +40,12 @@
       <span class="ai-form-item-label">
         <span class="ai-form-item-label__text">{{ field.label }}</span>
         <span v-if="fieldBadge" class="ai-form-item-label__badge">{{ fieldBadge }}</span>
+        <n-tooltip v-if="fieldLabelTip" trigger="hover" placement="top" :style="{ maxWidth: '360px' }">
+          <template #trigger>
+            <span class="ai-form-item-label__tip">?</span>
+          </template>
+          <span class="ai-form-item-label__tip-content">{{ fieldLabelTip }}</span>
+        </n-tooltip>
       </span>
     </template>
 
@@ -900,6 +906,7 @@ const recordSelectorDisplayText = computed(() => {
   return normalizeDisplayText(props.value)
 })
 const fieldDescription = computed(() => props.field?.props?.description || props.field?.description || '')
+const fieldLabelTip = computed(() => props.field?.props?.labelTip || props.field?.labelTip || '')
 const fieldBadge = computed(() => props.field?.props?.badge || props.field?.badge || '')
 const isSectionTitleField = computed(() => {
   return !isLegacyGroupTitleField(props.field) && ['divider', 'elDivider', 'AiFormSectionTitle', 'aiFormSectionTitle', 'formSectionTitle', 'FormSectionTitle']
@@ -2206,6 +2213,34 @@ function handleUploadRemove(field, file) {
   font-size: 12px;
   line-height: 18px;
   word-break: break-word;
+}
+
+.ai-form-item-label__tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid #cbd5e1;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  transition: all 0.2s;
+}
+
+.ai-form-item-label__tip:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.ai-form-item-label__tip-content {
+  white-space: pre-line;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .ai-form-readonly-text {

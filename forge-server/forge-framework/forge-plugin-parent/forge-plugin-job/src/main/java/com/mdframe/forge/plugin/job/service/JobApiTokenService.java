@@ -114,6 +114,9 @@ public class JobApiTokenService {
 
     @Transactional(rollbackFor = Exception.class)
     public JobApiPrincipal authenticate(String authorizationHeader) {
+        if (!Boolean.TRUE.equals(jobProperties.getOpenApi().getEnabled())) {
+            throw JobOpenApiException.unavailable();
+        }
         String tokenValue = extractBearerToken(authorizationHeader);
         try {
             String keyId = tokenCodec.extractKeyId(tokenValue);

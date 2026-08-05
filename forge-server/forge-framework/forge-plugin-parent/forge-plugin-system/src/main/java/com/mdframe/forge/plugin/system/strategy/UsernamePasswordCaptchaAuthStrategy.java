@@ -3,13 +3,12 @@ package com.mdframe.forge.plugin.system.strategy;
 import cn.hutool.core.util.StrUtil;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicy;
 import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicyResolver;
+import com.mdframe.forge.plugin.system.auth.LoginPasswordDecoder;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
+import com.mdframe.forge.starter.auth.enums.AuthType;
 import com.mdframe.forge.starter.auth.service.ICaptchaService;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.LoginUser;
-import com.mdframe.forge.starter.auth.enums.AuthType;
-import com.mdframe.forge.starter.crypto.keyexchange.RsaKeyPairHolder;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -18,12 +17,11 @@ import org.springframework.stereotype.Component;
  * 支持多种验证码类型：图形验证码、滑块验证码、短信验证码
  * 验证码类型由全局登录配置和客户端覆盖配置统一解析
  */
-@Slf4j
 @Component
 public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
 
     @Autowired
-    private RsaKeyPairHolder rsaKeyPairHolder;
+    private LoginPasswordDecoder loginPasswordDecoder;
 
     @Autowired
     private ICaptchaService captchaService;
@@ -92,8 +90,8 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
 
         // 6. 验证密码
         String encodedPassword = userLoadService.getUserPassword(loginUser.getUserId());
-        String decrypt = rsaKeyPairHolder.decryptByPrivateKeyNoBase64(request.getPassword());
-        if (!userLoadService.matchPassword(decrypt, encodedPassword)) {
+        String rawPassword = loginPasswordDecoder.decode(request.getPassword());
+        if (!userLoadService.matchPassword(rawPassword, encodedPassword)) {
             recordLoginFailure(loginUser, "密码错误");
         }
 

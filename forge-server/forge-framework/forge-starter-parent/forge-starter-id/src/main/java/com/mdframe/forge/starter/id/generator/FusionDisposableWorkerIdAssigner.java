@@ -9,8 +9,6 @@ import com.xfvape.uid.worker.WorkerIdAssigner;
 import com.xfvape.uid.worker.WorkerNodeType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.math.RandomUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.LocalDateTime;
 
@@ -23,10 +21,24 @@ import java.time.LocalDateTime;
 @Slf4j
 public class FusionDisposableWorkerIdAssigner implements WorkerIdAssigner {
 
+    private static final int MIN_WORKER_BITS = 1;
 
-    @Autowired
-    @Qualifier("workNodePOAtomicServiceImpl")
-    private IWorkNodePOAtomicService workNodeService;
+    private static final int MAX_WORKER_BITS = 62;
+
+    private final IWorkNodePOAtomicService workNodeService;
+
+    private final int workerBits;
+
+    private final long maxWorkerId;
+
+    public FusionDisposableWorkerIdAssigner(IWorkNodePOAtomicService workNodeService, int workerBits) {
+        if (workerBits < MIN_WORKER_BITS || workerBits > MAX_WORKER_BITS) {
+            throw new IllegalArgumentException("workerBits 必须在 1 到 62 之间");
+        }
+        this.workNodeService = workNodeService;
+        this.workerBits = workerBits;
+        this.maxWorkerId = (1L << workerBits) - 1;
+    }
 
     /**
      * Assign worker id base on database.<p>
@@ -39,8 +51,22 @@ public class FusionDisposableWorkerIdAssigner implements WorkerIdAssigner {
     public long assignWorkerId() {
         WorkerNodePO workNode = buildWorkerNode();
         workNodeService.addWorkerNode(workNode);
-        log.info("Add worker node:" + workNode);
-        return workNode.getWorkNodeId();
+        Long workerId = workNode.getWorkNodeId();
+        if (workerId == null || workerId <= 0) {
+            throw new IllegalStateException("WorkerId 分配失败：数据库未返回有效自增 ID");
+        }
+        if (workerId > maxWorkerId) {
+            throw new IllegalStateException("WorkerId 已超出 " + workerBits + " 位容量上限 " + maxWorkerId
+                    + "，必须扩容位宽或迁移 ID 生成方案");
+        }
+        long warningThreshold = maxWorkerId - maxWorkerId / 5;
+        if (workerId >= warningThreshold) {
+            log.warn("WorkerId 容量接近耗尽: workerId={}, maxWorkerId={}, workerBits={}",
+                    workerId, maxWorkerId, workerBits);
+        }
+        log.info("Worker node allocated: workerId={}, host={}, port={}",
+                workerId, workNode.getHostName(), workNode.getPort());
+        return workerId;
     }
 
     /**

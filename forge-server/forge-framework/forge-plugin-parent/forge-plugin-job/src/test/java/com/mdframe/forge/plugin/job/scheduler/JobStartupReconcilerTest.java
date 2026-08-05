@@ -15,7 +15,7 @@ class JobStartupReconcilerTest {
     void shouldRecoverStaleExecutionsBeforeSynchronizingSchedules() {
         JobExecutionRecoveryService recoveryService = mock(JobExecutionRecoveryService.class);
         JobScheduleCoordinator coordinator = mock(JobScheduleCoordinator.class);
-        JobStartupReconciler reconciler = new JobStartupReconciler(coordinator, recoveryService);
+        JobStartupReconciler reconciler = new JobStartupReconciler(coordinator, recoveryService, Runnable::run);
 
         reconciler.run(null);
 
@@ -29,7 +29,7 @@ class JobStartupReconcilerTest {
         JobExecutionRecoveryService recoveryService = mock(JobExecutionRecoveryService.class);
         JobScheduleCoordinator coordinator = mock(JobScheduleCoordinator.class);
         when(recoveryService.recoverStaleExecutions()).thenThrow(new IllegalStateException("db unavailable"));
-        JobStartupReconciler reconciler = new JobStartupReconciler(coordinator, recoveryService);
+        JobStartupReconciler reconciler = new JobStartupReconciler(coordinator, recoveryService, Runnable::run);
 
         reconciler.run(null);
 

@@ -1,9 +1,11 @@
 package com.mdframe.forge.starter.datascope.config;
 
 import com.mdframe.forge.starter.datascope.handler.DataScopeInterceptor;
+import com.mdframe.forge.starter.datascope.service.IDataScopeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,8 +33,10 @@ public class DataScopeAutoConfiguration {
      * 注意：只提供 Bean，由 MybatisPlusConfig 通过 List<InnerInterceptor> 自动注入并注册
      */
     @Bean
-    public DataScopeInterceptor dataScopeInterceptor() {
+    public DataScopeInterceptor dataScopeInterceptor(
+            ObjectProvider<IDataScopeService> dataScopeServiceProvider,
+            DataScopeProperties properties) {
         log.info("数据权限拦截器已创建，等待注册到 MybatisPlusInterceptor");
-        return new DataScopeInterceptor();
+        return new DataScopeInterceptor(dataScopeServiceProvider::getObject, properties);
     }
 }

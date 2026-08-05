@@ -11,7 +11,8 @@ import lombok.Getter;
 public enum CryptoAlgorithm {
 
     SM4("SM4", "国密SM4对称加密"),
-    AES("AES", "AES对称加密");
+    AES("AES", "AES对称加密"),
+    AES_GCM("AES_GCM", "AES-GCM认证加密");
 
     private final String code;
     private final String desc;

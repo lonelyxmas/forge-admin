@@ -18,6 +18,11 @@ public class SocialLoginRequest implements Serializable {
     private String platform;
 
     /**
+     * 连接编码（多连接下精确定位，可选；服务端最终以 state 绑定的连接为准）
+     */
+    private String connectionCode;
+
+    /**
      * 授权码
      */
     private String code;

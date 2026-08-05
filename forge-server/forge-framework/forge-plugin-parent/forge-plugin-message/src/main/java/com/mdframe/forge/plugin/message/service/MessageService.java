@@ -59,4 +59,14 @@ public interface MessageService extends IService<SysMessage> {
      * 查询消息详情
      */
     MessageVO getMessageDetail(Long messageId, Long userId);
+
+    /**
+     * 按候选顺序解析首个「存在且启用」的模板编码，用于平台差异化模板回退。
+     * <p>例如依次传入 {@code FLOW_TODO_CARD_WECOM}、{@code FLOW_TODO_CARD}，
+     * 返回第一个命中的编码；全部不存在或未启用时返回 {@code null}。</p>
+     *
+     * @param candidateCodes 候选模板编码（按优先级从高到低）
+     * @return 首个启用的模板编码；无匹配返回 null
+     */
+    String resolveEnabledTemplateCode(String... candidateCodes);
 }

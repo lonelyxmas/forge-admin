@@ -59,6 +59,14 @@
             <groupId>com.qcloud</groupId>
             <artifactId>cos_api</artifactId>
             <version>${tencent.cos.version}</version>
+            <exclusions>
+                <!-- KMS 仅用于 COS 客户端加密（项目未使用），其传递依赖 okio 1.x 与
+                     forge-starter-outbound 的 okhttp4/okio3 类路径冲突（NoSuchFieldError: Companion） -->
+                <exclusion>
+                    <groupId>com.tencentcloudapi</groupId>
+                    <artifactId>tencentcloud-sdk-java-kms</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- 测试 -->

@@ -12,6 +12,7 @@ import com.mdframe.forge.plugin.system.mapper.SysDictDataMapper;
 import com.mdframe.forge.plugin.system.service.ISysDictDataService;
 import com.mdframe.forge.starter.cache.service.ICacheService;
 import com.mdframe.forge.starter.core.domain.PageQuery;
+import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -38,6 +39,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
     private static final String DICT_DATA_CACHE_KEY_PATTERN = DICT_DATA_CACHE_KEY_PREFIX + "*";
     private static final long DICT_DATA_CACHE_TTL_MINUTES = 30L;
     private static final long LOCAL_CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(DICT_DATA_CACHE_TTL_MINUTES);
+    private static final String DICT_VALUE_DUPLICATED_MESSAGE = "同一字典下的字典键值不能重复";
     
     private final SysDictDataMapper dictDataMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -167,6 +169,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
     
     @Override
     public boolean insertDictData(SysDictDataDTO dto) {
+        validateDictValueUnique(dto);
         SysDictData dictData = new SysDictData();
         BeanUtil.copyProperties(dto, dictData);
         boolean result = dictDataMapper.insert(dictData) > 0;
@@ -179,6 +182,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
     @Override
     public boolean updateDictData(SysDictDataDTO dto) {
         SysDictData existing = dto.getDictCode() == null ? null : dictDataMapper.selectById(dto.getDictCode());
+        validateDictValueUnique(dto);
         SysDictData dictData = new SysDictData();
         BeanUtil.copyProperties(dto, dictData);
         boolean result = dictDataMapper.updateById(dictData) > 0;
@@ -195,6 +199,14 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
             }
         }
         return result;
+    }
+
+    private void validateDictValueUnique(SysDictDataDTO dto) {
+        int duplicateCount = dictDataMapper.countByDictTypeAndValue(
+                dto.getDictType(), dto.getDictValue(), dto.getDictCode());
+        if (duplicateCount > 0) {
+            throw new BusinessException(DICT_VALUE_DUPLICATED_MESSAGE);
+        }
     }
     
     @Override

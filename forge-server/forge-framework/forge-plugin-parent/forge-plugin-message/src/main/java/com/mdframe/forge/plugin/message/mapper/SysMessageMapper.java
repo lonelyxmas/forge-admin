@@ -8,4 +8,7 @@ public interface SysMessageMapper extends BaseMapper<SysMessage> {
 
     SysMessage selectByBizTypeAndBizKey(@Param("bizType") String bizType,
                                         @Param("bizKey") String bizKey);
+
+    SysMessage selectByIdempotencyKey(@Param("tenantId") Long tenantId,
+                                      @Param("idempotencyKey") String idempotencyKey);
 }

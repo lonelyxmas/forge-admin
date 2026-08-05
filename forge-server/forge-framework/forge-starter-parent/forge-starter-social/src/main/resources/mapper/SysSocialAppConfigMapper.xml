@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.social.mapper.SysSocialAppConfigMapper">
+
+    <sql id="selectColumns">
+        a.id, a.tenant_id, a.connection_id, a.app_code, a.app_name,
+        a.client_id, a.agent_id, a.secret_mode, a.secret_cipher, a.secret_ref,
+        a.secret_update_time, a.callback_token_cipher, a.encoding_aes_key_cipher,
+        a.redirect_uri, a.scope, a.config_json, a.status, a.remark,
+        a.create_by, a.create_time, a.create_dept, a.update_by, a.update_time, a.del_flag
+    </sql>
+
+    <!-- 按能力经活动绑定关联启用应用：绑定与应用均要求启用且未删除 -->
+    <select id="selectEnabledAppByCapability" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialAppConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_capability_binding b
+        INNER JOIN sys_social_app_config a
+            ON a.id = b.app_config_id
+           AND a.tenant_id = b.tenant_id
+           AND a.del_flag = 0
+           AND a.status = 1
+        WHERE b.tenant_id = #{tenantId}
+          AND b.connection_id = #{connectionId}
+          AND b.capability = #{capability}
+          AND b.status = 1
+          AND b.del_flag = 0
+        ORDER BY b.update_time DESC, b.id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectByConnection" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialAppConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_app_config a
+        WHERE a.tenant_id = #{tenantId}
+          AND a.connection_id = #{connectionId}
+          AND a.del_flag = 0
+        ORDER BY a.id
+    </select>
+
+    <select id="selectByAppCode" resultType="com.mdframe.forge.starter.social.domain.entity.SysSocialAppConfig">
+        SELECT <include refid="selectColumns"/>
+        FROM sys_social_app_config a
+        WHERE a.tenant_id = #{tenantId}
+          AND a.connection_id = #{connectionId}
+          AND a.app_code = #{appCode}
+          AND a.del_flag = 0
+        LIMIT 1
+    </select>
+
+    <!-- CAS 轮换 Secret：当前存储值（密文或外部引用）与期望值不一致时零行更新，由服务层报并发冲突。
+         注意：不能用 MySQL 方言 <=>（NULL 安全等号），租户拦截器的 JSqlParser 无法解析，改用标准等价写法 -->
+    <update id="rotateSecretCipherCas">
+        UPDATE sys_social_app_config
+        SET secret_cipher = #{newCipher},
+            secret_ref = #{newRef},
+            secret_mode = #{secretMode},
+            secret_update_time = NOW(),
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND del_flag = 0
+          AND ((#{expectedCipher} IS NULL AND secret_cipher IS NULL AND secret_ref IS NULL)
+               OR COALESCE(secret_cipher, secret_ref) = #{expectedCipher})
+    </update>
+</mapper>

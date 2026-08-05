@@ -29,4 +29,19 @@ public class DataScopeProperties {
      * 默认数据权限配置租户。租户未配置时回退到该租户的通用配置。
      */
     private Long defaultConfigTenantId = 1L;
+
+    /**
+     * 未配置 mapperMethod 时的处理策略。WARN 用于兼容迁移，DENY 用于严格生产门禁。
+     */
+    private UnconfiguredPolicy unconfiguredPolicy = UnconfiguredPolicy.WARN;
+
+    /**
+     * 已配置数据权限的查询发生上下文或 SQL 改写异常时是否失败关闭。
+     */
+    private Boolean failClosedOnError = true;
+
+    public enum UnconfiguredPolicy {
+        WARN,
+        DENY
+    }
 }

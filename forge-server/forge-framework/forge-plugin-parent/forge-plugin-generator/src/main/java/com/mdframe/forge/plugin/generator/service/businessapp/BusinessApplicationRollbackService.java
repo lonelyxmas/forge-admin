@@ -14,6 +14,8 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessExtensionVersionMapper;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessPublishService;
+import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessSnapshot;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessApplicationSnapshotService.SnapshotBundle;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationAssetSelectionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationPublishResultVO;
@@ -51,6 +53,7 @@ public class BusinessApplicationRollbackService {
     private final BusinessObjectDesignVersionService objectVersionService;
     private final BusinessObjectTableMappingService tableMappingService;
     private final BusinessObjectPublishService objectPublishService;
+    private final BusinessProcessPublishService processPublishService;
     private final BusinessAppService businessAppService;
     private final BusinessApplicationPageMenuPublishService pageMenuPublishService;
     private final BusinessBindingMapper bindingMapper;
@@ -102,6 +105,17 @@ public class BusinessApplicationRollbackService {
                 run = runService.markStepRunning(run, step);
                 run = runService.markStepSuccess(run, step,
                         "已锁定来源版本 v" + run.getSourceVersionNo());
+            }
+            if (!runService.isStepComplete(run, BusinessApplicationPublishStep.PROCESSES)) {
+                step = BusinessApplicationPublishStep.PROCESSES;
+                run = runService.markStepRunning(run, step);
+                snapshot = snapshotService.parse(run.getSnapshotJson());
+                List<BusinessProcessSnapshot> restored = processPublishService.restorePublishedProjection(
+                        run.getApplicationId(), processVersionIds(snapshot.get("publishedProcessVersions")));
+                run = runService.updateSnapshot(run,
+                        snapshotService.finalizeProcesses(run.getSnapshotJson(), restored));
+                run = runService.markStepSuccess(run, step,
+                        "已恢复 " + restored.size() + " 个业务流程发布投影");
             }
             if (!runService.isStepComplete(run, BusinessApplicationPublishStep.OBJECTS)) {
                 step = BusinessApplicationPublishStep.OBJECTS;
@@ -245,8 +259,17 @@ public class BusinessApplicationRollbackService {
                 .map(item -> longValue(item.get("id"))).filter(java.util.Objects::nonNull).toList());
         selection.setExtensionIds(listOfMap(snapshot.get("extensions")).stream()
                 .map(item -> longValue(item.get("id"))).filter(java.util.Objects::nonNull).toList());
+        selection.setProcessIds(listOfMap(snapshot.get("publishedProcessVersions")).stream()
+                .map(item -> longValue(item.get("processId"))).filter(java.util.Objects::nonNull).toList());
         selection.setIncludeAutomation(true);
         return selection;
+    }
+
+    private List<Long> processVersionIds(Object value) {
+        return listOfMap(value).stream()
+                .map(item -> longValue(item.get("processVersionId")))
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     private void restoreBindings(Long applicationId, List<Map<String, Object>> snapshots) {

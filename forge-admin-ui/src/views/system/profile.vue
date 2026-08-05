@@ -191,11 +191,11 @@
             <div v-for="item in socialBindings" :key="item.platform" class="security-item">
               <div class="security-item-left">
                 <div class="security-icon-wrapper">
-                  <n-avatar
+                  <AuthImage
                     v-if="item.platformLogo"
-                    :size="36"
                     :src="item.platformLogo"
-                    round
+                    :lazy="false"
+                    :img-style="{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }"
                   />
                   <i v-else class="i-material-symbols:link security-icon" />
                 </div>
@@ -428,6 +428,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthStore, useUserStore } from '@/store'
+import AuthImage from '@/components/common/AuthImage.vue'
 import { request } from '@/utils'
 import { resolveRenderableFileUrl } from '@/utils/file'
 

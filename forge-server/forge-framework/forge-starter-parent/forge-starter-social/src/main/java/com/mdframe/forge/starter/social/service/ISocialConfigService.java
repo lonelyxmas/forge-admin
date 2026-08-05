@@ -27,9 +27,21 @@ public interface ISocialConfigService {
     SysSocialConfig selectConfigById(Long id);
 
     /**
-     * 根据平台和租户查询配置
+     * 根据平台和租户查询配置（兼容期接口）
+     * <p>
+     * 仅当平台下存在唯一启用连接时返回；存在多个连接时失败关闭，要求按连接编码访问
      */
     SysSocialConfig selectByPlatformAndTenant(String platform, Long tenantId);
+
+    /**
+     * 按连接编码查询当前租户连接
+     */
+    SysSocialConfig selectConnectionByCode(String connectionCode);
+
+    /**
+     * 查询指定平台下“开启工作台免登且已启用”的连接（公开免登发现端点使用，跨租户取首个，无则返回 null）
+     */
+    SysSocialConfig selectSsoWorkbenchConnection(String platform);
 
     /**
      * 查询租户下所有启用的平台信息

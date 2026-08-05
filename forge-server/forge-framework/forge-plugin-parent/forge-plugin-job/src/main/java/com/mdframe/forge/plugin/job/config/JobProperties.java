@@ -142,7 +142,7 @@ public class JobProperties {
     @Data
     public static class OpenApi {
 
-        private Boolean enabled = true;
+        private Boolean enabled = false;
 
         private String tokenPepper;
 
@@ -157,6 +157,13 @@ public class JobProperties {
         private Long idempotencyLockWaitMillis = 2000L;
 
         private Long idempotencyLockLeaseMillis = 30000L;
+
+        public String validatedTokenPepper() {
+            if (tokenPepper == null || tokenPepper.trim().length() < 32) {
+                throw new IllegalStateException("定时任务开放API Token Pepper必须配置且至少32个字符");
+            }
+            return tokenPepper.trim();
+        }
 
         public Duration validatedIdempotencyTtl() {
             if (idempotencyTtl == null || idempotencyTtl.compareTo(Duration.ofMinutes(1)) < 0

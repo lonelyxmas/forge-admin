@@ -291,6 +291,18 @@
                 />
               </div>
             </n-form-item-gi>
+            <n-form-item-gi label="待办跳转" path="todoDetailUrlTemplate" :span="2">
+              <div class="w-full">
+                <n-input
+                  v-model:value="formData.todoDetailUrlTemplate"
+                  placeholder="留空默认跳待办详情页；可填相对路径或完整链接"
+                  clearable
+                />
+                <div class="text-12px text-gray-400 mt-1">
+                  企业协同待办卡片点击后的跳转地址，支持占位符 {taskId}/{businessKey}/{processInstanceId}（自动替换并 URL 编码）。例：/#/pages/order-detail?bizKey={businessKey}
+                </div>
+              </div>
+            </n-form-item-gi>
             <n-form-item-gi label="描述" path="description" :span="2">
               <n-input
                 v-model:value="formData.description"
@@ -747,6 +759,7 @@ const formData = reactive({
   description: '',
   notifyType: 'none',
   webhookUrl: '',
+  todoDetailUrlTemplate: '',
 })
 const rules = {
   modelName: { required: true, message: '请输入模型名称', trigger: 'blur' },
@@ -758,7 +771,7 @@ const rules = {
 function handleAdd() {
   isEdit.value = false
   modalTitle.value = '新增模型'
-  Object.assign(formData, { id: '', modelName: '', modelKey: '', category: '', flowType: '', designerType: 'approval', formType: 'dynamic', description: '', notifyType: 'none', webhookUrl: '' })
+  Object.assign(formData, { id: '', modelName: '', modelKey: '', category: '', flowType: '', designerType: 'approval', formType: 'dynamic', description: '', notifyType: 'none', webhookUrl: '', todoDetailUrlTemplate: '' })
   showModal.value = true
 }
 

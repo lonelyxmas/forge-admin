@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeDocumentMapper">
+
+    <sql id="documentColumns">
+        id, tenant_id, knowledge_id, file_id, doc_name, doc_type, source_type,
+        source_url, content_hash, chunk_count, process_status, process_error,
+        create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectDocumentPage" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledgeDocument">
+        SELECT <include refid="documentColumns" />
+        FROM ai_knowledge_document
+        WHERE del_flag = '0'
+        <if test="knowledgeId != null">
+            AND knowledge_id = #{knowledgeId}
+        </if>
+        <if test="docName != null and docName != ''">
+            AND doc_name LIKE CONCAT('%', #{docName}, '%')
+        </if>
+        <if test="processStatus != null and processStatus != ''">
+            AND process_status = #{processStatus}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectByKnowledgeId" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledgeDocument">
+        SELECT <include refid="documentColumns" />
+        FROM ai_knowledge_document
+        WHERE knowledge_id = #{knowledgeId} AND del_flag = '0'
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledgeDocument">
+        SELECT <include refid="documentColumns" />
+        FROM ai_knowledge_document
+        WHERE id = #{id} AND del_flag = '0'
+        FOR UPDATE
+    </select>
+
+    <select id="countByContentHash" resultType="long">
+        SELECT COUNT(1)
+        FROM ai_knowledge_document
+        WHERE knowledge_id = #{knowledgeId}
+          AND content_hash = #{contentHash}
+          AND del_flag = '0'
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+    <update id="updateProcessStatus">
+        UPDATE ai_knowledge_document
+        SET process_status = #{processStatus},
+            update_time = CURRENT_TIMESTAMP
+        <if test="processError != null">
+            , process_error = #{processError}
+        </if>
+        <if test="chunkCount != null">
+            , chunk_count = #{chunkCount}
+        </if>
+        WHERE id = #{id} AND del_flag = '0'
+    </update>
+
+</mapper>

@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderSaveDTO;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderTestDTO;
 import com.mdframe.forge.plugin.ai.provider.service.AiProviderService;
+import com.mdframe.forge.plugin.ai.provider.support.ProviderModelFetcher;
 import com.mdframe.forge.plugin.ai.provider.vo.AiProviderVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
@@ -157,6 +158,27 @@ public class AiProviderController {
     public RespInfo<Void> setDefault(@PathVariable Long id) {
         modelProviderManager.setDefaultProvider(id);
         return RespInfo.success();
+    }
+
+    /**
+     * 拉取供应商可用模型列表（调 OpenAI 兼容的 /v1/models 端点）
+     */
+    @PostMapping("/{id}/fetch-models")
+    @ApiDecrypt
+    @ApiEncrypt
+    public RespInfo<List<ProviderModelFetcher.FetchedModel>> fetchModels(@PathVariable Long id) {
+        return RespInfo.success(providerService.fetchModels(id));
+    }
+
+    /**
+     * 批量导入模型到供应商
+     */
+    @PostMapping("/{id}/models/batch")
+    @ApiDecrypt
+    @ApiEncrypt
+    public RespInfo<Integer> batchImportModels(@PathVariable Long id,
+                                                @RequestBody List<String> modelIds) {
+        return RespInfo.success(providerService.batchImportModels(id, modelIds));
     }
 
     /**

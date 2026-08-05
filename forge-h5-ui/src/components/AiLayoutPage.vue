@@ -131,9 +131,8 @@ function handleBack() {
 }
 
 .ai-layout-page__nav--glass {
-  border-bottom: 1rpx solid rgba(255, 255, 255, 0.7);
-  background: rgba(248, 250, 252, 0.7);
-  backdrop-filter: blur(26rpx);
+  border-bottom: 1rpx solid var(--border-color);
+  background: #fff;
 }
 
 .ai-layout-page__back {
@@ -145,10 +144,10 @@ function handleBack() {
   justify-content: center;
   margin: 0;
   padding: 0;
-  border: 1rpx solid rgba(255, 255, 255, 0.86);
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.06);
+  border: 1rpx solid var(--border-color);
+  border-radius: 10rpx;
+  background: #fff;
+  box-shadow: none;
 }
 
 .ai-layout-page__back::after {
@@ -170,7 +169,7 @@ function handleBack() {
 }
 
 .ai-layout-page__title {
-  color: #1e293b;
+  color: var(--text-strong);
   font-size: 34rpx;
   font-weight: 950;
   line-height: 1.18;
@@ -218,9 +217,8 @@ function handleBack() {
 }
 
 .ai-layout-page__footer--glass {
-  border-top: 1rpx solid rgba(255, 255, 255, 0.74);
-  background: rgba(248, 250, 252, 0.78);
-  box-shadow: 0 -10rpx 30rpx rgba(15, 23, 42, 0.04);
-  backdrop-filter: blur(26rpx);
+  border-top: 1rpx solid var(--border-color);
+  background: #fff;
+  box-shadow: none;
 }
 </style>

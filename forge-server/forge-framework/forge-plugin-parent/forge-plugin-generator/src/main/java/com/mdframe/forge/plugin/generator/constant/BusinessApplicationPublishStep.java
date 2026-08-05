@@ -9,6 +9,7 @@ public final class BusinessApplicationPublishStep {
 
     public static final String PRECHECK = "PRECHECK";
     public static final String SNAPSHOT = "SNAPSHOT";
+    public static final String PROCESSES = "PROCESSES";
     public static final String OBJECTS = "OBJECTS";
     public static final String ENTRIES = "ENTRIES";
     public static final String PAGE_MENUS = "PAGE_MENUS";
@@ -16,7 +17,7 @@ public final class BusinessApplicationPublishStep {
     public static final String COMMIT = "COMMIT";
 
     public static final List<String> ORDERED_STEPS = List.of(
-            PRECHECK, SNAPSHOT, OBJECTS, ENTRIES, PAGE_MENUS, EXTENSIONS, COMMIT
+            PRECHECK, SNAPSHOT, PROCESSES, OBJECTS, ENTRIES, PAGE_MENUS, EXTENSIONS, COMMIT
     );
 
     private BusinessApplicationPublishStep() {

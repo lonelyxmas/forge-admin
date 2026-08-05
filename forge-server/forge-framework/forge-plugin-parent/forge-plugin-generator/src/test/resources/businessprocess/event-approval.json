@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "processCode": "purchase_created_auto_approval",
+  "subject": {"objectId": "1900000000000001001", "objectCode": "sample_purchase_order", "objectVersionId": null, "recordIdSource": "EVENT_RECORD"},
+  "nodes": [
+    {"id": "start_created", "type": "START_EVENT", "name": "采购单新增", "config": {"eventType": "RECORD_CREATED", "condition": {"operator": "AND", "rules": [{"source": "record", "field": "autoSubmit", "operator": "EQ", "value": true}]}}},
+    {"id": "approval_purchase", "type": "APPROVAL", "name": "采购审批", "ports": ["APPROVED", "REJECTED", "CANCELED", "FAILED"], "config": {"flowModelKey": "sample_purchase_order_approval", "versionPolicy": "PINNED_AT_APPLICATION_PUBLISH", "titleTemplate": "采购审批-{orderNo}", "formAsset": {"formKey": "sample_purchase_order_approval_form", "formMode": "BUSINESS_CODE_FORM", "providerKey": "samplePurchaseOrder"}, "variableMappings": [{"field": "id", "variable": "recordId"}, {"field": "orderNo", "variable": "orderNo"}]}},
+    {"id": "notify_approved", "type": "ACTION", "name": "通知申请人", "config": {"actionType": "SEND_MESSAGE", "messageTemplateCode": "purchase_approval_approved", "channels": ["WEB"], "recipientRule": {"type": "RECORD_FIELD", "field": "applicantId"}}},
+    {"id": "end_success", "type": "END", "name": "完成", "config": {"result": "SUCCESS"}},
+    {"id": "end_rejected", "type": "END", "name": "驳回", "config": {"result": "REJECTED"}},
+    {"id": "end_canceled", "type": "END", "name": "取消", "config": {"result": "CANCELED"}},
+    {"id": "end_failed", "type": "END", "name": "失败", "config": {"result": "FAILED"}}
+  ],
+  "edges": [
+    {"id": "e1", "source": "start_created", "target": "approval_purchase", "sourcePort": "NEXT"},
+    {"id": "e2", "source": "approval_purchase", "target": "notify_approved", "sourcePort": "APPROVED"},
+    {"id": "e3", "source": "approval_purchase", "target": "end_rejected", "sourcePort": "REJECTED"},
+    {"id": "e4", "source": "approval_purchase", "target": "end_canceled", "sourcePort": "CANCELED"},
+    {"id": "e5", "source": "approval_purchase", "target": "end_failed", "sourcePort": "FAILED"},
+    {"id": "e6", "source": "notify_approved", "target": "end_success", "sourcePort": "NEXT"}
+  ],
+  "policies": {"approvalConcurrency": "ONE_ACTIVE_PER_BUSINESS_KEY", "maxSubProcessDepth": 5, "retry": {"mode": "LIMITED", "maxAttempts": 3, "backoffSeconds": [30, 120, 600]}},
+  "dependencies": {"objects": ["sample_purchase_order"], "flowModels": ["sample_purchase_order_approval"], "formAssets": ["sample_purchase_order_approval_form"], "businessActions": [], "messageTemplates": ["purchase_approval_approved"], "capabilities": [], "subProcesses": []}
+}

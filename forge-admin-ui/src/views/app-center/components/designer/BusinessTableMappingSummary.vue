@@ -64,7 +64,6 @@
       <n-alert v-if="mapping?.allowDdl === false || mapping?.readonly" type="info" :bordered="false">
         当前运行数据源禁止在线 DDL 或为只读模式；可以预览并导出迁移脚本，由数据库管理员审核执行。
       </n-alert>
-
     </template>
 
     <n-modal v-model:show="previewVisible" preset="card" title="数据库变更预览" class="ddl-preview-modal">
@@ -210,7 +209,15 @@ const indexTypeOptions = [
   { label: '唯一索引', value: 'UNIQUE' },
 ]
 const indexableDataTypes = new Set([
-  'varchar', 'char', 'int', 'bigint', 'decimal', 'date', 'datetime', 'time', 'tinyint',
+  'varchar',
+  'char',
+  'int',
+  'bigint',
+  'decimal',
+  'date',
+  'datetime',
+  'time',
+  'tinyint',
 ])
 
 const indexFieldOptions = computed(() => (props.modelSchema?.fields || [])
@@ -225,13 +232,20 @@ const indexFieldOptions = computed(() => (props.modelSchema?.fields || [])
   })))
 
 const legacyAutoIndexCount = computed(() => (props.modelSchema?.indexes || [])
-  .filter(index => index?.auto === true).length)
+  .filter(index => index?.auto === true)
+  .length)
 
-const canAlignImportedFields = computed(() => mapping.value?.tableMode === 'EXISTING'
-  && (mapping.value?.fields || []).some(field => field?.fieldCode && field?.databaseType && (
-    field.syncStatus === 'TYPE_MISMATCH'
-    || Boolean(field.required) !== !Boolean(field.databaseNullable)
-  )))
+const canAlignImportedFields = computed(() => {
+  if (mapping.value?.tableMode !== 'EXISTING')
+    return false
+  return (mapping.value?.fields || []).some((field) => {
+    if (field?.systemField || !field?.fieldCode || !field?.databaseType)
+      return false
+    const required = field.required === true
+    const databaseRequired = field.databaseNullable === false
+    return field.syncStatus === 'TYPE_MISMATCH' || required !== databaseRequired
+  })
+})
 
 const onlineExecutable = computed(() => {
   if (!preview.value?.ddlStatements?.length)

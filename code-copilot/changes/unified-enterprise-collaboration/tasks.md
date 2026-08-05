@@ -31,9 +31,9 @@
 - [x] Proposal：创建 Spec、Tasks、Test Spec 和执行日志。
 - [ ] Gate A：用户确认 Proposal；仅进入 Task 0。
 - [ ] Gate B：M1 输入和纵向验证完成；授权 P0/P1 `/apply`。
-- [ ] Apply/P0：通用底座、凭据安全和安全登录。
-- [ ] Apply/P1：企微通讯录、消息和运维闭环。
-- [ ] Review/Test/UAT M1：一期独立审查、真实企微验收和上线门禁。
+- [x] Apply/P0：通用底座、凭据安全和安全登录（Task 1-5 编码完成，`mvn -pl forge-admin-server -am compile` BUILD SUCCESS）。
+- [x] Apply/P1：企微通讯录、消息和运维闭环（Task 6-13、Task 18 一期、Task 16/17 一期前端编码完成；前端 ESLint 通过）。
+- [ ] Review/Test/UAT M1：一期独立审查、真实企微验收和上线门禁（待 Task 19A：自动化测试、真实企微 UAT 需客户提供测试企业资料）。
 - [ ] Gate C：待办资料和交互边界完成；授权 P2 `/apply`。
 - [ ] Apply/P2：企微待办、回调、安全跳转和补偿。
 - [ ] Review/Test/UAT M2：二期独立审查、真实企微验收和部署门禁。
@@ -395,6 +395,7 @@
   - `forge-admin-ui/src/views/system/collaboration/components/ApplicationEditor.vue` — LOGIN/DIRECTORY/MESSAGE/TODO 应用与 Secret 空值保留。
   - `forge-admin-ui/src/views/system/socialConfig.vue` — 兼容跳转或只读提示，不继续回显旧 Secret。
 - **验收**：所有枚举来自字典；Secret 永不回填；空值保留和显式轮换文案清楚；最长平台/连接名称不溢出。
+- **实施偏差（2026-07-28）**：页面文件按 V1.0.59 菜单 `component` 值实现为 `connections.vue`（连接列表+详情弹窗+应用/能力绑定编辑，替代 index.vue + ConnectionEditor/ApplicationEditor 拆分），API 层 `src/api/collaboration.js` 已建；`socialConfig.vue` 兼容改造与迁移摘要接口延后至 Task 19A 前补充。补齐后端能力绑定/应用删除端点与 `V1.0.62__add_collaboration_binding_api_resources.sql`（含 4 个新字典类型与 API 资源授权）。
 
 ## Task 17：同步、映射、投递和回调运维前端（P1/P2）
 

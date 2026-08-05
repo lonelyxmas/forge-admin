@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import api from '@/api'
+import { loadRuntimeCryptoConfig } from '@/utils/crypto/crypto-config'
 import { rsaEncrypt } from '@/utils/crypto/rsa'
 
 function getToken(data = {}) {
@@ -60,19 +61,32 @@ export const useAuthStore = defineStore('auth', {
       this.menus = []
       this.permissions = []
     },
-    async encryptPassword(password) {
+    async encryptPassword(password, enabled) {
+      if (!enabled) {
+        return password
+      }
       try {
         const res = await api.getPublicKey()
         const publicKey = res?.data?.publicKey
-        return publicKey ? rsaEncrypt(password, publicKey) : password
+        if (!publicKey) {
+          throw new Error('未获取到密码加密公钥')
+        }
+        return rsaEncrypt(password, publicKey)
       }
       catch (error) {
-        console.warn('密码 RSA 加密失败，使用明文降级:', error)
-        return password
+        console.error('密码 RSA 加密失败:', error)
+        throw new Error('密码加密服务暂不可用，请刷新后重试')
       }
     },
     async login(form) {
-      const password = await this.encryptPassword(form.password)
+      await loadRuntimeCryptoConfig()
+      const userClient = import.meta.env.VITE_USER_CLIENT || 'h5'
+      const loginConfigResponse = await api.getLoginConfig({
+        userClient,
+        ...(form.tenantId ? { tenantId: form.tenantId } : {}),
+      })
+      const passwordEncryptionEnabled = loginConfigResponse?.data?.enablePasswordEncryption !== false
+      const password = await this.encryptPassword(form.password, passwordEncryptionEnabled)
       const payload = {
         username: form.username,
         password,
@@ -80,9 +94,23 @@ export const useAuthStore = defineStore('auth', {
         codeKey: form.codeKey,
         tenantId: form.tenantId || undefined,
         authType: 'password_captcha',
+        userClient,
+        appId: import.meta.env.VITE_APP_ID || undefined,
+      }
+      const res = await api.login(payload)
+      this.setToken(res.data || {})
+      await this.fetchUserInfo()
+      this.fetchAccessSnapshot()
+      return res
+    },
+    async oauthLogin({ socialTicket, connectionCode, tenantId } = {}) {
+      const payload = {
+        socialTicket,
+        connectionCode,
+        tenantId: tenantId || undefined,
+        authType: 'oauth2',
         userClient: import.meta.env.VITE_USER_CLIENT || 'app',
         appId: import.meta.env.VITE_APP_ID || undefined,
-        appSecret: import.meta.env.VITE_APP_SECRET || undefined,
       }
       const res = await api.login(payload)
       this.setToken(res.data || {})

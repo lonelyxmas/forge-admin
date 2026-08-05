@@ -36,6 +36,13 @@ public class ChatClientCache {
         return cache.get(cacheKey, k -> buildBaseChatClient(provider, options));
     }
 
+    /**
+     * 为会话记忆构造 ChatClient。
+     * <p>Spring AI 1.1.8 起 conversationId 不再由 advisor builder 绑定，
+     * 改为在每次 prompt 调用时通过 advisor context 传入（key 为 {@code ChatMemory.CONVERSATION_ID}）。
+     * 因此这里只注册 MessageChatMemoryAdvisor，调用方在 prompt().advisors() 里传 conversationId。
+     * sessionId 为 null 时不注册 advisor（避免 getConversationId 的 notNull 断言失败）。</p>
+     */
     public ChatClient createSessionClient(ChatClient baseClient, String sessionId,
                                           org.springframework.ai.chat.memory.ChatMemory chatMemory) {
         if (baseClient == null) {
@@ -46,7 +53,6 @@ public class ChatClientCache {
         }
         return baseClient.mutate()
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory)
-                        .conversationId(sessionId)
                         .build())
                 .build();
     }

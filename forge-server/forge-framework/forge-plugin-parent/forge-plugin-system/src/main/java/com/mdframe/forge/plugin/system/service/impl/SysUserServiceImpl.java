@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -621,13 +622,28 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             return false;
         }
 
+        // 批量查询所有用户，避免循环 selectById
+        List<SysUser> users = TenantContextHolder.executeIgnore(() -> userMapper.selectBatchIds(userIds));
+        Map<Long, SysUser> userMap = users.stream()
+                .collect(Collectors.toMap(SysUser::getId, Function.identity(), (left, right) -> left));
+
+        // 批量查询有启用租户关系的 userId 集合，避免循环 selectCount
+        Set<Long> usersWithMembership = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectList(new LambdaQueryWrapper<SysUserTenant>()
+                        .in(SysUserTenant::getUserId, userIds)
+                        .eq(SysUserTenant::getStatus, 1)
+                        .select(SysUserTenant::getUserId))
+                        .stream()
+                        .map(SysUserTenant::getUserId)
+                        .collect(Collectors.toSet()));
+
         for (Long userId : userIds) {
             assertNotSelfManagement(userId);
-            SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+            SysUser user = userMap.get(userId);
             if (user == null) {
                 throw new RuntimeException("用户不存在");
             }
-            boolean defaultTenant = user.getTenantId() == null || !hasEnabledTenantMembership(userId);
+            boolean defaultTenant = user.getTenantId() == null || !usersWithMembership.contains(userId);
             upsertUserTenant(userId, tenantId, memberType, defaultTenant);
             if (defaultTenant) {
                 SysUser updateUser = new SysUser();

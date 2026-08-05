@@ -1,0 +1,171 @@
+# 执行日志 — 应用级业务流程编排器
+
+> change: `application-business-process-orchestrator`
+> started: 2026-08-03
+
+## 2026-08-03 Task 0：HARD-GATE 与实施基线
+
+- 变更范围：仅当前变更的 `spec.md`、`tasks.md`、`test-spec.md`、`execution-log.md`。
+- 用户授权：当前会话明确要求开始开发，按 Spec 第 9 章六项推荐默认值完成 HARD-GATE。
+- 规则基线：已读取根 `AGENTS.md`、`code-copilot/AGENTS.md`、三份 memory、自动化测试标准、流程业务 Skill 共享参考、Forge 编码规范与前端设计 Skill。
+- Git 基线：当前分支为 `main`；工作区已有能力开放平台相关修改和 `.DS_Store` 变化，均不属于本变更，实施中禁止覆盖或提交。
+- Flyway 基线：当前最新脚本为并行变更中的 `V1.0.82__improve_capability_client_workbench.sql`；本变更分配 `V1.0.83/V1.0.84`，不修改 `V1.0.82`。
+- 协议基线：冻结 `businessProcessJson 1.0`、三类完整样例、可信身份矩阵、Process/Node/Approval 状态机与 CAS 条件。
+- 安全结论：DAG、单活动审批、受限定时普通用户、同应用子流程深度 5、分阶段旧入口停写、禁止自由 Webhook；任一身份/权限/版本/关联不可信时失败关闭。
+- 已启动服务：无。
+- 数据库/运行态变更：无。
+- 文档检查：四份变更文档通过 `git diff --no-index --check`，无空白错误。
+- 协议检查：Ruby `JSON.parse` 成功解析 `test-spec.md` 中 3 个 JSON 协议样例；Ruby 输出一条系统目录权限 warning，不影响解析结论。
+- 状态检查：Spec 为 `apply`、HARD-GATE 为 `completed`、Tasks 为 `Apply/M1`；未发现仍要求“仅允许 Proposal”或“待用户确认”的门禁文本。
+- 已知非阻断：Spec Research 与任务前置中出现的 `TODO` 是对旧 `BusinessTriggerExecutor` 未实现 Webhook 的现状描述，不是本变更占位实现；新节点必须把该能力标为不可用。
+- 提交证据：`57fc3acb [application-business-process-orchestrator] 冻结编排协议与验证基线`；提交统计上传因本机 DNS/网络失败，Git 提交本身成功，未执行 push。
+
+## 2026-08-03 Task 1：流程数据库结构与资源
+
+- 新增 `V1.0.83__add_application_business_process.sql`：创建流程定义、不可变版本、运行实例和节点运行四张表；定义/版本使用 `BIGINT del_flag` 主键墓碑，运行表不提供删除标记。
+- 新增 `V1.0.84__add_application_business_process_resources.sql`：写入设计/运行/节点/触发字典、应用发布 `PROCESSES` 步骤、隐藏设计器路由和管理/运行/迁移权限；权限只继承既有应用查看、编辑和发布角色，不扩大无应用权限角色。
+- 幂等与租户：建表使用 `CREATE TABLE IF NOT EXISTS`；字典、资源和角色资源均使用 `NOT EXISTS`；内置数据统一 `tenant_id=1`。
+- 静态验证：`git diff --check` 通过；两个新迁移的 Flyway placeholder 扫描无输出；`tenant_id DEFAULT 0/=0/,0` 扫描无输出；迁移版本重复扫描无输出。
+- 轻量结构检查：`V1.0.83` 单引号 202、左右括号 60/60；`V1.0.84` 单引号 496、左右括号 31/31。
+- 合同核对：Flowable 使用 `BusinessFlowService/FlowClient`；消息与企业协同使用 `BusinessActionStepExecutor + MessageService/CollaborationMessageChannel`；统一能力平台仅确认 `CapabilityRegistry`，generator 尚无受控桥接，Task 9B 前按不可用处理。
+- 安全发现：旧 `SendMessageActionStepExecutor#resolveUserId` 在无 Session 时回退 `1L`，违反本变更“无合法普通用户失败关闭”；列入 Task 9B 修复，业务流程运行时不得复用该回退。
+- 跳过项：未连接 MySQL，未执行新库/存量库/重复 Flyway 和 `forge_schema_history` 检查；原因是本轮不自动修改真实数据库，留待 Task 19 目标环境验收。
+- 已启动服务：无。
+
+## 2026-08-03 Task 2：流程定义持久层
+
+- 新增 `AiBusinessProcess`：覆盖流程定义全部字段，`delFlag` 显式使用 `@TableLogic(value = "0", delval = "id")`。
+- 新增 `BusinessProcessMapper/BusinessProcessMapper.xml`：分页和按 ID/编码查询同时限定 `tenant_id`、有效应用、有效应用对象关联、启用业务对象和 `del_flag=0`，共享对象不能绕过应用关联。
+- 并发与删除：草稿保存要求当前 `draft_schema_hash` 命中客户端基线后才更新；逻辑删除原子写入当前行 `id` 并记录更新人。
+- 新增 `BusinessProcessMapperContractTest` 3 项：覆盖主键墓碑、租户/应用/对象失败关闭和草稿 hash CAS。
+- 首次命令：默认 Java 8 执行 Maven 失败，错误为 `无效的目标发行版: 17`，未进入源码编译；确认本机已有 Homebrew JDK 17 后仅对验证命令临时切换。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；测试 `3/3` 通过。现有 `BusinessFlowService` deprecation 与 `BusinessObjectDesignerService` unchecked 编译提示未新增失败。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 3：流程版本持久层
+
+- 新增 `AiBusinessProcessVersion`：完整承载应用版本、流程版本、规范化协议、依赖快照与发布审计，`delFlag` 使用主键墓碑逻辑删除。
+- 新增 `BusinessProcessVersionMapper/BusinessProcessVersionMapper.xml`：提供固定版本、版本 ID、版本列表、应用选定流程集合和最大版本号查询；全部显式限定租户和未删除记录，正式版本读取额外限定 `status=1`。
+- 不可变合同：只新增 `insertImmutable`，XML 不存在 `<update>` 或 `UPDATE ai_business_process_version`；空 `processIds` 集合使用 `AND 1 = 0` 失败关闭，避免误查全应用版本。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `4/4` 通过。仅保留 Task 2 已记录的既有 deprecation/unchecked 编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 4：流程运行与节点运行持久层
+
+- 新增 `AiBusinessProcessRun/AiBusinessProcessNodeRun`：运行记录固定应用、流程版本、业务对象/记录、可信 actor 与组织；节点记录按 `runId + nodeId + attemptNo` 新增尝试，不声明普通删除字段。
+- 新增 `BusinessProcessRunMapper/BusinessProcessRunMapper.xml`：提供运行 ID、幂等键、Flowable 实例等待关联和租户内恢复扫描；恢复范围区分 PENDING、超时 RUNNING/WAITING 和到期 FAILED。
+- 流程强 CAS：更新同时匹配 `tenantId + runId + expectedStatus + expectedCurrentNodeId + expectedProcessInstanceId`；终态记录结束时间，失败重试仅允许 `FAILED -> PENDING` 且原子增加次数。
+- 新增 `BusinessProcessNodeRunMapper/BusinessProcessNodeRunMapper.xml`：插入尝试强制 PENDING，认领只允许 PENDING，完成/等待/回调消费同时匹配旧状态和 correlation；失败尝试不提供复活 SQL。
+- XML 检查：`xmllint --noout BusinessProcessRunMapper.xml BusinessProcessNodeRunMapper.xml` 通过；目标文件 `git diff --check` 通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `6/6` 通过。仅保留已记录的既有 deprecation/unchecked 编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 5：运行查询与安全摘要
+
+- 新增 `BusinessProcessRunQueryDTO`：支持应用、流程、业务对象、记录、状态、触发来源和创建时间区间过滤。
+- 新增 `BusinessProcessRunVO/BusinessProcessRunDetailVO`：流程、版本、actor、组织和节点运行 ID 均声明为字符串；详情时间线只暴露 correlation、安全输入/输出摘要、错误码和截断错误摘要。
+- 运行分页 SQL：显式限定 `r.tenant_id`，使用 `CAST(... AS CHAR)` 返回所有长整型 ID，不读取 `context_snapshot/source_event_id/idempotency_key`。
+- 节点查询：时间线使用不含幂等键的 `Timeline_Columns`；最后尝试保留内部幂等恢复字段；可重试与审批 correlation 查询同时限定租户和 run，查询顺序稳定。
+- XML 检查：`xmllint --noout BusinessProcessRunMapper.xml BusinessProcessNodeRunMapper.xml` 通过；目标文件 `git diff --check` 通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；累计 Mapper 契约测试 `8/8` 通过，新增验证安全列和字符串 ID。仅保留已记录的既有编译提示。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 6：businessProcessJson 协议与发布校验
+
+- 新增强类型协议：`BusinessProcessSchema/BusinessProcessNode/BusinessProcessEdge` 分离根协议、主对象、节点、连线、策略、依赖和迁移元数据，不复用 BPMN/flowJson。
+- 新增 `BusinessProcessSchemaValidator`：严格拒绝重复键、未知根字段和数字 ID；按节点/边/端口及依赖排序生成 canonical JSON 和 SHA-256；保留条件分支与重试退避等有序语义。
+- 图门禁：单开始、节点注册表、固定/条件/审批出口、悬空边、自环、重复出口、DAG、开始可达、结束可达、节点/边数量和子流程深度全部失败关闭。
+- 节点与依赖门禁：校验事件、定时普通用户引用、审批固定版本与四结果出口、记录动作、消息、业务动作、能力桥接、同应用已发布子流程、直接/间接递归、对象与字段有效性。
+- 安全门禁：大小写及嵌套路径扫描 URL/Webhook/Secret/Token/Password/PrivateKey/Authorization/Cookie/JavaClass/SQL/Script/SpEL；自由 URL/JDBC 地址和画布 actor userId 覆盖失败关闭，问题响应不回显配置值。
+- 冻结样例修正：定时提醒样例原有未连线 `end_failed`，与不可达节点门禁冲突，已从 `test-spec.md` 和测试资源中移除；新增手动审批、事件审批、定时提醒三份 classpath 回归资源。
+- 新增 `BusinessProcessValidationVO/BusinessProcessValidationContext` 与 `BusinessProcessSchemaValidatorTest` 10 项，覆盖稳定 hash、三份冻结样例、重复键/数字 ID、多开始、环、悬空边、未知节点、无结束路径、失效字段、敏感键、自由 URL、递归子流程和能力桥接未就绪。
+- 中间失败 1：新增“未知节点/无结束节点”用例首次用字符串替换构造 fixture，未实际移除结束节点，导致 1 项断言失败；改为解析后按节点/边 ID 构造无结束图，重跑通过，生产代码无回退。
+- 中间失败 2：仅关闭 Jackson scalar coercion 仍会把数字 objectId 转为字符串，数字 ID 拒绝用例失败；增加原始 JsonNode 递归 ID 类型检查，并保留校验阶段二次保护，重跑通过。
+- 成功命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessSchemaValidatorTest,BusinessProcessMapperContractTest test`。
+- 结果：主代码编译成功；本轮 `18/18` 测试通过（Schema 10、Mapper 8）。仅保留已记录的既有 deprecation/unchecked 编译提示。
+- 知识沉淀：新增 `pitfalls.md #160`，明确画布样例必须通过真实图校验，不能以 JSON 语法解析代替合法性验证。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 7：流程定义控制面 Service 与 API
+
+- 新增 `BusinessProcessDTO/BusinessProcessSchemaDTO/BusinessProcessVO`、`BusinessProcessService` 和 `BusinessProcessController`：提供应用内分页、详情、创建、同应用复制、基础信息更新、草稿 hash CAS、校验、启停和逻辑删除；Controller 使用独立 `/ai/business/process` 命名空间、加解密与细粒度权限。
+- 草稿语义：新流程初始化为规范化“手动开始 → 成功结束”；所有 JSON/前端雪花 ID 保持字符串；流程编码创建后不可修改；结构不完整草稿可保存并保持 `DRAFT`，跨应用对象、编码不一致、Secret/自由 URL 等高风险错误禁止保存。
+- 复制与删除：副本生成新编码并重建全部节点/边 ID，清空发布版本、运行状态和旧来源；存在任意 run 或有效发布版本时拒绝逻辑删除。
+- 校验目录：使用当前应用对象/字段、不可变对象发布快照中的动作、表单/消息、同应用已发布子流程和真实 `sys_resource` 权限目录；Flowable 模型必须同时属于当前应用对象绑定且 `status=1/deploymentId` 有效，流程服务不可用时失败关闭。
+- 权限补丁：新增 `V1.0.85__add_business_process_start_permission.sql`，不修改已提交 `V1.0.84`；注册 `ai:businessProcess:start`，仅从既有 `ai:businessApplication:runtime` 角色继承通用 API 门禁，正式运行仍需发布快照动作权限、可见条件、记录状态和数据权限二次校验。
+- Mapper 扩展：基础信息/状态/设计状态更新、Schema CAS 同步主对象、run 引用计数、有效发布引用计数和当前已发布子流程查询全部写在 XML；流程列表不返回完整草稿正文。
+- 定向测试命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessSchemaValidatorTest,BusinessProcessMapperContractTest,BusinessProcessServiceTest,BusinessProcessControllerTest,BusinessProcessValidationContextResolverTest test`。
+- 定向测试结果：`31/31` 通过（Schema 10、Mapper 9、Service 8、Controller 3、Context Resolver 1），Failures/Errors/Skipped 均为 0。
+- 静态检查：`xmllint --noout` 校验三份变更 Mapper XML 通过；`V1.0.85` Flyway placeholder 和 `tenant_id=0` 扫描无输出，`tenant_id=1/NOT EXISTS/ai:businessProcess:start` 命中预期；目标文件 `git diff --check` 通过。
+- 聚合编译命令：`JAVA_HOME=<JDK17> PATH=<JDK17/bin:...> mvn -pl forge-admin-server -am compile -DskipTests`。
+- 聚合编译结果：47/47 模块 `BUILD SUCCESS`，generator 与 admin 装配链路通过；仅有既有 deprecation、unchecked 和 Lombok `@Builder` warning，无新增阻断。
+- 跳过项：未执行真实 MySQL/Flyway、权限继承数据查询、加密 HTTP API、Flowable 已发布/未发布模型联调和浏览器验证；原因是本轮遵循用户偏好不启动真实服务、不改数据库或 Flowable 运行态，留待 Task 19 环境门禁。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-03 Task 14：前端独立协议与画布基础
+
+- TDD 红灯：首次执行 `pnpm exec vitest run src/components/business-process-designer/__tests__/business-process-designer.spec.js`，测试套件因 `BusinessProcessCanvas.vue` 等四个目标模块不存在而按预期失败，未进入用例执行。
+- 协议与注册表：新增 `business-process-schema.js/business-process-node-types.js`，提供默认草稿、严格字符串 ID、BPMN 输入拒绝、节点/边/端口/依赖排序、稳定 hash 输入、八类业务节点和审批四结果出口。
+- 设计器状态：新增 `useBusinessProcessDesigner.js`，复用 `useFlowHistory`，支持线性节点插入/复制/删除、边 CRUD、条件双分支、选择、撤销重做、dirty 基线和深克隆导出；业务 DAG 中不生成伪审批节点。
+- 画布复用：新增 `BusinessProcessCanvas.vue`，用临时只读布局适配把业务类型映射给 `layoutFlow`，持久化协议不增加 `nodeType/bpmnElementId`；直接复用既有 `FlowCanvas/EdgeLayer` 插槽，无需修改共享画布。
+- BPMN 隔离：`convertJsonToBpmn` 在转换前显式识别并拒绝 `businessProcessJson`，审批 `flowJson` 的原转换路径保持不变。
+- 定向测试：业务画布测试 `10/10` 通过；组合执行业务画布、BPMN roundtrip、JSON→BPMN、FlowCanvas、layout-engine 共 5 个测试文件，结果 `48/48` 通过。
+- 中间操作纠正：首次组合回归误在仓库根目录执行，pnpm 报 `Command "vitest" not found`，未执行任何测试或产生代码影响；切换到 `forge-admin-ui` 后按同一命令通过。
+- 静态检查：`pnpm exec eslint src/components/business-process-designer src/components/flow-designer/converter/json-to-bpmn.js` 通过；目标文件 `git diff --check` 通过。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8825` 个模块并 `BUILD SUCCESS`（`built in 1m 50s`）。保留仓库既有的组件命名冲突、动态/静态 import、CSS `//` 注释警告，未新增阻断。
+- 跳过项：未启动 Vite/浏览器，原因是 Task 14 仅交付协议和画布基础，尚无应用路由与完整节点配置；浏览器交互留待 Task 15-16。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
+- 已启动服务：无。
+
+## 2026-08-03 Task 15：节点配置、真实审批设计器与草稿交互
+
+- TDD 红灯：新增 `business-process-designer-workbench.spec.js` 后首次运行因五个目标组件不存在而在模块解析阶段失败，符合先冻结工作台交互合同再实现的预期。
+- 工作台：新增 `BusinessProcessDesigner.vue`，提供紧凑工具栏、节点面板、共享画布、问题列表、节点复制/删除、检查、自动/显式保存状态、服务端冲突提示与刷新入口；dirty 草稿注册 `beforeunload` 保护。
+- 节点配置：新增 `BusinessProcessNodeRenderer/BusinessProcessNodeConfigDrawer/StartNodeConfig/ActionAndApprovalNodeConfig`，覆盖触发方式、事件、定时服务账号、结构化条件、记录动作、消息、业务动作、能力、审批、子流程和结束结果，不暴露高级文本协议或自由外部目标。
+- 审批衔接：审批节点只选择已发布/已部署 Flowable 模型，并在全屏弹层异步复用真实 `flow/design.vue`；会签、驳回、退回、审批人和字段权限继续由 BPMN 所有，关闭/保存/部署后发出模型刷新事件。
+- 协议联动：新增 `synchronizeBusinessProcessDependencies` 与开始类型切换合同；节点引用变更自动重建七类受治理依赖，手动/事件/定时切换同步 `recordIdSource`，动作新增默认绑定当前主对象。
+- 定向测试：两份业务设计器测试共 `17/17` 通过（协议/历史 11、工作台交互 6）；工作台测试覆盖审批四出口、真实设计器入口、结构化触发切换、面板路由、依赖同步、自动保存、hash 冲突和离开保护。
+- 组合回归：业务设计器、BPMN roundtrip、JSON→BPMN、FlowCanvas 和 layout-engine 共 6 个测试文件，结果 `55/55` 通过；未发布/未部署审批模型不会进入可选目录。
+- 静态检查：`pnpm exec eslint src/components/business-process-designer` 通过；目标目录 `git diff --check` 通过。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8825` 个模块并成功构建（`built in 1m 46s`）；真实 `flow/design.vue` 异步依赖、Naive UI 抽屉和弹窗均通过装配。
+- 既有警告：仍为组件命名冲突、动态/静态 import 和 CSS `//` 注释等仓库存量构建警告，本任务未新增阻断。
+- 跳过项：未启动 Vite/浏览器，原因是 Task 15 独立组件尚未接入可访问路由；浏览器与路由离开验收将在 Task 16 完成应用工作台/全屏设计页后执行。未启动 Admin/Flow 服务，未执行 Flyway、数据库或 Flowable 运行态变更。
+- 已启动服务：无。
+
+## 2026-08-03 Task 16：应用工作台业务流程核心面板
+
+- TDD 红灯：新增 Task 16 工作台测试后首次运行因 `ApplicationProcessPanel.vue`、`business-process.[processId].vue` 和 `api/business-process.js` 不存在而在模块解析阶段失败，符合先冻结接口、列表和设计页交互合同再实现的预期。
+- 控制面 API：新增 `api/business-process.js`，分页、详情、创建、复制、更新、设计草稿、Schema CAS、校验、启停和逻辑删除均显式使用加密请求；保存 payload 使用服务端返回的 64 位 `draftSchemaHash`，不把前端 dirty-check hash 当并发基线。
+- 应用工作台：新增克制的流程列表，支持搜索、状态筛选、分页、新建、复制、设计、启停、逻辑删除和进入应用发布；新建流程只选择当前应用对象，流程编码由服务端生成。旧“业务流程/触发器/动作”三按钮组件不再作为应用工作台主入口。
+- 路由与返回：`automation` 分区文案改为“业务流程 / 触发、审批与自动化”，新增 `/app-center/business-process/:processId` 全屏路由；筛选同步到 route query，`returnTo` 返回原应用和筛选状态，且只接受本地路径。
+- 全屏设计页：加载真实 designer 草稿和对象字段、对象动作、Flowable 模型、表单、消息模板、同应用已发布子流程目录；所有 ID 归一为字符串。关闭内嵌 Flowable 设计器后刷新模型和表单目录；受治理能力与服务账号目录未交付时保持空目录并失败关闭。
+- 草稿可靠性：保存期间继续编辑会排队再次 CAS 保存；脏草稿执行检查前先保存；HTTP 409 显示冲突并禁止覆盖；浏览器刷新和路由离开分别由 `beforeunload` 与 `onBeforeRouteLeave` 保护。
+- 未交付边界：运行记录和迁移预览在面板中显示“待接入”禁用态，未创建 Task 13/17 尚不存在的 API。
+- 定向与回归测试：Node `v20.19.0` 下执行 Task 16 API/工作台测试与业务流程设计器、BPMN roundtrip、JSON→BPMN、FlowCanvas、layout-engine 共 8 个测试文件，结果 `62/62` 通过。
+- 静态检查：Task 16 API、页面、路由、测试及 `src/components/business-process-designer` 目标 ESLint 通过；目标文件空白检查通过。
+- 浏览器验证：用 `webapp-testing` Playwright 脚本临时启动 Vite `127.0.0.1:3017`，通过 34 次受控请求装配真实应用工作台和全屏设计路由；验证旧三入口消失、筛选保留、节点新增、CAS 保存使用 `aaaaaaaa...` 服务端 hash、服务端校验和未保存离开取消。workspace/designer 截图保存于 `/tmp/forge-task16-workspace.png`、`/tmp/forge-task16-designer.png`，console error 与 page error 均为 0；脚本结束后 Vite 已停止。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8845` 个模块并成功构建（`built in 1m 58s`）；保留仓库既有组件命名冲突、动态/静态 import 和 CSS `//` 注释警告，无新增阻断。
+- 跳过项：未启动 Admin/Flow，未执行真实加密 HTTP、权限资源查询、MySQL/Flyway、Flowable 模型保存/部署或运行态变更；这些仍由 Task 19 目标环境验收。
+- 已启动服务：浏览器验证仅临时启动 Vite，已由脚本停止；未遗留 `3017` 监听进程。
+
+## 2026-08-04 Task 12：应用发布流程版本和依赖快照
+
+- TDD 红灯：先新增 `BusinessProcessPublishServiceTest` 和应用发布步骤断言；首次执行 `mvn -Penable-tests ... -Dtest=BusinessProcessPublishServiceTest,BusinessApplicationPhaseFiveSecurityTest` 在测试编译阶段因 `BusinessProcessPublishService` 尚不存在而失败，符合先冻结版本合同再实现的预期。
+- 发布选择与候选冻结：`BusinessApplicationPublishDTO/AssetSelectionVO` 增加流程 ID；空选择默认包含应用内全部启用流程，`includeAutomation=false` 时明确为空。候选快照保存流程白名单信息、完整结构化协议和 `draftSchemaHash`，恢复不得读取后来修改的新草稿。
+- 不可变版本：新增 `BusinessProcessPublishService/BusinessProcessPublishResult/BusinessProcessSnapshot`；发布前锁定流程定义，以 `(tenant_id, process_id, application_version, del_flag)` 幂等复用，hash 不同返回 409；新版本只执行 `insertImmutable`，无版本 UPDATE SQL。
+- 依赖固定：流程版本依赖快照固定对象设计版本；Flowable 必须同时具备 `status=1`、正版本号、`processDefinitionId` 和 `deploymentId`，并保存模型 ID、版本与部署标识；表单、业务动作、消息模板、能力和子流程只保存稳定白名单引用。
+- 应用发布与恢复：固定步骤变为 `PRECHECK → SNAPSHOT → PROCESSES → OBJECTS → ENTRIES → PAGE_MENUS → EXTENSIONS → COMMIT`；`PROCESSES` 被计入部分成功副作用，步骤成功后把结构化 `publishedProcessVersions` 写回运行单快照。`runtimeActions` 仅冻结空字段，Task 13 再编译手动动作。
+- 回滚边界：来源快照中的历史 `processVersionId` 只恢复流程定义的 `published_version/design_status` 投影，并清理未选择投影；不读取或更新运行表，因此已开始实例继续固定自己的流程版本。
+- 就绪检查：正式流程来源切换为 `businessProcessJson`；复用 Schema/图/依赖校验阻断对象版本、字段、审批部署版本、结束路径、子流程递归、单活动审批策略和手动权限问题。旧 binding 仅作为兼容快照保留，不再决定是否存在应用级流程。
+- 定向验证命令：`JAVA_HOME=<JDK17> mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessPublishServiceTest,BusinessApplicationPhaseFiveSecurityTest,BusinessApplicationAssetSelectionServiceTest,BusinessApplicationReadinessServiceTest,BusinessProcessMapperContractTest,BusinessProcessSchemaValidatorTest,BusinessProcessValidationContextResolverTest,BusinessProcessServiceTest,BusinessApplicationPublishRunServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 边界复核红灯：补充“候选缺少流程 hash”和“Flowable 版本号为 0”回归后，相关两类测试共 `7` 项首次运行出现 `3` 个预期失败，确认协调发布仍会回退当前草稿且零版本会被校验/发布接受。
+- 边界修正：协调发布存在 `publishRunId` 时强制要求每个所选流程都有候选 hash；Flowable 模型在校验目录和依赖固定阶段均要求版本号 `> 0`。相关两类测试重跑 `7/7` 通过。
+- 定向验证结果：Task 12 九类测试最终 `46/46` 通过，Failures/Errors/Skipped 均为 0；覆盖幂等重试、hash 冲突、候选 hash 缺失失败关闭、Flowable 非正版本拒绝、对象/Flowable 依赖固定、历史投影恢复、默认流程选择、快照字段和就绪阻断。
+- Mapper 静态检查：`xmllint --noout BusinessProcessMapper.xml BusinessProcessVersionMapper.xml` 通过；目标差异 `git diff --check` 通过。
+- 聚合编译：边界修正后重跑 `JAVA_HOME=<JDK17> mvn -pl forge-admin-server -am -DskipTests compile`，47/47 模块 `BUILD SUCCESS`；仅保留仓库既有 deprecation、unchecked 和 Lombok `@Builder` warning。
+- generator 全量基线（边界修正前）：执行 `mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator test`，共 561 项，555 项通过，2 failures + 4 errors。失败为未被 Task 12 修改的 `FormulaExecutionEngineLookupTest`、`FormulaValueMaskerTest`、`BusinessBindingApplicationTargetTest`、`BusinessExtensionVersionServiceTest`（2 项）和 `LowcodeRuntimeConfigBuilderTest`；Task 12 定向类全部通过，本轮未越界修改这些存量失败。边界修正后未重复消耗时间执行同一已知失败全量，改以覆盖修改类的 `46/46` 定向测试和 47 模块聚合编译闭环。
+- 跳过项：未启动 Admin/Flow，未执行 Flyway、真实数据库发布/回滚、加密 HTTP 或 Flowable 部署联调；本任务没有新增数据库脚本，真实新旧实例并存验收留待 Task 19。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。

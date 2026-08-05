@@ -250,7 +250,7 @@
                         maxlength="64"
                         show-count
                         placeholder="请输入数据集名称"
-                        @update:value="value => formData.datasetName = value"
+                        @update:value="value => updateDatasetFormField(formData, 'datasetName', value, updateValue)"
                       />
                     </label>
                     <label class="dataset-field dataset-field--required">
@@ -259,7 +259,7 @@
                         :value="formData.datasetCode"
                         :disabled="isFormReadOnly"
                         placeholder="请输入数据集编码"
-                        @update:value="value => formData.datasetCode = value"
+                        @update:value="value => updateDatasetFormField(formData, 'datasetCode', value, updateValue)"
                       />
                     </label>
                     <label class="dataset-field">
@@ -271,7 +271,7 @@
                         clearable
                         default-expand-all
                         placeholder="请选择业务分类"
-                        @update:value="value => formData.categoryId = value"
+                        @update:value="value => updateDatasetFormField(formData, 'categoryId', value, updateValue)"
                       />
                     </label>
                     <label class="dataset-field dataset-field--required">
@@ -285,7 +285,7 @@
                           filterable
                           clearable
                           placeholder="请选择数据连接"
-                          @update:value="value => handleConnectionChange(value, formData)"
+                          @update:value="value => handleConnectionChange(value, formData, updateValue)"
                         />
                       </div>
                     </label>
@@ -311,7 +311,7 @@
                       <n-radio-group
                         :value="formData.status"
                         :disabled="isFormReadOnly"
-                        @update:value="value => formData.status = value"
+                        @update:value="value => updateDatasetFormField(formData, 'status', value, updateValue)"
                       >
                         <n-radio-button
                           v-for="option in statusOptions"
@@ -332,7 +332,7 @@
                         filterable
                         clearable
                         placeholder="请先选择数据连接，再选择数据表"
-                        @update:value="value => handleTableNameChange(value, formData)"
+                        @update:value="value => handleTableNameChange(value, formData, updateValue)"
                       />
                     </label>
                     <label class="dataset-field dataset-field--wide">
@@ -345,7 +345,7 @@
                         maxlength="200"
                         show-count
                         placeholder="请输入数据集描述"
-                        @update:value="value => formData.description = value"
+                        @update:value="value => updateDatasetFormField(formData, 'description', value, updateValue)"
                       />
                     </label>
                     <div class="dataset-field dataset-field--wide">
@@ -383,7 +383,7 @@
                         theme="light"
                         show-fullscreen
                         placeholder="SELECT order_id, order_time, customer_name, amount, status FROM orders WHERE order_time >= :start_time AND order_time < :end_time AND status = :status LIMIT :limit"
-                        @update:value="value => formData.sqlText = value"
+                        @update:value="value => updateDatasetFormField(formData, 'sqlText', value, updateValue)"
                       />
                     </div>
                     <div class="sql-preview-shell">
@@ -528,7 +528,7 @@
                           :min="100"
                           :max="1000000"
                           :step="100"
-                          @update:value="value => formData.maxRows = value"
+                          @update:value="value => updateDatasetFormField(formData, 'maxRows', value, updateValue)"
                         />
                         <n-input-number
                           :value="formData.maxRows"
@@ -536,7 +536,7 @@
                           :min="100"
                           :max="1000000"
                           :step="100"
-                          @update:value="value => formData.maxRows = value"
+                          @update:value="value => updateDatasetFormField(formData, 'maxRows', value, updateValue)"
                         />
                       </div>
                     </div>
@@ -552,14 +552,14 @@
                           :min="1"
                           :max="1800"
                           :step="1"
-                          @update:value="value => formData.timeoutSeconds = value"
+                          @update:value="value => updateDatasetFormField(formData, 'timeoutSeconds', value, updateValue)"
                         />
                         <n-input-number
                           :value="formData.timeoutSeconds"
                           :disabled="isFormReadOnly"
                           :min="1"
                           :max="1800"
-                          @update:value="value => formData.timeoutSeconds = value"
+                          @update:value="value => updateDatasetFormField(formData, 'timeoutSeconds', value, updateValue)"
                         />
                       </div>
                     </div>
@@ -568,7 +568,7 @@
                       <n-radio-group
                         :value="formData.cacheEnabled === 1 ? 1 : 0"
                         :disabled="isFormReadOnly"
-                        @update:value="value => handleCacheStrategyChange(value, formData)"
+                        @update:value="value => handleCacheStrategyChange(value, formData, updateValue)"
                       >
                         <n-radio-button :value="0">
                           不缓存
@@ -588,7 +588,7 @@
                         :disabled="isFormReadOnly"
                         :min="1"
                         :max="86400"
-                        @update:value="value => formData.cacheTtlSeconds = value"
+                        @update:value="value => updateDatasetFormField(formData, 'cacheTtlSeconds', value, updateValue)"
                       />
                     </label>
                     <label class="dataset-field">
@@ -1995,7 +1995,7 @@ async function loadConnectionOptions() {
     if (res.code === 200 && Array.isArray(res.data)) {
       connectionOptions.value = res.data.map(item => ({
         label: item.connectionName,
-        value: item.id,
+        value: toIdString(item.id),
       }))
     }
   }
@@ -2391,6 +2391,7 @@ function prepareDatasetFormData(sourceData = {}, options = {}) {
   }
 
   nextFormData.paramSchemaJson = parseParamSchemaFormValue(nextFormData.paramSchemaJson)
+  nextFormData.connectionId = toIdString(nextFormData.connectionId)
   nextFormData.accessMode = nextFormData.accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC'
   nextFormData.aclItems = normalizeAclItems(nextFormData.aclItems)
   nextFormData.rowScope = normalizeRowScope(nextFormData.rowScope)
@@ -2450,13 +2451,14 @@ async function beforeRenderDetail(detailData) {
   return nextFormData
 }
 
-async function handleConnectionChange(connectionId, formData) {
-  formData.connectionId = connectionId
+async function handleConnectionChange(connectionId, formData, updateValue) {
+  formData.connectionId = toIdString(connectionId)
   formData.tableName = null
   clearRowScopeColumns(formData)
   resetRowScopeTableFields()
+  syncSlotForm(updateValue)
   if (formData.datasetType === 'TABLE') {
-    await loadTableOptions(connectionId)
+    await loadTableOptions(formData.connectionId)
   }
 }
 
@@ -2481,9 +2483,10 @@ async function handleDatasetTypeChange(datasetType, formData, updateValue) {
   syncSlotForm(updateValue)
 }
 
-async function handleTableNameChange(tableName, formData) {
+async function handleTableNameChange(tableName, formData, updateValue) {
   formData.tableName = tableName
   clearRowScopeColumns(formData)
+  syncSlotForm(updateValue)
   if (!tableName) {
     resetRowScopeTableFields()
     return
@@ -2826,6 +2829,11 @@ function syncSlotForm(updateValue) {
   }
 }
 
+function updateDatasetFormField(formData, field, value, updateValue) {
+  formData[field] = value
+  syncSlotForm(updateValue)
+}
+
 async function handleAccessModeChange(value, formData, updateValue) {
   formData.accessMode = value === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC'
   syncSlotForm(updateValue)
@@ -3073,11 +3081,12 @@ function handleRowScopeRemarkChange(formData, value, updateValue) {
   syncSlotForm(updateValue)
 }
 
-function handleCacheStrategyChange(value, formData) {
+function handleCacheStrategyChange(value, formData, updateValue) {
   formData.cacheEnabled = value === 1 ? 1 : 0
   if (formData.cacheEnabled === 1 && !formData.cacheTtlSeconds) {
     formData.cacheTtlSeconds = 300
   }
+  syncSlotForm(updateValue)
 }
 
 function getRowScopeAttributeOptions(formData, currentRule) {

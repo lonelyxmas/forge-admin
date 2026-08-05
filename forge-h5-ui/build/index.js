@@ -1,6 +1,5 @@
 import path from 'node:path'
-import pkg from 'glob'
-const { sync: globSync } = pkg
+import { globSync } from 'glob'
 import dynamicIcons from '../src/static/icons/dynamic-icons.js'
 
 /**

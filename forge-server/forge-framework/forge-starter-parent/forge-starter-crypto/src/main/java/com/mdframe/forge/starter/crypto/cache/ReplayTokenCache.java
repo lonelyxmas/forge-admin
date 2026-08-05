@@ -18,25 +18,14 @@ public class ReplayTokenCache {
     private final ICacheService cacheService;
 
     /**
-     * 缓存nonce
+     * 原子登记 nonce，避免并发请求在检查和写入之间同时通过。
      *
-     * @param nonce     随机字符串
-     * @param expireSeconds 过期时间（秒）
+     * @return true 表示首次登记，false 表示 nonce 已存在
      */
-    public void cache(String nonce, long expireSeconds) {
+    public boolean markIfAbsent(String nonce, long expireSeconds) {
         String key = CACHE_PREFIX + nonce;
-        cacheService.set(key, "1", expireSeconds, TimeUnit.SECONDS);
-        log.debug("缓存防重放nonce: {}, 过期时间: {}秒", nonce, expireSeconds);
-    }
-
-    /**
-     * 检查nonce是否已存在
-     *
-     * @param nonce 随机字符串
-     * @return 是否存在
-     */
-    public boolean exists(String nonce) {
-        String key = CACHE_PREFIX + nonce;
-        return cacheService.hasKey(key);
+        boolean marked = cacheService.setIfAbsent(key, "1", expireSeconds, TimeUnit.SECONDS);
+        log.debug("原子登记防重放nonce: {}, 结果: {}, 过期时间: {}秒", nonce, marked, expireSeconds);
+        return marked;
     }
 }
