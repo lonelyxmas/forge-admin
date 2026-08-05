@@ -42,10 +42,7 @@
         <where>
             AND (t.assignee = #{userId}
                 OR (t.candidate_users IS NOT NULL AND t.candidate_users != ''
-                    AND (t.candidate_users = #{userId}
-                        OR t.candidate_users LIKE CONCAT(#{userId}, ',%')
-                        OR t.candidate_users LIKE CONCAT('%,', #{userId})
-                        OR t.candidate_users LIKE CONCAT('%,', #{userId}, ',%')))
+                    AND FIND_IN_SET(#{userId}, t.candidate_users))
                 OR (t.candidate_groups IS NOT NULL AND t.candidate_groups != ''))
             AND (t.status = 0 OR (t.assignee = #{userId} AND t.status = 1))
             <if test="title != null and title != ''">
