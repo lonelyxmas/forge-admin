@@ -21,6 +21,12 @@ import com.mdframe.forge.plugin.ai.provider.support.AiProviderSecretMasker;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.plugin.ai.provider.support.ProviderModelFetcher;
 import com.mdframe.forge.plugin.ai.provider.vo.AiProviderVO;
+import com.mdframe.forge.plugin.ai.model.adapter.AiModelAdapterRegistry;
+import com.mdframe.forge.plugin.ai.model.adapter.AiEmbeddingModelAdapter;
+import com.mdframe.forge.plugin.ai.model.adapter.AiRerankModelAdapter;
+import com.mdframe.forge.plugin.ai.multimodal.image.adapter.AiImageModelAdapter;
+import com.mdframe.forge.plugin.ai.multimodal.voice.adapter.AiAsrModelAdapter;
+import com.mdframe.forge.plugin.ai.multimodal.voice.adapter.AiTtsModelAdapter;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +53,7 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
     private static final String CONNECTION_TEST_FAILURE_MESSAGE = "连接失败，请检查供应商配置和网络状态";
 
     private final AiProviderAdapterRegistry adapterRegistry;
+    private final AiModelAdapterRegistry modelAdapterRegistry;
     private final AiProviderCacheEvictionScheduler evictionScheduler;
     private final AiModelService modelService;
     private final AiModelHealthRegistry healthRegistry;
@@ -123,6 +130,18 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
      */
     public String testConnection(AiProviderTestDTO request) {
         AiProvider provider = resolveTestProvider(request);
+        String modelType = request.getModelType();
+        // 未指定或 Chat 类型走现有 ChatModel 路径
+        if (!StringUtils.hasText(modelType) || AiModelType.CHAT.getCode().equals(modelType)) {
+            return testChatConnection(provider);
+        }
+        return testNonChatConnection(provider, modelType, request);
+    }
+
+    /**
+     * Chat 模型连接测试（现有逻辑）。
+     */
+    private String testChatConnection(AiProvider provider) {
         String model = resolveTestModel(provider);
         AiModelRuntimeOptions options = new AiModelRuntimeOptions(
                 model, 0D, CONNECTION_TEST_MAX_TOKENS);
@@ -151,6 +170,95 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
                     diagnostics.httpStatus(), diagnostics.errorCode());
             throw new BusinessException(CONNECTION_TEST_FAILURE_MESSAGE);
         }
+    }
+
+    /**
+     * 非 Chat 类型连接测试（Embedding/Rerank/Image/ASR/TTS），通过 model 层适配器分发。
+     */
+    private String testNonChatConnection(AiProvider provider, String modelType, AiProviderTestDTO request) {
+        AiModelType type = AiModelType.fromCode(modelType);
+        if (type == null) {
+            throw new BusinessException("不支持的模型类型: " + modelType);
+        }
+        String model = resolveNonChatTestModel(provider, modelType, request);
+        String baseUrl = AiProviderBaseUrlPolicy.normalizeAndValidate(
+                provider.getAdapterCode(), provider.getBaseUrl());
+        String apiKey = provider.getId() != null && aiSecretCrypto.isEncrypted(provider.getApiKey())
+                ? aiSecretCrypto.decrypt(provider.getApiKey()) : provider.getApiKey();
+        try {
+            String result = dispatchNonChatTest(type, model, baseUrl, apiKey);
+            log.info("[AI供应商测试] 连接成功, providerId={}, adapterCode={}, modelType={}, model={}",
+                    provider.getId(), provider.getAdapterCode(), type.getCode(), model);
+            resetProviderHealth(provider);
+            return result;
+        } catch (BusinessException e) {
+            log.warn("[AI供应商测试] 配置校验失败, providerId={}, adapterCode={}, modelType={}, exceptionType={}",
+                    provider.getId(), type.getCode(), e.getClass().getSimpleName());
+            throw e;
+        } catch (Exception e) {
+            AiProviderFailureDiagnostics diagnostics = AiProviderFailureDiagnostics.from(e);
+            log.warn("[AI供应商测试] 连接失败, providerId={}, adapterCode={}, modelType={}, "
+                            + "exceptionType={}, httpStatus={}, errorCode={}",
+                    provider.getId(), type.getCode(), e.getClass().getSimpleName(),
+                    diagnostics.httpStatus(), diagnostics.errorCode());
+            throw new BusinessException(CONNECTION_TEST_FAILURE_MESSAGE);
+        }
+    }
+
+    /**
+     * 按模型类型分发到对应适配器执行测试。
+     */
+    private String dispatchNonChatTest(AiModelType type, String model, String baseUrl, String apiKey) {
+        return switch (type) {
+            case EMBEDDING -> testEmbeddingConnection(model, baseUrl, apiKey);
+            case RERANK -> testRerankConnection(model, baseUrl, apiKey);
+            case IMAGE_GENERATION -> testImageConnection(model, baseUrl, apiKey);
+            case TTS -> testTtsConnection(model, baseUrl, apiKey);
+            case ASR -> throw new BusinessException("ASR模型需音频输入，请通过其他类型模型测试供应商连接");
+            default -> throw new BusinessException("不支持的模型类型: " + type.getCode());
+        };
+    }
+
+    private String testEmbeddingConnection(String model, String baseUrl, String apiKey) {
+        AiEmbeddingModelAdapter adapter = modelAdapterRegistry.getEmbedding(model);
+        List<List<Float>> vectors = adapter.embed(baseUrl, apiKey, model, List.of("connection test"));
+        int dimension = vectors != null && !vectors.isEmpty() && vectors.get(0) != null
+                ? vectors.get(0).size() : 0;
+        return "连接成功\n模型: " + model + "\n向量维度: " + dimension;
+    }
+
+    private String testRerankConnection(String model, String baseUrl, String apiKey) {
+        AiRerankModelAdapter adapter = modelAdapterRegistry.getRerank(model);
+        List<Float> scores = adapter.rerank(baseUrl, apiKey, model, "test",
+                List.of("test passage"));
+        float score = scores != null && !scores.isEmpty() ? scores.get(0) : 0;
+        return "连接成功\n模型: " + model + "\n重排分数: " + score;
+    }
+
+    private String testImageConnection(String model, String baseUrl, String apiKey) {
+        modelAdapterRegistry.getImage(model).generate(baseUrl, apiKey, model, "test", null, "256x256");
+        return "连接成功\n模型: " + model;
+    }
+
+    private String testTtsConnection(String model, String baseUrl, String apiKey) {
+        AiTtsModelAdapter adapter = modelAdapterRegistry.getTts(model);
+        byte[] audio = adapter.synthesize(baseUrl, apiKey, model, "connection test");
+        long size = audio != null ? audio.length : 0;
+        return "连接成功\n模型: " + model + "\n音频大小: " + size + " bytes";
+    }
+
+    /**
+     * 为非 Chat 类型解析测试模型标识。
+     * 已保存的供应商从 DB 中查找已启用的对应类型模型；未保存的（inline）使用提交的 defaultModel。
+     */
+    private String resolveNonChatTestModel(AiProvider provider, String modelType, AiProviderTestDTO request) {
+        if (provider.getId() != null) {
+            return modelService.findEnabledModelIdByType(provider.getId(), modelType);
+        }
+        if (!StringUtils.hasText(request.getDefaultModel())) {
+            throw new BusinessException("未保存供应商测试必须指定默认模型");
+        }
+        return request.getDefaultModel().trim();
     }
 
     /**

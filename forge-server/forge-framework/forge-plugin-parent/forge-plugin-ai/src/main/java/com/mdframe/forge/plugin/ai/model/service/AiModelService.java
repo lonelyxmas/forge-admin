@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.ai.model.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.ai.constant.AiConstants;
+import com.mdframe.forge.plugin.ai.model.constant.AiModelType;
 import com.mdframe.forge.plugin.ai.model.domain.AiModel;
 import com.mdframe.forge.plugin.ai.model.mapper.AiModelMapper;
 import com.mdframe.forge.plugin.ai.model.capability.domain.AiModelCapability;
@@ -172,6 +173,27 @@ public class AiModelService extends ServiceImpl<AiModelMapper, AiModel> {
      */
     public List<AiModel> listByProviderId(Long providerId) {
         return baseMapper.selectEnabledModels(providerId);
+    }
+
+    /**
+     * 按供应商和模型类型查找已启用的模型标识。
+     *
+     * @param providerId 供应商 ID
+     * @param modelType  模型类型 code（如 embedding、rerank）
+     * @return 第一个匹配的已启用模型标识
+     * @throws BusinessException 若无匹配模型
+     */
+    public String findEnabledModelIdByType(Long providerId, String modelType) {
+        AiModelType type = AiModelType.fromCode(modelType);
+        if (type == null) {
+            throw new BusinessException("不支持的模型类型: " + modelType);
+        }
+        return listByProviderId(providerId).stream()
+                .filter(m -> type.getCode().equals(m.getModelType()))
+                .map(AiModel::getModelId)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        "供应商下未找到已启用的" + type.getCode() + "类型模型，请先在模型管理中配置"));
     }
 
     /**

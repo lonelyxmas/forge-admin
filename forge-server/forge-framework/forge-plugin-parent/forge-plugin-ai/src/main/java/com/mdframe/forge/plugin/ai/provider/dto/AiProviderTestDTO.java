@@ -23,4 +23,10 @@ public class AiProviderTestDTO {
     private String baseUrl;
 
     private String defaultModel;
+
+    /**
+     * 模型类型，用于连接测试路由。
+     * 空或 "chat" 走 ChatModel 测试；其他值（embedding/rerank/image_generation/asr/tts）走对应适配器。
+     */
+    private String modelType;
 }
