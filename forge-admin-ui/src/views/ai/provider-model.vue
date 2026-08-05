@@ -69,6 +69,9 @@
               <span class="provider-list-item__content">
                 <span class="provider-list-item__title">
                   <strong>{{ provider.providerName }}</strong>
+                  <NTag v-if="provider.isDefault === '1'" type="success" size="small" :bordered="false">
+                    默认
+                  </NTag>
                   <DictTag dict-type="ai_status" :value="provider.status" size="small" />
                 </span>
                 <span class="provider-list-item__meta">
@@ -124,16 +127,14 @@
               </div>
             </div>
             <div class="provider-detail-header__actions">
-              <NButton secondary @click="handleTestConnection(selectedProvider)">
-                测试连接
-              </NButton>
-              <NButton type="primary" ghost @click="handleEditProvider(selectedProvider)">
+              <NButton type="primary" ghost :loading="providerEditing" @click="handleEditProvider(selectedProvider)">
                 编辑配置
               </NButton>
               <NButton
                 v-if="selectedProvider.isDefault !== '1'"
                 text
                 class="text-success"
+                :loading="providerDefaultUpdatingId === selectedProvider.id"
                 @click="handleSetDefault(selectedProvider)"
               >
                 设为默认
@@ -152,102 +153,131 @@
             </div>
           </div>
 
-          <n-tabs v-model:value="activeProviderTab" type="line" animated class="provider-tabs">
-            <n-tab-pane name="basic" tab="基础配置">
-              <div class="provider-config-content">
-                <section class="config-section">
-                  <div class="config-section__title">
-                    <i class="ai-icon:settings" aria-hidden="true" />
-                    <strong>基础信息</strong>
+          <div class="provider-config-content">
+            <section class="config-section">
+              <div class="config-section__title">
+                <i class="ai-icon:settings" aria-hidden="true" />
+                <strong>基础信息</strong>
+              </div>
+              <div class="config-form-grid">
+                <div class="config-field">
+                  <span>供应商名称</span>
+                  <n-input :value="selectedProvider.providerName" readonly />
+                </div>
+                <div class="config-field">
+                  <span>供应商类型</span>
+                  <div class="config-field__value">
+                    <DictTag dict-type="ai_provider_type" :value="selectedProvider.providerType" size="small" />
                   </div>
-                  <div class="config-form-grid">
-                    <div class="config-field">
-                      <span>供应商名称</span>
-                      <n-input :value="selectedProvider.providerName" readonly />
-                    </div>
-                    <div class="config-field">
-                      <span>供应商类型</span>
-                      <div class="config-field__value">
-                        <DictTag dict-type="ai_provider_type" :value="selectedProvider.providerType" size="small" />
-                      </div>
-                    </div>
-                    <div class="config-field">
-                      <span>连接协议</span>
-                      <div class="config-field__value">
-                        <DictTag dict-type="ai_provider_adapter_type" :value="selectedProvider.adapterCode" size="small" />
-                      </div>
-                    </div>
-                    <div class="config-field">
-                      <span>默认供应商</span>
-                      <div class="config-field__value">
-                        {{ selectedProvider.isDefault === '1' ? '是' : '否' }}
-                      </div>
-                    </div>
-                    <div class="config-field config-field--full">
-                      <span>Base URL</span>
-                      <n-input :value="selectedProvider.baseUrl" readonly />
-                    </div>
-                    <div class="config-field config-field--full">
-                      <span>备注</span>
-                      <n-input :value="selectedProvider.remark || '暂无备注'" type="textarea" :rows="2" readonly />
-                    </div>
+                </div>
+                <div class="config-field">
+                  <span>连接协议</span>
+                  <div class="config-field__value">
+                    <DictTag dict-type="ai_provider_adapter_type" :value="selectedProvider.adapterCode" size="small" />
                   </div>
-                </section>
+                </div>
+                <div class="config-field">
+                  <span>默认供应商</span>
+                  <div class="config-field__value">
+                    {{ selectedProvider.isDefault === '1' ? '是' : '否' }}
+                  </div>
+                </div>
+                <div class="config-field config-field--full">
+                  <span>Base URL</span>
+                  <n-input :value="selectedProvider.baseUrl" readonly />
+                </div>
+                <div class="config-field config-field--full">
+                  <span>备注</span>
+                  <n-input :value="selectedProvider.remark || '暂无备注'" type="textarea" :rows="2" readonly />
+                </div>
+              </div>
+            </section>
 
-                <section class="config-section">
-                  <div class="config-section__title">
-                    <i class="ai-icon:lock" aria-hidden="true" />
-                    <strong>API Key / 密钥配置</strong>
-                  </div>
-                  <div class="secret-config-row">
-                    <div class="config-field">
-                      <span>API Key</span>
-                      <n-input :value="selectedProvider.apiKey || '未配置'" type="password" readonly show-password-on="click" />
-                      <small>密钥仅展示脱敏值，编辑时留空表示不修改。</small>
-                    </div>
-                    <NButton secondary @click="handleTestConnection(selectedProvider)">
+            <section class="config-section">
+              <div class="config-section__title">
+                <i class="ai-icon:lock" aria-hidden="true" />
+                <strong>API Key / 密钥配置</strong>
+              </div>
+              <div class="secret-config-row">
+                <div class="config-field">
+                  <span>API Key</span>
+                  <div class="secret-config-input">
+                    <n-input
+                      :value="selectedProvider.apiKey || '未配置'"
+                      type="password"
+                      readonly
+                      show-password-on="click"
+                    />
+                    <NButton secondary @click="handleFetchModels">
                       验证连接
                     </NButton>
                   </div>
-                </section>
+                  <small>密钥仅展示脱敏值，编辑时留空表示不修改。</small>
+                </div>
               </div>
-            </n-tab-pane>
+            </section>
+          </div>
 
-            <n-tab-pane name="models" :tab="`模型管理 (${modelPagination.itemCount})`">
-              <div class="model-tab-toolbar">
+          <section class="model-section">
+            <div class="model-section__heading">
+              <i class="ai-icon:apps" aria-hidden="true" />
+              <strong>模型管理</strong>
+              <NTag size="small" :bordered="false">
+                {{ modelPagination.itemCount }} 个
+              </NTag>
+            </div>
+            <div class="model-tab-toolbar">
+              <div class="model-tab-toolbar__left">
                 <span>默认模型用于连接测试，以及未显式指定模型时的调用。</span>
-                <NButton type="primary" secondary @click="handleAddModel()">
+                <n-select
+                  v-model:value="modelSearch.modelType"
+                  placeholder="全部类型"
+                  clearable
+                  :options="modelTypeOptions"
+                  size="small"
+                  style="width: 130px"
+                  @update:value="handleModelSearch"
+                />
+              </div>
+              <div class="model-tab-toolbar__actions">
+                <NButton secondary @click="handleFetchModels">
+                  <template #icon>
+                    <i class="ai-icon:download" />
+                  </template>
+                  获取模型
+                </NButton>
+                <NButton type="primary" @click="handleAddModel()">
                   <template #icon>
                     <i class="ai-icon:plus" />
                   </template>
                   新增模型
                 </NButton>
               </div>
-              <n-data-table
-                :columns="modelColumns"
-                :data="modelList"
-                :loading="modelLoading"
-                :row-key="row => row.id"
-                :scroll-x="1030"
+            </div>
+            <n-data-table
+              :columns="modelColumns"
+              :data="modelList"
+              :loading="modelLoading"
+              :row-key="row => row.id"
+              :scroll-x="1030"
+              size="small"
+              class="model-table"
+            />
+            <div class="model-pagination">
+              <n-pagination
+                :page="modelPagination.pageNum"
+                :page-size="modelPagination.pageSize"
+                :item-count="modelPagination.itemCount"
+                :page-sizes="modelPageSizes"
+                :prefix="paginationPrefix"
+                show-size-picker
+                show-quick-jumper
                 size="small"
-                class="model-table"
+                @update:page="handleModelPageChange"
+                @update:page-size="handleModelPageSizeChange"
               />
-              <div class="model-pagination">
-                <n-pagination
-                  :page="modelPagination.pageNum"
-                  :page-size="modelPagination.pageSize"
-                  :item-count="modelPagination.itemCount"
-                  :page-sizes="modelPageSizes"
-                  :prefix="paginationPrefix"
-                  show-size-picker
-                  show-quick-jumper
-                  size="small"
-                  @update:page="handleModelPageChange"
-                  @update:page-size="handleModelPageSizeChange"
-                />
-              </div>
-            </n-tab-pane>
-          </n-tabs>
+            </div>
+          </section>
         </template>
 
         <div v-else class="provider-detail-empty">
@@ -322,32 +352,14 @@
         </div>
       </n-form>
       <template #action>
-        <NButton @click="providerModal.show = false">
-          取消
-        </NButton>
-        <NButton type="primary" :loading="providerModal.saving" @click="handleSaveProvider">
-          确定
-        </NButton>
-      </template>
-    </n-modal>
-
-    <n-modal v-model:show="testResult.show" preset="card" title="连接测试结果" :style="testModalStyle">
-      <n-spin :show="testResult.loading">
-        <div class="test-result-status" :class="`test-result-status--${testResult.status}`">
-          <div class="test-result-status__icon" aria-hidden="true">
-            <i :class="testResultIconClass" />
-          </div>
-          <div>
-            <strong>{{ testResult.title }}</strong>
-            <p>{{ testResult.summary }}</p>
-          </div>
+        <div class="modal-footer-actions">
+          <NButton @click="providerModal.show = false">
+            取消
+          </NButton>
+          <NButton type="primary" :loading="providerModal.saving" @click="handleSaveProvider">
+            确定
+          </NButton>
         </div>
-        <pre v-if="testResult.content" class="test-result-content">{{ testResult.content }}</pre>
-      </n-spin>
-      <template #action>
-        <NButton @click="testResult.show = false">
-          关闭
-        </NButton>
       </template>
     </n-modal>
 
@@ -424,12 +436,86 @@
         </div>
       </n-form>
       <template #action>
-        <NButton @click="modelModal.show = false">
-          取消
-        </NButton>
-        <NButton type="primary" :loading="modelModal.saving" @click="handleSaveModel">
-          确定
-        </NButton>
+        <div class="modal-footer-actions">
+          <NButton @click="modelModal.show = false">
+            取消
+          </NButton>
+          <NButton type="primary" :loading="modelModal.saving" @click="handleSaveModel">
+            确定
+          </NButton>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="fetchModelsModal.show"
+      preset="card"
+      title="获取可用模型"
+      :style="modalCardStyle"
+      :mask-closable="false"
+    >
+      <template v-if="fetchModelsModal.loading">
+        <div class="fetch-models-loading">
+          <i class="ai-icon:loader animate-spin" aria-hidden="true" />
+          <p>正在从供应商拉取可用模型…</p>
+        </div>
+      </template>
+
+      <template v-else-if="fetchModelsModal.error">
+        <n-result status="error" title="获取模型失败" :description="fetchModelsModal.error" size="small">
+          <template #footer>
+            <NButton size="small" @click="handleFetchModels">
+              重试
+            </NButton>
+          </template>
+        </n-result>
+      </template>
+
+      <template v-else>
+        <div class="fetch-models-toolbar">
+          <span>发现 {{ fetchModelsModal.models.length }} 个可用模型</span>
+          <n-checkbox
+            :checked="fetchModelsModalAllChecked"
+            :indeterminate="fetchModelsModalSomeChecked"
+            @update:checked="handleToggleAllModels"
+          >
+            全选
+          </n-checkbox>
+        </div>
+        <div class="fetch-models-list">
+          <template v-for="group in fetchModelsModalGroups" :key="group.ownedBy">
+            <div class="fetch-models-group-title">
+              {{ group.ownedBy }}
+            </div>
+            <div v-for="model in group.models" :key="model.id" class="fetch-models-item">
+              <n-checkbox :checked="fetchModelsModal.checked[model.id]" @update:checked="checked => handleToggleModel(model.id, checked)">
+                <code>{{ model.id }}</code>
+              </n-checkbox>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template #footer>
+        <div class="modal-footer-actions">
+          <NButton
+            v-if="!fetchModelsModal.loading && !fetchModelsModal.error"
+            @click="fetchModelsModal.show = false"
+          >
+            取消
+          </NButton>
+          <NButton
+            v-if="!fetchModelsModal.loading && !fetchModelsModal.error"
+            type="primary"
+            :loading="fetchModelsModal.importing"
+            :disabled="fetchModelsModalCheckedCount === 0"
+            @click="handleImportModels"
+          >
+            导入 {{ fetchModelsModalCheckedCount }} 个模型
+          </NButton>
+          <NButton v-if="fetchModelsModal.error" @click="fetchModelsModal.show = false">
+            关闭
+          </NButton>
+        </div>
       </template>
     </n-modal>
   </div>
@@ -447,10 +533,11 @@ import {
   modelTest,
   modelUpdate,
   providerAdd,
+  providerBatchImportModels,
   providerDelete,
+  providerFetchModels,
   providerGetById,
   providerSetDefault,
-  providerTest,
   providerUpdate,
 } from '@/api/ai'
 import AuthImage from '@/components/common/AuthImage.vue'
@@ -471,7 +558,6 @@ const modelCapabilityOptions = computed(() => dict.value.ai_model_capability_typ
 const providerPageSizes = [10, 20, 50]
 const modelPageSizes = [10, 20, 50]
 const modalCardStyle = { maxWidth: '860px', width: 'calc(100vw - 32px)' }
-const testModalStyle = { maxWidth: '620px', width: 'calc(100vw - 32px)' }
 const providerAvatarStyle = { width: '48px', height: '48px', borderRadius: '14px', objectFit: 'cover' }
 const providerListAvatarStyle = { width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }
 
@@ -480,21 +566,28 @@ const providerList = ref([])
 const providerLoading = ref(false)
 const providerPagination = reactive({ pageNum: 1, pageSize: 10, itemCount: 0 })
 const selectedProvider = ref(null)
-const activeProviderTab = ref('basic')
 const modelList = ref([])
 const modelLoading = ref(false)
 const defaultModelUpdatingId = ref(null)
+const providerDefaultUpdatingId = ref(null)
 const modelPagination = reactive({ pageNum: 1, pageSize: 10, itemCount: 0 })
+const modelSearch = reactive({ modelType: null })
 const providerFormRef = ref(null)
 const modelFormRef = ref(null)
 
 const providerSelectOptions = computed(() => providerList.value.map(p => ({ label: p.providerName, value: p.id })))
+
+// 模型行操作 loading：{ id: 'test' | 'edit' | 'delete' }
+const modelRowActionLoading = reactive({})
+const isModelRowActionLoading = (id, type) => modelRowActionLoading[id] === type
 
 const uploadPrefix = import.meta.env.VITE_API_BASEURL || '/api'
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('token') || ''
   return { Authorization: `Bearer ${token}` }
 })
+
+const providerEditing = ref(false)
 
 const providerModal = reactive({
   show: false,
@@ -528,6 +621,32 @@ const modelModal = reactive({
   saving: false,
   form: createModelForm(),
 })
+
+const fetchModelsModal = reactive({
+  show: false,
+  loading: false,
+  importing: false,
+  error: '',
+  models: [],
+  checked: {},
+})
+
+const fetchModelsModalGroups = computed(() => {
+  const groupsMap = new Map()
+  for (const model of fetchModelsModal.models) {
+    const ownedBy = model.ownedBy || '其他'
+    if (!groupsMap.has(ownedBy))
+      groupsMap.set(ownedBy, [])
+    groupsMap.get(ownedBy).push(model)
+  }
+  return [...groupsMap.entries()].map(([ownedBy, models]) => ({ ownedBy, models }))
+})
+
+const fetchModelsModalCheckedCount = computed(() => Object.values(fetchModelsModal.checked).filter(Boolean).length)
+
+const fetchModelsModalAllChecked = computed(() => fetchModelsModal.models.length > 0 && fetchModelsModalCheckedCount.value === fetchModelsModal.models.length)
+
+const fetchModelsModalSomeChecked = computed(() => fetchModelsModalCheckedCount.value > 0 && !fetchModelsModalAllChecked.value)
 
 function createProviderForm() {
   return {
@@ -646,20 +765,18 @@ const modelColumns = [
   {
     title: '是否默认',
     key: 'isDefault',
-    width: 135,
+    width: 90,
+    align: 'center',
     render(row) {
       const isDefault = row.isDefault === '1'
-      return h('div', { class: 'inline-default-editor' }, [
-        h(NSwitch, {
-          value: isDefault,
-          size: 'small',
-          loading: defaultModelUpdatingId.value === row.id,
-          disabled: defaultModelUpdatingId.value !== null,
-          ariaLabel: isDefault ? '当前默认模型' : '设为默认模型',
-          onUpdateValue: value => handleDefaultModelChange(row, value),
-        }),
-        isDefault ? h('span', { class: 'inline-default-editor__label' }, '当前默认') : null,
-      ])
+      return h(NSwitch, {
+        value: isDefault,
+        size: 'small',
+        loading: defaultModelUpdatingId.value === row.id,
+        disabled: defaultModelUpdatingId.value !== null,
+        ariaLabel: isDefault ? '当前默认模型' : '设为默认模型',
+        onUpdateValue: value => handleDefaultModelChange(row, value),
+      })
     },
   },
   {
@@ -676,11 +793,13 @@ const modelColumns = [
     width: 160,
     fixed: 'right',
     render(row) {
+      const rowLoading = (type) => isModelRowActionLoading(row.id, type)
+      const anyLoading = rowLoading('test') || rowLoading('edit') || rowLoading('delete')
       const actions = [
-        h(NButton, { text: true, size: 'small', class: 'text-info', onClick: () => handleTestModel(row) }, { default: () => '测试' }),
-        h(NButton, { text: true, size: 'small', class: 'text-primary', onClick: () => handleEditModel(row) }, { default: () => '编辑' }),
-        h(NPopconfirm, { onPositiveClick: () => handleDeleteModel(row.id) }, {
-          trigger: () => h(NButton, { text: true, size: 'small', class: 'text-error' }, { default: () => '删除' }),
+        h(NButton, { text: true, size: 'small', class: 'text-info', loading: rowLoading('test'), disabled: anyLoading, onClick: () => handleTestModel(row) }, { default: () => '测试' }),
+        h(NButton, { text: true, size: 'small', class: 'text-primary', loading: rowLoading('edit'), disabled: anyLoading, onClick: () => handleEditModel(row) }, { default: () => '编辑' }),
+        h(NPopconfirm, { onPositiveClick: () => handleDeleteModel(row) }, {
+          trigger: () => h(NButton, { text: true, size: 'small', class: 'text-error', loading: rowLoading('delete'), disabled: anyLoading }, { default: () => '删除' }),
           default: () => '确定删除该模型吗？',
         }),
       ]
@@ -694,13 +813,21 @@ function providerInitial(provider) {
 }
 
 async function handleTestModel(row) {
+  if (modelRowActionLoading[row.id])
+    return
+  modelRowActionLoading[row.id] = 'test'
   try {
     const res = await modelTest(row.id)
     if (res.code === 200)
       window.$message.success(res.data || '连接成功')
+    else
+      window.$message.error(res.msg || '模型连接失败')
   }
   catch (error) {
     window.$message.error(error.message || '模型连接失败')
+  }
+  finally {
+    delete modelRowActionLoading[row.id]
   }
 }
 
@@ -795,6 +922,7 @@ async function loadModels() {
       pageNum: modelPagination.pageNum,
       pageSize: modelPagination.pageSize,
       providerId: selectedProvider.value.id,
+      ...(modelSearch.modelType ? { modelType: modelSearch.modelType } : {}),
     })
     if (res.code === 200 && res.data) {
       modelList.value = res.data.records || []
@@ -812,7 +940,6 @@ function handleSelectProvider(row) {
     return
 
   selectedProvider.value = row
-  activeProviderTab.value = 'basic'
   modelPagination.pageNum = 1
   loadModels()
 }
@@ -835,6 +962,11 @@ function handleModelPageSizeChange(pageSize) {
   loadModels()
 }
 
+function handleModelSearch() {
+  modelPagination.pageNum = 1
+  loadModels()
+}
+
 function handleAddProvider() {
   providerModal.isEdit = false
   providerModal.form = createProviderForm()
@@ -842,6 +974,9 @@ function handleAddProvider() {
 }
 
 async function handleEditProvider(row) {
+  if (providerEditing.value)
+    return
+  providerEditing.value = true
   try {
     const res = await providerGetById(row.id)
     if (res.code === 200 && res.data) {
@@ -849,8 +984,16 @@ async function handleEditProvider(row) {
       providerModal.form = { ...createProviderForm(), ...res.data, apiKey: '' }
       providerModal.show = true
     }
+    else {
+      window.$message.error(res.msg || '读取供应商失败')
+    }
   }
-  catch {}
+  catch (e) {
+    window.$message.error(e.message || '读取供应商失败')
+  }
+  finally {
+    providerEditing.value = false
+  }
 }
 
 async function handleSaveProvider() {
@@ -902,61 +1045,97 @@ async function handleDeleteProvider(id) {
   }
 }
 
-const testResult = reactive({
-  show: false,
-  content: '',
-  loading: false,
-  status: 'loading',
-  title: '正在验证连接',
-  summary: '正在使用启用的默认模型发起一次低 Token 请求。',
-})
-const testResultIconClass = computed(() => ({
-  success: 'ai-icon:check-circle',
-  error: 'ai-icon:x-circle',
-  loading: 'ai-icon:refresh-cw',
-})[testResult.status])
-
-async function handleTestConnection(row) {
-  testResult.loading = true
-  testResult.show = true
-  testResult.status = 'loading'
-  testResult.title = '正在验证连接'
-  testResult.summary = `正在连接 ${row.providerName || '供应商'}，请稍候。`
-  testResult.content = ''
-  try {
-    const res = await providerTest({ id: row.id })
-    if (res.code === 200) {
-      testResult.status = 'success'
-      testResult.title = '连接成功'
-      testResult.summary = `${row.providerName || '供应商'} 已通过连接验证。`
-      testResult.content = typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)
-    }
-    else {
-      testResult.status = 'error'
-      testResult.title = '连接失败'
-      testResult.summary = res.msg || '请检查默认模型、API Key、Base URL 和供应商网络状态。'
-    }
-  }
-  catch (e) {
-    testResult.status = 'error'
-    testResult.title = '连接失败'
-    testResult.summary = e.message || '请检查默认模型、API Key、Base URL 和供应商网络状态。'
-  }
-  finally {
-    testResult.loading = false
-  }
-}
-
 async function handleSetDefault(row) {
+  if (providerDefaultUpdatingId.value !== null)
+    return
+  providerDefaultUpdatingId.value = row.id
   try {
     const res = await providerSetDefault(row.id)
     if (res.code === 200) {
       window.$message.success('设置成功')
       await loadProviders()
     }
+    else {
+      window.$message.error(res.msg || '设置失败')
+    }
   }
-  catch {
-    window.$message.error('设置失败')
+  catch (e) {
+    window.$message.error(e.message || '设置失败')
+  }
+  finally {
+    providerDefaultUpdatingId.value = null
+  }
+}
+
+async function handleFetchModels() {
+  if (!selectedProvider.value) {
+    window.$message.warning('请先选择供应商')
+    return
+  }
+  const provider = selectedProvider.value
+  fetchModelsModal.show = true
+  fetchModelsModal.loading = true
+  fetchModelsModal.error = ''
+  fetchModelsModal.models = []
+  fetchModelsModal.checked = {}
+  try {
+    const res = await providerFetchModels(provider.id)
+    if (res.code === 200 && Array.isArray(res.data)) {
+      fetchModelsModal.models = res.data
+      const checked = {}
+      for (const model of res.data)
+        checked[model.id] = true
+      fetchModelsModal.checked = checked
+    }
+    else {
+      fetchModelsModal.error = res.msg || '获取模型失败'
+    }
+  }
+  catch (e) {
+    fetchModelsModal.error = e.message || '获取模型失败'
+  }
+  finally {
+    fetchModelsModal.loading = false
+  }
+}
+
+function handleToggleAllModels(checked) {
+  const next = {}
+  for (const model of fetchModelsModal.models)
+    next[model.id] = checked
+  fetchModelsModal.checked = next
+}
+
+function handleToggleModel(id, checked) {
+  fetchModelsModal.checked[id] = checked
+}
+
+async function handleImportModels() {
+  const providerId = selectedProvider.value?.id
+  const modelIds = Object.entries(fetchModelsModal.checked)
+    .filter(([, checked]) => checked)
+    .map(([id]) => id)
+  if (!providerId || modelIds.length === 0)
+    return
+
+  fetchModelsModal.importing = true
+  try {
+    const res = await providerBatchImportModels(providerId, modelIds)
+    if (res.code === 200) {
+      window.$message.success(`已导入 ${res.data ?? modelIds.length} 个模型`)
+      fetchModelsModal.show = false
+      modelPagination.pageNum = 1
+      await Promise.all([loadModels(), loadProviders()])
+    }
+    else {
+      window.$message.error(res.msg || '导入失败')
+    }
+  }
+  catch (e) {
+    window.$message.error(e.message || '导入失败')
+  }
+  finally {
+    fetchModelsModal.importing = false
   }
 }
 
@@ -967,7 +1146,6 @@ function handleAddModel(provider = selectedProvider.value) {
   }
   const providerChanged = selectedProvider.value?.id !== provider.id
   selectedProvider.value = provider
-  activeProviderTab.value = 'models'
   if (providerChanged) {
     modelPagination.pageNum = 1
     loadModels()
@@ -978,6 +1156,9 @@ function handleAddModel(provider = selectedProvider.value) {
 }
 
 async function handleEditModel(row) {
+  if (modelRowActionLoading[row.id])
+    return
+  modelRowActionLoading[row.id] = 'edit'
   try {
     const res = await modelGetById(row.id)
     if (res.code === 200 && res.data) {
@@ -985,8 +1166,16 @@ async function handleEditModel(row) {
       modelModal.form = { ...res.data }
       modelModal.show = true
     }
+    else {
+      window.$message.error(res.msg || '读取模型失败')
+    }
   }
-  catch {}
+  catch (e) {
+    window.$message.error(e.message || '读取模型失败')
+  }
+  finally {
+    delete modelRowActionLoading[row.id]
+  }
 }
 
 async function handleSaveModel() {
@@ -1016,9 +1205,12 @@ async function handleSaveModel() {
   }
 }
 
-async function handleDeleteModel(id) {
+async function handleDeleteModel(row) {
+  if (modelRowActionLoading[row.id])
+    return
+  modelRowActionLoading[row.id] = 'delete'
   try {
-    const res = await modelDelete(id)
+    const res = await modelDelete(row.id)
     if (res.code === 200) {
       window.$message.success('删除成功')
       if (modelList.value.length === 1 && modelPagination.pageNum > 1)
@@ -1031,6 +1223,9 @@ async function handleDeleteModel(id) {
   }
   catch (e) {
     window.$message.error(e.message || '删除失败')
+  }
+  finally {
+    delete modelRowActionLoading[row.id]
   }
 }
 
@@ -1110,123 +1305,6 @@ onMounted(() => {
   background: radial-gradient(circle at 100% 0, rgba(14, 165, 233, 0.08), transparent 360px), var(--page-bg);
 }
 
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  margin-bottom: 18px;
-  padding: 22px 24px;
-  overflow: hidden;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-}
-
-.page-heading__main,
-.page-heading__aside,
-.summary-metrics,
-.selected-provider,
-.selected-provider__identity,
-.selected-provider__actions,
-.selected-provider__title-row,
-.selected-provider__tags,
-.connection-cell,
-.table-actions,
-.model-empty__guide {
-  display: flex;
-  align-items: center;
-}
-
-.page-heading__main {
-  min-width: 0;
-  gap: 16px;
-}
-
-.page-heading__icon {
-  display: grid;
-  flex: 0 0 52px;
-  width: 52px;
-  height: 52px;
-  color: #fff;
-  font-size: 24px;
-  place-items: center;
-  background: linear-gradient(145deg, #075985, #0e7490);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 15px;
-  box-shadow: 0 8px 20px rgba(3, 105, 161, 0.18);
-}
-
-.page-heading__eyebrow,
-.section-kicker {
-  margin-bottom: 4px;
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.page-heading h1,
-.workspace-panel h2,
-.model-table-heading h3,
-.model-empty h2 {
-  margin: 0;
-  color: var(--text-strong);
-  font-weight: 600;
-}
-
-.page-heading h1 {
-  font-size: 24px;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-}
-
-.page-heading p {
-  max-width: 680px;
-  margin: 6px 0 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.page-heading__aside {
-  flex: 0 0 auto;
-  gap: 18px;
-}
-
-.summary-metrics {
-  gap: 4px;
-  padding: 4px;
-  background: var(--panel-subtle);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-}
-
-.summary-metric {
-  min-width: 76px;
-  padding: 7px 10px;
-  text-align: center;
-}
-
-.summary-metric + .summary-metric {
-  border-left: 1px solid var(--panel-border);
-}
-
-.summary-metric span,
-.connection-summary__item > span {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.summary-metric strong {
-  color: var(--text-strong);
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-}
-
 .provider-workspace {
   display: grid;
   grid-template-columns: minmax(500px, 0.88fr) minmax(0, 1.12fr);
@@ -1236,43 +1314,6 @@ onMounted(() => {
 
 .provider-workspace > * {
   min-width: 0;
-}
-
-.workspace-panel {
-  overflow: hidden;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
-}
-
-.workspace-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 17px 18px 14px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.workspace-panel h2 {
-  font-size: 16px;
-}
-
-.provider-filters {
-  display: grid;
-  grid-template-columns: minmax(170px, 1fr) 130px 100px;
-  gap: 10px;
-  padding: 14px 16px;
-  background: var(--panel-subtle);
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.provider-filters__actions {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 :deep(.n-data-table .n-data-table-th),
@@ -1311,264 +1352,13 @@ onMounted(() => {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.provider-identity,
-.model-identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.provider-avatar,
-.model-avatar {
-  display: grid;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  overflow: hidden;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  place-items: center;
-  border-radius: 10px;
-}
-
-.provider-avatar--fallback {
-  background: linear-gradient(145deg, #334155, #0f766e);
-}
-
-.model-avatar--fallback {
-  background: linear-gradient(145deg, #075985, #0369a1);
-}
-
-.provider-identity__copy,
-.model-identity__copy,
-.selected-provider__copy {
-  min-width: 0;
-}
-
-.provider-identity__name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.provider-identity__name-text {
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-cell {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .table-actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
   min-height: 32px;
   white-space: nowrap;
-}
-
-.current-default-label {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.pagination-wrap {
-  display: flex;
-  justify-content: flex-end;
-  max-width: 100%;
-  padding: 12px 16px;
-  overflow-x: auto;
-  border-top: 1px solid var(--panel-border);
-}
-
-.selected-provider {
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.selected-provider__identity {
-  min-width: 0;
-  gap: 12px;
-}
-
-.selected-provider__avatar {
-  display: grid;
-  flex: 0 0 48px;
-  width: 48px;
-  height: 48px;
-  overflow: hidden;
-  color: #fff;
-  font-size: 17px;
-  font-weight: 700;
-  place-items: center;
-  background: linear-gradient(145deg, #334155, #0e7490);
-  border-radius: 14px;
-}
-
-.selected-provider__title-row {
-  min-width: 0;
-  gap: 8px;
-}
-
-.selected-provider__title-row h2 {
-  overflow: hidden;
-  font-size: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selected-provider__tags {
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.selected-provider__actions {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.connection-summary {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.7fr) minmax(240px, 1.6fr) minmax(100px, 0.5fr);
-  gap: 1px;
-  margin: 14px 16px 0;
-  overflow: hidden;
-  background: var(--panel-border);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-}
-
-.connection-summary__item {
-  min-width: 0;
-  padding: 11px 13px;
-  background: var(--panel-subtle);
-}
-
-.connection-summary__item code {
-  display: block;
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-summary__item strong {
-  color: var(--text-strong);
-  font-size: 14px;
-}
-
-.model-table-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 18px 12px;
-}
-
-.model-table-heading h3 {
-  font-size: 15px;
-}
-
-.model-table-heading > span {
-  max-width: 360px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: right;
-}
-
-.model-identity__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.model-identity__copy strong,
-.model-identity__copy code {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-identity__copy strong {
-  color: var(--text-strong);
-  font-size: 13px;
-}
-
-.model-identity__copy code {
-  max-width: 150px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.model-empty {
-  display: flex;
-  min-height: 480px;
-  padding: 48px 28px;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  text-align: center;
-}
-
-.model-empty__icon {
-  display: grid;
-  width: 68px;
-  height: 68px;
-  margin-bottom: 18px;
-  color: var(--accent);
-  font-size: 28px;
-  place-items: center;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  border-radius: 20px;
-}
-
-.model-empty h2 {
-  font-size: 18px;
-}
-
-.model-empty p {
-  max-width: 420px;
-  margin: 8px 0 24px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.model-empty__guide {
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.model-empty__guide span {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  place-items: center;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  border-radius: 50%;
 }
 
 .modal-form-grid {
@@ -1603,127 +1393,9 @@ onMounted(() => {
   right: -6px;
 }
 
-.test-result-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-}
-
-.test-result-status--success {
-  background: var(--success-soft);
-  border-color: rgba(34, 197, 94, 0.28);
-}
-
-.test-result-status--error {
-  background: var(--danger-soft);
-  border-color: rgba(239, 68, 68, 0.28);
-}
-
-.test-result-status--loading {
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
-}
-
-.test-result-status__icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.test-result-status--success .test-result-status__icon {
-  color: #16a34a;
-}
-
-.test-result-status--error .test-result-status__icon {
-  color: #dc2626;
-}
-
-.test-result-status--loading .test-result-status__icon {
-  color: var(--accent);
-}
-
-.test-result-status strong {
-  color: var(--text-strong);
-  font-size: 14px;
-}
-
-.test-result-status p {
-  margin: 4px 0 0;
-  color: var(--text-body);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.test-result-content {
-  max-height: 360px;
-  margin: 12px 0 0;
-  padding: 13px 15px;
-  overflow-y: auto;
-  color: var(--text-body);
-  background: var(--panel-subtle);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 @media (max-width: 1260px) {
   .provider-workspace {
     grid-template-columns: 1fr;
-  }
-
-  .model-empty {
-    min-height: 320px;
-  }
-}
-
-@media (max-width: 900px) {
-  .page-heading,
-  .page-heading__aside {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .page-heading__aside {
-    gap: 12px;
-  }
-
-  .summary-metrics {
-    align-self: stretch;
-  }
-
-  .summary-metric {
-    flex: 1;
-  }
-
-  .provider-filters {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .provider-filters .n-input {
-    grid-column: 1 / -1;
-  }
-
-  .selected-provider {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .selected-provider__actions {
-    justify-content: flex-start;
-  }
-
-  .connection-summary {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .connection-summary__item--endpoint {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
 }
 
@@ -1732,75 +1404,12 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .page-heading {
-    padding: 17px;
-    border-radius: 13px;
-  }
-
-  .page-heading__main {
-    align-items: flex-start;
-  }
-
-  .page-heading__icon {
-    flex-basis: 42px;
-    width: 42px;
-    height: 42px;
-    font-size: 20px;
-    border-radius: 12px;
-  }
-
-  .page-heading h1 {
-    font-size: 21px;
-  }
-
-  .summary-metric {
-    min-width: 0;
-    padding-inline: 6px;
-  }
-
-  .provider-filters,
   .modal-form-grid {
     grid-template-columns: 1fr;
   }
 
-  .provider-filters .n-input,
   .form-item--full {
     grid-column: auto;
-  }
-
-  .provider-filters__actions {
-    grid-column: auto;
-    justify-content: stretch;
-  }
-
-  .provider-filters__actions .n-button {
-    flex: 1;
-  }
-
-  .selected-provider__actions {
-    gap: 12px;
-  }
-
-  .connection-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .connection-summary__item--endpoint {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  .model-table-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .model-table-heading > span {
-    text-align: left;
-  }
-
-  .pagination-wrap {
-    justify-content: flex-start;
   }
 }
 
@@ -1995,11 +1604,12 @@ onMounted(() => {
 
 .provider-list-item__title {
   min-width: 0;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .provider-list-item__title strong {
+  flex: 0 0 auto;
   overflow: hidden;
   color: var(--text-strong);
   font-size: 13px;
@@ -2090,19 +1700,6 @@ onMounted(() => {
   gap: 10px;
 }
 
-.provider-tabs :deep(.n-tabs-nav) {
-  padding: 0 20px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.provider-tabs :deep(.n-tabs-tab) {
-  padding: 14px 2px 12px;
-}
-
-.provider-tabs :deep(.n-tab-pane) {
-  padding: 0;
-}
-
 .provider-config-content {
   display: grid;
   gap: 12px;
@@ -2170,8 +1767,18 @@ onMounted(() => {
   gap: 12px;
 }
 
+.secret-config-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.secret-config-input .n-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .secret-config-row .config-field {
-  max-width: 620px;
   flex: 1;
 }
 
@@ -2182,12 +1789,49 @@ onMounted(() => {
   font-size: 11px;
 }
 
+.model-section {
+  border-top: 1px solid var(--panel-border);
+}
+
+.model-section__heading {
+  display: flex;
+  padding: 13px 16px 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.model-section__heading i {
+  color: var(--accent);
+}
+
 .model-tab-toolbar {
   padding: 13px 16px;
   justify-content: space-between;
   gap: 14px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.model-tab-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.model-tab-toolbar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .model-pagination {
@@ -2269,5 +1913,51 @@ onMounted(() => {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.fetch-models-loading {
+  display: flex;
+  min-height: 200px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.fetch-models-loading i {
+  font-size: 32px;
+}
+
+.fetch-models-toolbar {
+  display: flex;
+  padding: 8px 2px 12px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fetch-models-list {
+  max-height: 420px;
+  padding: 4px 2px;
+  overflow-y: auto;
+  border-top: 1px solid var(--panel-border);
+}
+
+.fetch-models-group-title {
+  padding: 10px 2px 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fetch-models-item {
+  padding: 6px 2px;
+}
+
+.fetch-models-item code {
+  color: var(--text-strong);
+  font-size: 13px;
 }
 </style>

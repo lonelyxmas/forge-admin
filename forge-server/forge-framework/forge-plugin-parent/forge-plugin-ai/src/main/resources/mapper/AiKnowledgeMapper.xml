@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeMapper">
+
+    <sql id="knowledgeColumns">
+        id, tenant_id, knowledge_name, description, icon,
+        vector_store_instance_id, embedding_model_id, rerank_model_id,
+        dimension_of_vector_model, chunk_strategy, chunk_config_json,
+        search_config_json, dedup_strategy, dedup_action, upload_confirm,
+        status, create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectKnowledgePage" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledge">
+        SELECT <include refid="knowledgeColumns" />
+        FROM ai_knowledge
+        WHERE del_flag = '0'
+        <if test="knowledgeName != null and knowledgeName != ''">
+            AND knowledge_name LIKE CONCAT('%', #{knowledgeName}, '%')
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledge">
+        SELECT <include refid="knowledgeColumns" />
+        FROM ai_knowledge
+        WHERE id = #{id} AND del_flag = '0'
+        FOR UPDATE
+    </select>
+
+    <select id="countByName" resultType="long">
+        SELECT COUNT(1)
+        FROM ai_knowledge
+        WHERE knowledge_name = #{knowledgeName}
+          AND del_flag = '0'
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+</mapper>

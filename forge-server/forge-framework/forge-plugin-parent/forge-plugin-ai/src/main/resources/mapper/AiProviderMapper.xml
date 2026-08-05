@@ -75,25 +75,21 @@
     <select id="selectIdsForDefaultSwitch" resultType="java.lang.Long">
         SELECT id
         FROM ai_provider
-        WHERE tenant_id = #{tenantId}
-          AND del_flag = '0'
-        ORDER BY id ASC
+        WHERE del_flag = '0'
         FOR UPDATE
     </select>
 
     <update id="clearDefaultProviders">
         UPDATE ai_provider
         SET is_default = '0', update_time = CURRENT_TIMESTAMP
-        WHERE tenant_id = #{tenantId}
-          AND is_default = '1'
+        WHERE is_default = '1'
           AND del_flag = '0'
     </update>
 
     <update id="markDefaultProvider">
         UPDATE ai_provider
         SET is_default = '1', update_time = CURRENT_TIMESTAMP
-        WHERE tenant_id = #{tenantId}
-          AND id = #{id}
+        WHERE id = #{id}
           AND del_flag = '0'
     </update>
 

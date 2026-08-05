@@ -76,6 +76,7 @@ public class AiClientImpl implements AiClient {
                     requestId, request.getAgentCode(), resolved.provider().getId(), resolved.model(), length(systemPrompt), length(request.getMessage()));
             dispatched = true;
             ChatResponse response = chatClient.prompt()
+                    .advisors(a -> a.param(org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID, historySessionId))
                     .system(systemPrompt)
                     .user(request.getMessage())
                     .call()
@@ -146,6 +147,7 @@ public class AiClientImpl implements AiClient {
             AtomicReference<Throwable> streamFailure = new AtomicReference<>();
 
             return chatClient.prompt()
+                    .advisors(a -> a.param(org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID, historySessionId))
                     .system(systemPrompt)
                     .user(request.getMessage())
                     .stream()

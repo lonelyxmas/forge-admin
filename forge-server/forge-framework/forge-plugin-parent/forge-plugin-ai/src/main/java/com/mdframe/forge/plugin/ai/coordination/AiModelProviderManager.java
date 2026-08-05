@@ -8,7 +8,6 @@ import com.mdframe.forge.plugin.ai.model.service.AiModelService;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderSaveDTO;
 import com.mdframe.forge.plugin.ai.provider.service.AiProviderService;
 import com.mdframe.forge.starter.core.exception.BusinessException;
-import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -89,20 +88,11 @@ public class AiModelProviderManager {
         if (providerId == null) {
             throw new BusinessException("AI供应商ID不能为空");
         }
-        Long tenantId = requireTenantId();
-        List<Long> lockedProviderIds = providerService.lockAllForDefaultSwitch(tenantId);
+        List<Long> lockedProviderIds = providerService.lockAllForDefaultSwitch();
         if (!lockedProviderIds.contains(providerId)) {
             throw new BusinessException("AI供应商不存在");
         }
-        providerService.switchDefaultProvider(tenantId, providerId);
-    }
-
-    private Long requireTenantId() {
-        Long tenantId = SessionHelper.getTenantId();
-        if (tenantId == null || tenantId <= 0) {
-            throw new BusinessException("无法确定当前租户");
-        }
-        return tenantId;
+        providerService.switchDefaultProvider(providerId);
     }
 
     private void lockProviders(Set<Long> providerIds) {
