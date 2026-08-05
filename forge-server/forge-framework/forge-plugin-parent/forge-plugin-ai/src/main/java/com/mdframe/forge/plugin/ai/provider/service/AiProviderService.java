@@ -11,6 +11,7 @@ import com.mdframe.forge.plugin.ai.provider.adapter.AiProviderAdapterCode;
 import com.mdframe.forge.plugin.ai.provider.adapter.AiProviderAdapterRegistry;
 import com.mdframe.forge.plugin.ai.provider.adapter.AiProviderBaseUrlPolicy;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
+import com.mdframe.forge.plugin.ai.provider.dto.AiModelImportItem;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderSaveDTO;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderTestDTO;
 import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
@@ -167,19 +168,20 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
 
     /**
      * 批量导入模型到供应商。
-     * 已存在的模型自动跳过；未导入时从勾选的第一个设为默认；统一按 chat 类型导入。
+     * 已存在的模型自动跳过；未导入时从勾选的第一个设为默认；
+     * 模型类型优先使用前端传入值，为空时根据模型标识启发式推断（{@link AiModelType#inferFromModelId}）。
      *
      * @param providerId 供应商 ID
-     * @param modelIds 勾选的模型标识列表
+     * @param items 导入项列表（每项含 modelId 和可选的 modelType）
      * @return 实际导入数量（跳过已存在）
      */
     @Transactional(rollbackFor = Exception.class)
-    public int batchImportModels(Long providerId, List<String> modelIds) {
+    public int batchImportModels(Long providerId, List<AiModelImportItem> items) {
         if (providerId == null) {
             throw new BusinessException("AI供应商ID不能为空");
         }
         requireProvider(providerId);
-        if (modelIds == null || modelIds.isEmpty()) {
+        if (items == null || items.isEmpty()) {
             throw new BusinessException("请选择要导入的模型");
         }
 
@@ -190,14 +192,21 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
 
         int imported = 0;
         boolean hasDefault = modelService.getDefaultModelId(providerId) != null;
-        for (String modelId : modelIds) {
-            String trimmed = modelId == null ? "" : modelId.trim();
+        for (AiModelImportItem item : items) {
+            String trimmed = item.getModelId() == null ? "" : item.getModelId().trim();
             if (!StringUtils.hasText(trimmed) || existing.contains(trimmed)) {
                 continue;
             }
+            // 优先使用前端传入的类型，为空时启发式推断
+            String modelType = StringUtils.hasText(item.getModelType())
+                    ? AiModelType.fromCode(item.getModelType()) != null
+                        ? item.getModelType()
+                        : AiModelType.inferFromModelId(trimmed).getCode()
+                    : AiModelType.inferFromModelId(trimmed).getCode();
+
             AiModelSaveDTO dto = new AiModelSaveDTO();
             dto.setProviderId(providerId);
-            dto.setModelType(AiModelType.CHAT.getCode());
+            dto.setModelType(modelType);
             dto.setModelId(trimmed);
             dto.setModelName(trimmed);
             dto.setStatus(AiConstants.STATUS_NORMAL);

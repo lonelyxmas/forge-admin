@@ -37,4 +37,51 @@ class AiModelTypeTest {
         assertNull(AiModelType.fromCode("unknown_type"));
         assertNull(AiModelType.fromCode(null));
     }
+
+    @Test
+    void inferFromModelId_embedding() {
+        assertEquals(AiModelType.EMBEDDING, AiModelType.inferFromModelId("text-embedding-3-small"));
+        assertEquals(AiModelType.EMBEDDING, AiModelType.inferFromModelId("text-embedding-ada-002"));
+        assertEquals(AiModelType.EMBEDDING, AiModelType.inferFromModelId("bge-large-zh-v1.5-embed"));
+    }
+
+    @Test
+    void inferFromModelId_rerank() {
+        assertEquals(AiModelType.RERANK, AiModelType.inferFromModelId("bge-reranker-v2-m3"));
+        assertEquals(AiModelType.RERANK, AiModelType.inferFromModelId("cross-encoder-ms-marco-MiniLM-L-6-v2"));
+    }
+
+    @Test
+    void inferFromModelId_imageGeneration() {
+        assertEquals(AiModelType.IMAGE_GENERATION, AiModelType.inferFromModelId("dall-e-3"));
+        assertEquals(AiModelType.IMAGE_GENERATION, AiModelType.inferFromModelId("flux-1-schnell"));
+        assertEquals(AiModelType.IMAGE_GENERATION, AiModelType.inferFromModelId("stable-diffusion-xl"));
+    }
+
+    @Test
+    void inferFromModelId_asr() {
+        assertEquals(AiModelType.ASR, AiModelType.inferFromModelId("whisper-1"));
+        assertEquals(AiModelType.ASR, AiModelType.inferFromModelId("paraformer-v2"));
+    }
+
+    @Test
+    void inferFromModelId_tts() {
+        assertEquals(AiModelType.TTS, AiModelType.inferFromModelId("tts-1"));
+        assertEquals(AiModelType.TTS, AiModelType.inferFromModelId("cosyvoice-v1"));
+    }
+
+    @Test
+    void inferFromModelId_chatFallback() {
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId("gpt-4o"));
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId("deepseek-chat"));
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId("qwen-plus"));
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId("glm-4"));
+    }
+
+    @Test
+    void inferFromModelId_nullAndBlank() {
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId(null));
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId(""));
+        assertEquals(AiModelType.CHAT, AiModelType.inferFromModelId("   "));
+    }
 }
