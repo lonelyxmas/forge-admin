@@ -575,3 +575,16 @@ Capability 不再以 7 个同级小插件散落在 `forge-plugin-parent` 下，�
 删除业务应用继续保留业务对象，便于对象被同一业务域内其他应用复用；不能为了让业务域可删而改变应用删除语义。业务域已无子域、业务应用和访问入口，仅剩未被有效应用引用的业务对象时，删除入口必须明确展示对象数量和清理边界，并显式传入孤立对象清理意图。
 
 后端默认不级联，收到显式清理意图后在同一事务内再次校验有效应用引用，物理清理 `ai_business_object_relation` 关系重建数据，按主键墓碑逻辑删除 `ai_business_object` 和 `ai_business_suite`。动态业务数据表、设计/发布历史和运行日志不做物理删除；存在有效应用引用时失败关闭。
+
+## 64. 后端数据库性能优化模式（P1 归档）
+
+**记录日期**：2026-08-05
+
+后端分页查询性能优化遵循以下固定模式，后续 P2/P3 变更继续复用：
+
+1. **N+1 查询消除**：分页后循环单条查询改为一次 IN 批量查询 + Map 组装。新增 Mapper 方法返回聚合统计 VO（如 `ReceiverStatVO`），XML 用 `GROUP BY` + `SUM(CASE WHEN ...)` 一次聚合。
+2. **LIKE 逗号列表匹配改 FIND_IN_SET**：`column = userId OR column LIKE 'userId,%' OR column LIKE '%,userId' OR column LIKE '%,userId,%'` 统一改为 `FIND_IN_SET(#{userId}, column)`，单条件替代 4 路 LIKE。
+3. **JOIN OR 索引失效消除**：`LEFT JOIN t c ON c.id = m.col OR c.code = m.col` 统一存储为 ID，JOIN 条件改为 `c.id = m.col`。存量数据用 Flyway `UPDATE ... INNER JOIN ... SET` 迁移。
+4. **全量加载改按需查询**：`service.list()` 全量加载改为按需 `listByIds` / `lambdaQuery().eq()`。需要祖先链补齐时用 `loadResourcesWithAncestors` 迭代查询模式（`listByIds` + 收集 parentId + 循环直到无新 ID，`put` 返回非 null 防死循环）。
+5. **子查询改 LEFT JOIN 派生表聚合**：分页中每行相关子查询（COUNT/SUM）改为 `LEFT JOIN (SELECT session_id, COUNT(*) ... GROUP BY session_id) r ON r.session_id = s.id`，派生表先聚合再 JOIN，避免结果集膨胀。
+6. **统计查询加时间范围**：全表 COUNT/SUM 统计增加 `WHERE create_time >= DATE_SUB(NOW(), INTERVAL 90 DAY)` 时间过滤，减少扫描行数。前端文案需同步标注时间范围。

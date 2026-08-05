@@ -1,12 +1,14 @@
 # 变更规格 - 后端数据库性能 P1 分页查询优化
 
-> status: reviewed
+> status: done
 > created: 2026-08-05
+> archived: 2026-08-05
 > complexity: 🟡中等
 > 前置变更：backend-db-perf-and-injection-hardening（P0 已完成）
 > 本轮执行范围：Task 5-12（P1 分页性能优化）
 > Q1=方案A（Flyway迁移统一ID）；Q2=方案B（增加90天时间范围过滤）；Q3=实现时确认（businessDatasetMapper 无 saveBatch 能力，保留循环 insert）
 > 全量编译：`mvn clean install -DskipTests` 通过（2026-08-05）
+> 归档路径：code-copilot/changes/archive/2026-08-05-backend-db-perf-p1/
 
 ## 1. 背景与动机
 
@@ -151,3 +153,15 @@ GROUP BY s.id
 - P3 LambdaQueryWrapper 迁移（Task 17）→ 另开变更
 - 前端改动 → 无
 - 数据库表结构变更 → 仅 Task 11 需要数据迁移脚本
+
+## 8. 归档记录（HARD-GATE）
+
+- **归档时间**：2026-08-05
+- **归档路径**：`code-copilot/changes/archive/2026-08-05-backend-db-perf-p1/`
+- **归档结论**：Proposal、Apply、Review、Fix 全部完成，全量编译通过，状态更新为 `done`
+- **Follow-up**：
+  - FU-1（中）：`session.vue` 统计文案需同步为"近90天..."（后端 Task 9 已改 90 天范围）
+  - P0 变更 `backend-db-perf-and-injection-hardening` 仍在 changes/ 目录，后续需一并归档
+- **知识沉淀**：
+  - decisions.md：N+1 修复模式、LIKE 改 FIND_IN_SET、JOIN OR 消除、全量加载改按需查询
+  - pitfalls.md：businessDatasetMapper 无 saveBatch 能力、LEFT JOIN 派生表聚合优于直接 GROUP BY
