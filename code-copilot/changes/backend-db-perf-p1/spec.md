@@ -1,6 +1,6 @@
 # 变更规格 - 后端数据库性能 P1 分页查询优化
 
-> status: review-ready
+> status: reviewed
 > created: 2026-08-05
 > complexity: 🟡中等
 > 前置变更：backend-db-perf-and-injection-hardening（P0 已完成）
