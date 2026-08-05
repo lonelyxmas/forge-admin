@@ -709,3 +709,141 @@ export function streamEngineChat(data, onEvent, onComplete, onError) {
 export function engineResume(interruptId, confirmed) {
   return request.post('/ai/engine/resume', { interruptId, confirmed })
 }
+
+// ========== 知识库管理 ==========
+
+/** 分页查询知识库 */
+export function knowledgePage(params) {
+  return request.get('/ai/knowledge/page', { params })
+}
+
+/** 查询知识库详情 */
+export function knowledgeGetById(id) {
+  return request.get(`/ai/knowledge/${id}`)
+}
+
+/** 新增知识库 */
+export function knowledgeCreate(data) {
+  return request.post('/ai/knowledge', data)
+}
+
+/** 修改知识库 */
+export function knowledgeUpdate(data) {
+  return request.put('/ai/knowledge', data)
+}
+
+/** 删除知识库 */
+export function knowledgeDelete(id) {
+  return request.delete(`/ai/knowledge/${id}`)
+}
+
+/** 分页查询知识库文档 */
+export function knowledgeDocumentPage(params) {
+  return request.get('/ai/knowledge/document/page', { params })
+}
+
+/** 上传文档（两步上传第一步） */
+export function knowledgeDocumentUpload(data) {
+  return request.post('/ai/knowledge/document/upload', data)
+}
+
+/** 确认处理文档（两步上传第二步） */
+export function knowledgeDocumentConfirm(documentId) {
+  return request.post(`/ai/knowledge/document/${documentId}/confirm`)
+}
+
+/** 删除文档 */
+export function knowledgeDocumentDelete(documentId) {
+  return request.delete(`/ai/knowledge/document/${documentId}`)
+}
+
+/** 订阅文档处理进度（SSE） */
+export function knowledgeDocumentProgressSSE(documentId, onEvent, onComplete, onError) {
+  const authStore = useAuthStore()
+  const controller = new AbortController()
+  fetch(`${BASE_URL}/ai/knowledge/document/${documentId}/progress`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+    },
+    signal: controller.signal,
+  })
+    .then((response) => {
+      if (!response.ok)
+        throw new Error(response.statusText)
+      if (!response.body)
+        throw new Error('浏览器不支持流式响应')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) { onComplete(); return }
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split(/\r?\n\r?\n/)
+          buffer = events.pop() || ''
+          for (const eventStr of events) {
+            let eventData = ''
+            for (const line of eventStr.split(/\r?\n/)) {
+              if (line.startsWith('data:'))
+                eventData = line.slice(5).trim()
+            }
+            if (eventData) {
+              try { eventData = JSON.parse(eventData) }
+              catch { /* keep raw */ }
+              onEvent(eventData)
+            }
+          }
+          read()
+        }).catch((err) => {
+          if (err.name !== 'AbortError')
+            onError(err)
+        })
+      }
+      read()
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError')
+        onError(err)
+    })
+  return controller
+}
+
+/** 知识库检索调试 */
+export function knowledgeSearch(data) {
+  return request.post('/ai/knowledge/search', data)
+}
+
+// ========== 向量存储实例 ==========
+
+/** 分页查询存储实例 */
+export function storeInstancePage(params) {
+  return request.get('/ai/store/page', { params })
+}
+
+/** 查询存储实例详情 */
+export function storeInstanceGetById(id) {
+  return request.get(`/ai/store/${id}`)
+}
+
+/** 新增存储实例 */
+export function storeInstanceCreate(data) {
+  return request.post('/ai/store', data)
+}
+
+/** 修改存储实例 */
+export function storeInstanceUpdate(data) {
+  return request.put('/ai/store', data)
+}
+
+/** 删除存储实例 */
+export function storeInstanceDelete(id) {
+  return request.delete(`/ai/store/${id}`)
+}
+
+/** 测试存储实例连接 */
+export function storeInstanceTest(id) {
+  return request.post(`/ai/store/${id}/test`)
+}
