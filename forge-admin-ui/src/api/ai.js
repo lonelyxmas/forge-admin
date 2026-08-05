@@ -307,9 +307,11 @@ export function providerFetchModels(id) {
 
 /**
  * 批量导入模型到供应商
+ * @param {string|number} id 供应商 ID
+ * @param {Array<{modelId: string, modelType?: string}>} items 导入项列表
  */
-export function providerBatchImportModels(id, modelIds) {
-  return request.post(`/ai/provider/${id}/models/batch`, modelIds)
+export function providerBatchImportModels(id, items) {
+  return request.post(`/ai/provider/${id}/models/batch`, items)
 }
 
 // ========== 模型管理 ==========

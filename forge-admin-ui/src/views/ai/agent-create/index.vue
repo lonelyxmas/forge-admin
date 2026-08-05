@@ -227,7 +227,7 @@ async function handleConfirmCreate() {
 }
 
 function handleGoToAgent() {
-  router.push('/ai/agent-workspace/chat')
+  router.push('/ai/agent/chat')
 }
 </script>
 

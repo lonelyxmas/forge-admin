@@ -491,6 +491,13 @@
               <n-checkbox :checked="fetchModelsModal.checked[model.id]" @update:checked="checked => handleToggleModel(model.id, checked)">
                 <code>{{ model.id }}</code>
               </n-checkbox>
+              <n-select
+                :value="fetchModelsModal.modelTypes[model.id]"
+                :options="modelTypeOptions"
+                size="tiny"
+                style="width: 110px; margin-left: 8px;"
+                @update:value="val => handleModelTypeChange(model.id, val)"
+              />
             </div>
           </template>
         </div>
@@ -554,6 +561,27 @@ const modelTypeOptions = computed(() => dict.value.ai_model_type || [])
 const statusOptions = computed(() => dict.value.ai_status || [])
 const isDefaultOptions = computed(() => dict.value.ai_is_default || [])
 const modelCapabilityOptions = computed(() => dict.value.ai_model_capability_type || [])
+
+/**
+ * 根据模型标识启发式推断模型类型（与后端 AiModelType.inferFromModelId 逻辑一致）。
+ * @param {string} modelId 模型标识
+ * @returns {string} 推断的模型类型 code
+ */
+function inferModelType(modelId) {
+  if (!modelId) return 'chat'
+  const lower = modelId.toLowerCase()
+  if (lower.includes('embedding') || lower.includes('embed')) return 'embedding'
+  if (lower.includes('rerank') || lower.includes('re-rank') || lower.includes('cross-encoder')) return 'rerank'
+  if (lower.includes('dall-e') || lower.includes('dalle')
+    || lower.includes('imagen') || lower.includes('flux')
+    || lower.includes('midjourney') || lower.includes('stable-diffusion')
+    || lower.includes('sdxl') || lower.includes('cogview')) return 'image_generation'
+  if (lower.includes('whisper') || lower.includes('asr')
+    || lower.includes('speech-to-text') || lower.includes('paraformer')) return 'asr'
+  if (lower.includes('tts') || lower.includes('speech-to-speech')
+    || lower.includes('cosyvoice') || lower.includes('sambert')) return 'tts'
+  return 'chat'
+}
 
 const providerPageSizes = [10, 20, 50]
 const modelPageSizes = [10, 20, 50]
@@ -629,6 +657,7 @@ const fetchModelsModal = reactive({
   error: '',
   models: [],
   checked: {},
+  modelTypes: {}, // { modelId: inferredType } — 每个模型的推断/用户修改后的类型
 })
 
 const fetchModelsModalGroups = computed(() => {
@@ -1078,14 +1107,19 @@ async function handleFetchModels() {
   fetchModelsModal.error = ''
   fetchModelsModal.models = []
   fetchModelsModal.checked = {}
+  fetchModelsModal.modelTypes = {}
   try {
     const res = await providerFetchModels(provider.id)
     if (res.code === 200 && Array.isArray(res.data)) {
       fetchModelsModal.models = res.data
       const checked = {}
-      for (const model of res.data)
+      const types = {}
+      for (const model of res.data) {
         checked[model.id] = true
+        types[model.id] = inferModelType(model.id)
+      }
       fetchModelsModal.checked = checked
+      fetchModelsModal.modelTypes = types
     }
     else {
       fetchModelsModal.error = res.msg || '获取模型失败'
@@ -1110,19 +1144,26 @@ function handleToggleModel(id, checked) {
   fetchModelsModal.checked[id] = checked
 }
 
+function handleModelTypeChange(modelId, modelType) {
+  fetchModelsModal.modelTypes[modelId] = modelType
+}
+
 async function handleImportModels() {
   const providerId = selectedProvider.value?.id
-  const modelIds = Object.entries(fetchModelsModal.checked)
+  const items = Object.entries(fetchModelsModal.checked)
     .filter(([, checked]) => checked)
-    .map(([id]) => id)
-  if (!providerId || modelIds.length === 0)
+    .map(([modelId]) => ({
+      modelId,
+      modelType: fetchModelsModal.modelTypes[modelId] || inferModelType(modelId),
+    }))
+  if (!providerId || items.length === 0)
     return
 
   fetchModelsModal.importing = true
   try {
-    const res = await providerBatchImportModels(providerId, modelIds)
+    const res = await providerBatchImportModels(providerId, items)
     if (res.code === 200) {
-      window.$message.success(`已导入 ${res.data ?? modelIds.length} 个模型`)
+      window.$message.success(`已导入 ${res.data ?? items.length} 个模型`)
       fetchModelsModal.show = false
       modelPagination.pageNum = 1
       await Promise.all([loadModels(), loadProviders()])
@@ -1953,7 +1994,9 @@ onMounted(() => {
 }
 
 .fetch-models-item {
+  display: flex;
   padding: 6px 2px;
+  align-items: center;
 }
 
 .fetch-models-item code {

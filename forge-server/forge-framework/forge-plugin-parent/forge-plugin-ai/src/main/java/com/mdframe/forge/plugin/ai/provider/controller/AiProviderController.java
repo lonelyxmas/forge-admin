@@ -7,6 +7,7 @@ import com.mdframe.forge.plugin.ai.model.domain.AiModel;
 import com.mdframe.forge.plugin.ai.model.service.AiModelService;
 import com.mdframe.forge.plugin.ai.provider.adapter.AiProviderAdapterCode;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
+import com.mdframe.forge.plugin.ai.provider.dto.AiModelImportItem;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderSaveDTO;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderTestDTO;
 import com.mdframe.forge.plugin.ai.provider.service.AiProviderService;
@@ -177,8 +178,8 @@ public class AiProviderController {
     @ApiDecrypt
     @ApiEncrypt
     public RespInfo<Integer> batchImportModels(@PathVariable Long id,
-                                                @RequestBody List<String> modelIds) {
-        return RespInfo.success(providerService.batchImportModels(id, modelIds));
+                                                @RequestBody List<AiModelImportItem> items) {
+        return RespInfo.success(providerService.batchImportModels(id, items));
     }
 
     /**
