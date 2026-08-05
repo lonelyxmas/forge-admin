@@ -529,17 +529,22 @@ function deleteSuite() {
   if (!suite.value?.id)
     return
   const currentSuite = suite.value
+  const orphanEntryCount = Number(currentSuite.appCount || 0)
   const orphanObjectCount = Number(currentSuite.objectCount || 0)
-  const cleanupOrphanObjects = orphanObjectCount > 0
+  const cleanupOrphanResources = orphanEntryCount > 0 || orphanObjectCount > 0
+  const cleanupTargets = [
+    orphanEntryCount > 0 ? `${orphanEntryCount} 个孤立访问入口` : null,
+    orphanObjectCount > 0 ? `${orphanObjectCount} 个未被应用使用的业务对象配置` : null,
+  ].filter(Boolean).join('、')
   window.$dialog?.warning({
     title: '删除业务域',
-    content: cleanupOrphanObjects
-      ? `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？将同时清理该业务域内 ${orphanObjectCount} 个未被应用使用的业务对象配置；对应业务数据表和历史版本不会被物理删除。`
-      : `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？存在子域、业务应用或访问入口时仍会阻止删除。`,
-    positiveText: cleanupOrphanObjects ? '删除并清理' : '删除',
+    content: cleanupOrphanResources
+      ? `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？将同时清理该业务域内的${cleanupTargets}；访问入口菜单将停用，对应业务数据表和历史版本不会被物理删除。`
+      : `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？存在子业务域或业务应用时仍会阻止删除。`,
+    positiveText: cleanupOrphanResources ? '删除并清理' : '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      await deleteBusinessSuite(currentSuite.id, cleanupOrphanObjects)
+      await deleteBusinessSuite(currentSuite.id, cleanupOrphanResources)
       message.success('业务域已删除')
       router.replace('/app-center')
     },

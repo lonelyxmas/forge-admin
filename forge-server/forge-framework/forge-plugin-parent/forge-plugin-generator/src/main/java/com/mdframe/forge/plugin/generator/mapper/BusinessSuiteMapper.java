@@ -37,6 +37,12 @@ public interface BusinessSuiteMapper extends BaseMapper<AiBusinessSuite> {
     Long countAppsBySuite(@Param("tenantId") Long tenantId,
                           @Param("suiteCode") String suiteCode);
 
+    Long countActiveApplicationEntryReferencesBySuite(@Param("tenantId") Long tenantId,
+                                                       @Param("suiteCode") String suiteCode);
+
+    int logicDeleteEntriesBySuite(@Param("tenantId") Long tenantId,
+                                  @Param("suiteCode") String suiteCode);
+
     Long countActiveApplicationObjectReferencesBySuite(@Param("tenantId") Long tenantId,
                                                         @Param("suiteCode") String suiteCode);
 
