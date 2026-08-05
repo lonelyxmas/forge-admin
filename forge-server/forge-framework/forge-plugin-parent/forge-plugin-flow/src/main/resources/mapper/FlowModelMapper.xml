@@ -15,7 +15,7 @@
     <select id="selectModelPage" resultType="com.mdframe.forge.starter.flow.entity.FlowModel">
         SELECT m.*, c.category_name AS category_name
         FROM sys_flow_model m
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         <where>
             m.del_flag = '0'
             <if test="modelName != null and modelName != ''">
