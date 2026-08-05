@@ -1,0 +1,70 @@
+package com.mdframe.forge.plugin.ai.agent.engine.event;
+
+/**
+ * Agent 事件类型枚举（28种 + CUSTOM）
+ */
+public enum AgentEventType {
+
+    AGENT_START("AGENT_START"),
+    AGENT_END("AGENT_END"),
+    AGENT_RESULT("AGENT_RESULT"),
+
+    MODEL_CALL_START("MODEL_CALL_START"),
+    MODEL_CALL_END("MODEL_CALL_END"),
+
+    TEXT_BLOCK_START("TEXT_BLOCK_START"),
+    TEXT_BLOCK_DELTA("TEXT_BLOCK_DELTA"),
+    TEXT_BLOCK_END("TEXT_BLOCK_END"),
+
+    THINKING_BLOCK_START("THINKING_BLOCK_START"),
+    THINKING_BLOCK_DELTA("THINKING_BLOCK_DELTA"),
+    THINKING_BLOCK_END("THINKING_BLOCK_END"),
+
+    DATA_BLOCK_START("DATA_BLOCK_START"),
+    DATA_BLOCK_DELTA("DATA_BLOCK_DELTA"),
+    DATA_BLOCK_END("DATA_BLOCK_END"),
+
+    TOOL_CALL_START("TOOL_CALL_START"),
+    TOOL_CALL_DELTA("TOOL_CALL_DELTA"),
+    TOOL_CALL_END("TOOL_CALL_END"),
+
+    TOOL_RESULT_START("TOOL_RESULT_START"),
+    TOOL_RESULT_TEXT_DELTA("TOOL_RESULT_TEXT_DELTA"),
+    TOOL_RESULT_DATA_DELTA("TOOL_RESULT_DATA_DELTA"),
+    TOOL_RESULT_END("TOOL_RESULT_END"),
+
+    EXCEED_MAX_ITERS("EXCEED_MAX_ITERS"),
+    REQUEST_STOP("REQUEST_STOP"),
+
+    REQUIRE_USER_CONFIRM("REQUIRE_USER_CONFIRM"),
+    USER_CONFIRM_RESULT("USER_CONFIRM_RESULT"),
+
+    SUBAGENT_EXPOSED("SUBAGENT_EXPOSED"),
+    HINT_BLOCK("HINT_BLOCK"),
+    ALL_TOOLS_DENIED("ALL_TOOLS_DENIED"),
+
+    CUSTOM("CUSTOM");
+
+    private final String code;
+
+    AgentEventType(String code) {
+        this.code = code;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    /**
+     * 按 code 查找枚举值，不存在返回 null。
+     */
+    public static AgentEventType fromCode(String code) {
+        if (code == null) return null;
+        for (AgentEventType type : values()) {
+            if (type.code.equals(code)) {
+                return type;
+            }
+        }
+        return null;
+    }
+}

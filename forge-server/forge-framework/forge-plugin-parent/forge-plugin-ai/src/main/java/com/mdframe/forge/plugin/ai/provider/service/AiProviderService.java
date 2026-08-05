@@ -15,6 +15,7 @@ import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderCacheEvictionScheduler;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderFailureDiagnostics;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderSecretMasker;
+import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.plugin.ai.provider.vo.AiProviderVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,7 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
     private final AiProviderCacheEvictionScheduler evictionScheduler;
     private final AiModelService modelService;
     private final AiModelHealthRegistry healthRegistry;
+    private final AiSecretCrypto aiSecretCrypto;
 
     /**
      * 获取默认供应商。
@@ -81,7 +83,7 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
         applySaveRequest(provider, request);
         provider.setIsDefault(AiConstants.IS_DEFAULT_NO);
         provider.setAdapterCode(resolveCreateAdapterCode(request.getAdapterCode()));
-        provider.setApiKey(requireSecret(request.getApiKey()));
+        provider.setApiKey(aiSecretCrypto.encrypt(requireSecret(request.getApiKey())));
         normalizeProviderConnection(provider);
         if (!save(provider)) {
             throw new BusinessException("AI供应商新增失败");
@@ -98,7 +100,9 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
         String persistedAdapterCode = provider.getAdapterCode();
         applySaveRequest(provider, request);
         provider.setAdapterCode(resolveUpdateAdapterCode(request.getAdapterCode(), persistedAdapterCode));
-        provider.setApiKey(resolveUpdateSecret(request.getApiKey(), persistedSecret));
+        String resolvedSecret = resolveUpdateSecret(request.getApiKey(), persistedSecret);
+        // 如果 resolveUpdateSecret 返回的是 persisted 密文（未修改），直接保留；否则加密新明文
+        provider.setApiKey(resolvedSecret == persistedSecret ? persistedSecret : aiSecretCrypto.encrypt(resolvedSecret));
         normalizeProviderConnection(provider);
         if (!updateById(provider)) {
             throw new BusinessException("AI供应商更新失败");
@@ -273,7 +277,10 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
         if (!StringUtils.hasText(provider.getProviderType())) {
             throw new BusinessException("供应商类型不能为空");
         }
-        provider.setApiKey(requireSecret(provider.getApiKey()));
+        // apiKey 在 createProvider/updateProvider 中已加密落库，此处仅校验非空
+        if (!StringUtils.hasText(provider.getApiKey())) {
+            throw new BusinessException("API Key不能为空");
+        }
         provider.setBaseUrl(AiProviderBaseUrlPolicy.normalizeAndValidate(
                 provider.getAdapterCode(), provider.getBaseUrl()));
     }

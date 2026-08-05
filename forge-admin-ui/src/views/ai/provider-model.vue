@@ -215,7 +215,18 @@
 
             <n-tab-pane name="models" :tab="`模型管理 (${modelPagination.itemCount})`">
               <div class="model-tab-toolbar">
-                <span>默认模型用于连接测试，以及未显式指定模型时的调用。</span>
+                <div class="model-tab-toolbar__left">
+                  <span>默认模型用于连接测试，以及未显式指定模型时的调用。</span>
+                  <n-select
+                    v-model:value="modelSearch.modelType"
+                    placeholder="全部类型"
+                    clearable
+                    :options="modelTypeOptions"
+                    size="small"
+                    style="width: 130px"
+                    @update:value="handleModelSearch"
+                  />
+                </div>
                 <NButton type="primary" secondary @click="handleAddModel()">
                   <template #icon>
                     <i class="ai-icon:plus" />
@@ -485,6 +496,7 @@ const modelList = ref([])
 const modelLoading = ref(false)
 const defaultModelUpdatingId = ref(null)
 const modelPagination = reactive({ pageNum: 1, pageSize: 10, itemCount: 0 })
+const modelSearch = reactive({ modelType: null })
 const providerFormRef = ref(null)
 const modelFormRef = ref(null)
 
@@ -795,6 +807,7 @@ async function loadModels() {
       pageNum: modelPagination.pageNum,
       pageSize: modelPagination.pageSize,
       providerId: selectedProvider.value.id,
+      ...(modelSearch.modelType ? { modelType: modelSearch.modelType } : {}),
     })
     if (res.code === 200 && res.data) {
       modelList.value = res.data.records || []
@@ -831,6 +844,11 @@ function handleModelPageChange(page) {
 
 function handleModelPageSizeChange(pageSize) {
   modelPagination.pageSize = pageSize
+  modelPagination.pageNum = 1
+  loadModels()
+}
+
+function handleModelSearch() {
   modelPagination.pageNum = 1
   loadModels()
 }
@@ -2188,6 +2206,13 @@ onMounted(() => {
   gap: 14px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.model-tab-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .model-pagination {

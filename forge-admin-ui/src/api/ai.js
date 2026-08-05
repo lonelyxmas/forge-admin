@@ -493,3 +493,193 @@ export function customQuerySchemeUpdate(configKey, data) {
 export function customQuerySchemeDelete(configKey, id) {
   return request.delete(`/ai/custom-query/${configKey}/scheme/${id}`)
 }
+
+// ========== 图片生成 ==========
+
+export function imageGenerate(data) {
+  return request.post('/ai/image-generate', data)
+}
+
+export function imageGeneratePage(params) {
+  return request.get('/ai/image-generate/page', { params })
+}
+
+export function imageGenerateGetResult(id) {
+  return request.get(`/ai/image-generate/${id}`)
+}
+
+// ========== 语音（ASR/TTS） ==========
+
+export function voiceAsr(formData) {
+  return request.post('/ai/voice/asr', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export function voiceTts(data) {
+  return request.post('/ai/voice/tts', data)
+}
+
+// ========== AI 创建 Agent ==========
+
+export function agentAiCreateSSE(description, onEvent, onComplete, onError) {
+  const authStore = useAuthStore()
+  const controller = new AbortController()
+
+  fetch(`${BASE_URL}/ai/agent/ai-create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+    },
+    body: JSON.stringify({ description }),
+    signal: controller.signal,
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error(response.statusText)
+      if (!response.body) throw new Error('浏览器不支持流式响应')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) { onComplete(); return }
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split(/\r?\n\r?\n/)
+          buffer = events.pop() || ''
+          for (const eventStr of events) {
+            let eventType = 'message'
+            let eventData = ''
+            for (const line of eventStr.split(/\r?\n/)) {
+              if (line.startsWith('event:')) eventType = line.slice(6).trim()
+              else if (line.startsWith('data:')) eventData = line.slice(5).trim()
+            }
+            if (eventData) {
+              try { eventData = JSON.parse(eventData) } catch { /* keep raw */ }
+              onEvent(eventType, eventData)
+            }
+          }
+          read()
+        }).catch(onError)
+      }
+      read()
+    })
+    .catch(onError)
+
+  return controller
+}
+
+export function agentAiCreateConfirm(config) {
+  return request.post('/ai/agent/ai-create/confirm', config)
+}
+
+// ========== 技能管理 ==========
+
+export function skillPage(params) {
+  return request.get('/ai/skill/page', { params })
+}
+
+export function skillGetById(id) {
+  return request.get(`/ai/skill/${id}`)
+}
+
+export function skillGetFiles(id) {
+  return request.get(`/ai/skill/${id}/files`)
+}
+
+export function skillGetAgentSkills(agentId) {
+  return request.get(`/ai/skill/agent/${agentId}`)
+}
+
+export function skillAdd(data) {
+  return request.post('/ai/skill', data)
+}
+
+export function skillUpdate(data) {
+  return request.put('/ai/skill', data)
+}
+
+export function skillDelete(id) {
+  return request.delete(`/ai/skill/${id}`)
+}
+
+export function skillUploadZip(formData) {
+  return request.post('/ai/skill/upload-zip', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export function skillAiGenerate(description) {
+  return request.post('/ai/skill/ai-generate', null, { params: { description } })
+}
+
+export function skillAiOptimize(id, instruction) {
+  return request.post(`/ai/skill/${id}/ai-optimize`, null, { params: { instruction } })
+}
+
+// ========== Agent 引擎对话（SSE） ==========
+
+export function streamEngineChat(data, onEvent, onComplete, onError) {
+  const authStore = useAuthStore()
+  const controller = new AbortController()
+
+  fetch(`${BASE_URL}/ai/engine/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+      'X-Timestamp': Date.now().toString(),
+      'X-Nonce': generateUUID(),
+    },
+    body: JSON.stringify(data),
+    signal: controller.signal,
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error(response.statusText)
+      if (!response.body) throw new Error('浏览器不支持流式响应')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) { onComplete(); return }
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split(/\r?\n\r?\n/)
+          buffer = events.pop() || ''
+          for (const eventStr of events) {
+            let eventType = 'message'
+            let eventData = ''
+            for (const line of eventStr.split(/\r?\n/)) {
+              if (line.startsWith('event:')) eventType = line.slice(6).trim()
+              else if (line.startsWith('data:')) eventData = line.slice(5).trim()
+            }
+            if (eventData) {
+              try { eventData = JSON.parse(eventData) } catch { /* keep raw */ }
+              onEvent(eventType, eventData)
+            }
+          }
+          read()
+        }).catch((err) => {
+          if (err.name !== 'AbortError') onError(err)
+        })
+      }
+      read()
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') onError(err)
+    })
+
+  return controller
+}
+
+export function engineResume(interruptId, confirmed) {
+  return request.post('/ai/engine/resume', { interruptId, confirmed })
+}

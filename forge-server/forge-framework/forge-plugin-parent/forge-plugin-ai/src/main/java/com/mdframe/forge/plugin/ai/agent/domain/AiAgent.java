@@ -32,6 +32,14 @@ public class AiAgent extends TenantEntity {
     private BigDecimal temperature;
     private Integer maxTokens;
     private String extraConfig;
+    private String greeting;
+    private String presetQuestions;
+    private Integer maxIters;
+    private String knowledgeIds;
+    private String ragMode;
+    private String toolGroupMode;
+    private Long asrModelId;
+    private Long ttsModelId;
     private String status;
 
     @TableLogic(value = "0", delval = "id")

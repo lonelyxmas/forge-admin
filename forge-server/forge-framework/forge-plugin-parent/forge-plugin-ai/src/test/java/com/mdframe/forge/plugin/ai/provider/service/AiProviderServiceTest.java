@@ -9,6 +9,7 @@ import com.mdframe.forge.plugin.ai.provider.dto.AiProviderSaveDTO;
 import com.mdframe.forge.plugin.ai.provider.dto.AiProviderTestDTO;
 import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderCacheEvictionScheduler;
+import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.plugin.ai.health.AiModelHealthRegistry;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,11 +61,16 @@ class AiProviderServiceTest {
     @Mock
     private ChatModel chatModel;
 
+    @Mock
+    private AiSecretCrypto aiSecretCrypto;
+
     private AiProviderService service;
 
     @BeforeEach
     void setUp() {
-        service = new AiProviderService(adapterRegistry, evictionScheduler, modelService, healthRegistry);
+        // AiSecretCrypto mock: encrypt 返回输入（测试中不验证加密逻辑，只验证调用链）
+        lenient().when(aiSecretCrypto.encrypt(any())).thenAnswer(inv -> inv.getArgument(0));
+        service = new AiProviderService(adapterRegistry, evictionScheduler, modelService, healthRegistry, aiSecretCrypto);
         ReflectionTestUtils.setField(service, "baseMapper", providerMapper);
     }
 

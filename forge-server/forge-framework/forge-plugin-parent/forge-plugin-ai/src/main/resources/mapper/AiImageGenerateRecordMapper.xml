@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.multimodal.image.mapper.AiImageGenerateRecordMapper">
+
+    <sql id="columns">
+        id, tenant_id, user_id, provider_id, model_id, prompt, negative_prompt, size,
+        result_file_id, status, error_msg, create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectRecordPage" resultType="com.mdframe.forge.plugin.ai.multimodal.image.domain.AiImageGenerateRecord">
+        SELECT <include refid="columns"/>
+        FROM ai_image_generate_record
+        WHERE del_flag = '0'
+          AND tenant_id = #{tenantId}
+          <if test="userId != null">
+              AND user_id = #{userId}
+          </if>
+          <if test="status != null and status != ''">
+              AND status = #{status}
+          </if>
+        ORDER BY create_time DESC
+    </select>
+
+</mapper>
