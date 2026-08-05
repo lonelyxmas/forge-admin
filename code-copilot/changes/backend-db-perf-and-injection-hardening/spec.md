@@ -1,5 +1,5 @@
 # 后端数据库性能与注入加固
-> status: confirmed
+> status: review-ready
 > created: 2026-08-05
 > complexity: 🔴复杂
 > 本轮执行范围：P0（Task 1-4 安全紧急修复），P1/P2/P3 后续另开独立变更
@@ -221,8 +221,20 @@
 ## 11. 执行日志
 
 | Task | 状态 | 实际改动文件 | 备注 |
+|------|------|------------|------|
+| Task 1 | ✅完成 | CrudGeneratorStreamService.java, GenTableColumnMapper.java, GenTableColumnMapper.xml | SQL注入修复，inSql改为参数化Mapper方法 |
+| Task 2 | ✅完成 | MessageServiceImpl.java, MessageSendEvent.java(新增) | @TransactionalEventListener(AFTER_COMMIT) 拆分发送 |
+| Task 3 | ✅完成 | SamplePurchaseOrderServiceImpl.java | 移除@Transactional，RPC在事务外，更新失败告警 |
+| Task 4 | ✅完成 | SysFileMetadataServiceImpl.java | 移除@Transactional，文件IO在事务外 |
+| 聚合验证 | ✅通过 | mvn clean install -DskipTests | 全量编译通过 |
 
 ## 12. 审查结论
+
+P0 四个安全紧急修复全部完成，全量编译通过。改动范围：
+- SQL 注入：1 处（参数化查询替代字符串拼接）
+- 事务拆分：3 处（消息发送、采购单提交、文件删除）
+- 新增文件：1 个（MessageSendEvent）
+- 行为变化：消息 send() 返回状态为"发送中"，最终状态由监听器异步更新
 
 ## 13. 确认记录（HARD-GATE）
 - **确认时间**：2026-08-05
