@@ -32,8 +32,11 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -153,7 +156,12 @@ public class DataBusinessDefinitionServiceImpl
             if (!datasetIds.add(item.getDatasetId())) {
                 throw new BusinessException("绑定数据集不能重复");
             }
-            DataDataset dataset = datasetService.getById(item.getDatasetId());
+        }
+        // 批量查询所有数据集，避免循环 getById
+        Map<Long, DataDataset> datasetMap = datasetService.listByIds(datasetIds).stream()
+                .collect(Collectors.toMap(DataDataset::getId, Function.identity(), (left, right) -> left));
+        for (DataBusinessDatasetDTO item : datasets) {
+            DataDataset dataset = datasetMap.get(item.getDatasetId());
             if (dataset == null) {
                 throw new BusinessException("数据集不存在或已删除");
             }
@@ -207,16 +215,35 @@ public class DataBusinessDefinitionServiceImpl
 
     private List<DataBusinessDatasetVO> listBusinessDatasets(Long businessId, boolean onlyAccessible) {
         List<DataBusinessDataset> bindings = businessDatasetMapper.selectByBusinessId(SessionHelper.getTenantId(), businessId);
+        if (bindings.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 批量查询所有 dataset，避免循环 getById
+        Set<Long> datasetIds = bindings.stream()
+                .map(DataBusinessDataset::getDatasetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, DataDataset> datasetMap = datasetIds.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : datasetService.listByIds(datasetIds).stream()
+                        .collect(Collectors.toMap(DataDataset::getId, Function.identity(), (left, right) -> left));
+
+        // 批量查询所有字段，避免循环 listByDatasetId
+        Map<Long, List<DataDatasetField>> fieldMap = new java.util.HashMap<>();
+        for (Long datasetId : datasetIds) {
+            fieldMap.put(datasetId, datasetFieldService.listByDatasetId(datasetId));
+        }
+
         List<DataBusinessDatasetVO> result = new ArrayList<>();
         for (DataBusinessDataset binding : bindings) {
-            DataDataset dataset = datasetService.getById(binding.getDatasetId());
+            DataDataset dataset = datasetMap.get(binding.getDatasetId());
             if (dataset == null || !DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
                 continue;
             }
             if (onlyAccessible && !datasetAccessService.canAccess(dataset, DataDatasetAccessLevelEnum.QUERY)) {
                 continue;
             }
-            List<DataDatasetField> fields = datasetFieldService.listByDatasetId(binding.getDatasetId());
+            List<DataDatasetField> fields = fieldMap.getOrDefault(binding.getDatasetId(), java.util.Collections.emptyList());
             result.add(toDatasetVO(binding, fields, onlyAccessible));
         }
         return result;
