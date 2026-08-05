@@ -31,6 +31,15 @@ public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver>
                                  @Param("bizKey") String bizKey,
                                  @Param("readTime") LocalDateTime readTime);
 
+    int markMessagesReadBatch(@Param("tenantId") Long tenantId,
+                              @Param("userId") Long userId,
+                              @Param("messageIds") List<Long> messageIds,
+                              @Param("readTime") LocalDateTime readTime);
+
+    int markAllMessagesRead(@Param("tenantId") Long tenantId,
+                            @Param("userId") Long userId,
+                            @Param("readTime") LocalDateTime readTime);
+
     int updateDeliveryResult(@Param("messageId") Long messageId,
                              @Param("userId") Long userId,
                              @Param("deliveryStatus") String deliveryStatus,

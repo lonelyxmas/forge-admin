@@ -50,6 +50,35 @@
           AND r.read_flag = 0
     </update>
 
+    <update id="markMessagesReadBatch">
+        UPDATE sys_message_receiver
+        SET read_flag = 1,
+            read_time = #{readTime}
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND read_flag = 0
+        <choose>
+            <when test="messageIds != null and !messageIds.isEmpty()">
+                AND message_id IN
+                <foreach collection="messageIds" item="messageId" open="(" separator="," close=")">
+                    #{messageId}
+                </foreach>
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="markAllMessagesRead">
+        UPDATE sys_message_receiver
+        SET read_flag = 1,
+            read_time = #{readTime}
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND read_flag = 0
+    </update>
+
     <update id="updateDeliveryResult">
         UPDATE sys_message_receiver
         SET delivery_status = #{deliveryStatus},

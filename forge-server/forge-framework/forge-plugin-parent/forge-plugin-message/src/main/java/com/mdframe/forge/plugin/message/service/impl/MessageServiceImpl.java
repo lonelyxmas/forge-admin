@@ -465,38 +465,13 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         if (messageIds == null || messageIds.isEmpty()) {
             return;
         }
-        List<SysMessageReceiver> receivers = receiverMapper.selectList(
-            new LambdaQueryWrapper<SysMessageReceiver>()
-                .in(SysMessageReceiver::getMessageId, messageIds)
-                .eq(SysMessageReceiver::getUserId, userId)
-                .eq(SysMessageReceiver::getReadFlag, 0)
-        );
-        if (!receivers.isEmpty()) {
-            LocalDateTime now = LocalDateTime.now();
-            receivers.forEach(r -> {
-                r.setReadFlag(1);
-                r.setReadTime(now);
-            });
-            receivers.forEach(receiverMapper::updateById);
-        }
+        receiverMapper.markMessagesReadBatch(resolveTenantId(), userId, messageIds, LocalDateTime.now());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void markAllRead(Long userId) {
-        List<SysMessageReceiver> receivers = receiverMapper.selectList(
-            new LambdaQueryWrapper<SysMessageReceiver>()
-                .eq(SysMessageReceiver::getUserId, userId)
-                .eq(SysMessageReceiver::getReadFlag, 0)
-        );
-        if (!receivers.isEmpty()) {
-            LocalDateTime now = LocalDateTime.now();
-            receivers.forEach(r -> {
-                r.setReadFlag(1);
-                r.setReadTime(now);
-            });
-            receivers.forEach(receiverMapper::updateById);
-        }
+        receiverMapper.markAllMessagesRead(resolveTenantId(), userId, LocalDateTime.now());
     }
 
     @Override
