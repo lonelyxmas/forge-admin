@@ -169,7 +169,31 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         SysRole role = loadRoleForAccess(roleId);
         assertCanMaintainRole(role);
 
-        List<SysResource> assignableResources = resourceService.list();
+        List<SysResource> assignableResources;
+        Set<Long> resourceIdSet = resourceIds != null ? new HashSet<>(Arrays.asList(resourceIds)) : Collections.emptySet();
+        if (StringUtils.isNotBlank(clientCode)) {
+            assignableResources = new ArrayList<>(resourceService.lambdaQuery()
+                    .eq(SysResource::getClientCode, clientCode)
+                    .list());
+            if (!resourceIdSet.isEmpty()) {
+                Set<Long> existingIds = assignableResources.stream()
+                        .map(SysResource::getId)
+                        .collect(Collectors.toSet());
+                Set<Long> missingIds = new HashSet<>(resourceIdSet);
+                missingIds.removeAll(existingIds);
+                if (!missingIds.isEmpty()) {
+                    for (SysResource ancestor : loadResourcesWithAncestors(missingIds)) {
+                        if (existingIds.add(ancestor.getId())) {
+                            assignableResources.add(ancestor);
+                        }
+                    }
+                }
+            }
+        } else {
+            assignableResources = resourceIdSet.isEmpty()
+                    ? Collections.emptyList()
+                    : loadResourcesWithAncestors(resourceIdSet);
+        }
         Map<Long, SysResource> resourceMap = assignableResources.stream()
                 .collect(Collectors.toMap(SysResource::getId, resource -> resource, (left, right) -> left));
         Set<Long> clientResourceIdSet = Collections.emptySet();
@@ -283,6 +307,27 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     private boolean isClientCompatibleParent(SysResource resource, String clientCode) {
         return resource != null
                 && (StringUtils.isBlank(resource.getClientCode()) || clientCode.equals(resource.getClientCode()));
+    }
+
+    private List<SysResource> loadResourcesWithAncestors(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, SysResource> resourceMap = new HashMap<>();
+        Set<Long> pendingIds = new HashSet<>(ids);
+        while (!pendingIds.isEmpty()) {
+            List<SysResource> batch = resourceService.listByIds(pendingIds);
+            pendingIds.clear();
+            for (SysResource resource : batch) {
+                if (resourceMap.put(resource.getId(), resource) == null) {
+                    Long pid = normalizeParentId(resource.getParentId());
+                    if (pid != 0L && !resourceMap.containsKey(pid)) {
+                        pendingIds.add(pid);
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(resourceMap.values());
     }
 
     @Override

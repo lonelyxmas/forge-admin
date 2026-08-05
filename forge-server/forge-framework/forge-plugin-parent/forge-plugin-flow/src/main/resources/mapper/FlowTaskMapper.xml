@@ -8,7 +8,7 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         WHERE t.task_id = #{taskId}
     </select>
 
@@ -26,7 +26,7 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         WHERE t.task_id = #{taskId} OR t.id = #{taskId}
         ORDER BY CASE WHEN t.task_id = #{taskId} THEN 0 ELSE 1 END
         LIMIT 1
@@ -38,14 +38,11 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         <where>
             AND (t.assignee = #{userId}
                 OR (t.candidate_users IS NOT NULL AND t.candidate_users != ''
-                    AND (t.candidate_users = #{userId}
-                        OR t.candidate_users LIKE CONCAT(#{userId}, ',%')
-                        OR t.candidate_users LIKE CONCAT('%,', #{userId})
-                        OR t.candidate_users LIKE CONCAT('%,', #{userId}, ',%')))
+                    AND FIND_IN_SET(#{userId}, t.candidate_users))
                 OR (t.candidate_groups IS NOT NULL AND t.candidate_groups != ''))
             AND (t.status = 0 OR (t.assignee = #{userId} AND t.status = 1))
             <if test="title != null and title != ''">
@@ -76,7 +73,7 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         <where>
             AND t.assignee = #{userId}
             AND t.status IN (2, 3, 4, 5, 7, 8)
@@ -108,7 +105,7 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         <where>
             AND t.start_user_id = #{userId}
             <if test="title != null and title != ''">
@@ -139,7 +136,7 @@
                m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
-        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
+        LEFT JOIN sys_flow_category c ON c.id = m.category
         WHERE t.due_date IS NOT NULL
           AND t.due_date &lt;= #{now}
           AND t.status IN (0, 1)

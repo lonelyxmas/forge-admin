@@ -55,6 +55,14 @@
         ORDER BY sort ASC
     </select>
 
+    <select id="selectConfiguredColumnsByTableName" resultMap="GenTableColumnResultMap">
+        SELECT <include refid="GenTableColumnColumns"/>
+        FROM gen_table_column c
+        INNER JOIN gen_table t ON c.table_id = t.table_id
+        WHERE t.table_name = #{tableName}
+        ORDER BY c.sort ASC
+    </select>
+
     <delete id="deleteByTableId">
         DELETE FROM gen_table_column
         WHERE table_id = #{tableId}

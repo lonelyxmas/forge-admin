@@ -14,7 +14,6 @@ import com.mdframe.forge.starter.file.core.FileManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -108,7 +107,6 @@ public class SysFileMetadataServiceImpl extends ServiceImpl<SysFileMetadataMappe
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void removeByFileId(String fileId) {
         SysFileMetadata metadata = this.lambdaQuery()
                 .eq(SysFileMetadata::getFileId, fileId)
@@ -118,15 +116,16 @@ public class SysFileMetadataServiceImpl extends ServiceImpl<SysFileMetadataMappe
             throw new RuntimeException("素材不存在");
         }
         checkOwnership(metadata);
+        // 文件 IO 在事务外执行，避免长事务占用 DB 连接
         fileManager.delete(metadata.getFileId());
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void removeBatch(String[] fileIds) {
         for (String fileId : fileIds) {
             try {
                 SysFileMetadata fileMetadata = this.getById(fileId);
+                // 文件 IO 在事务外执行，异常只告警不阻断后续文件删除
                 fileManager.delete(fileMetadata.getFileId());
             } catch (Exception e) {
                 log.error("删除文件失败: {}", fileId, e);

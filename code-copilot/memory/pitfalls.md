@@ -3890,7 +3890,6 @@ Capability OAuth/OpenAPI 入口为了不把 `fdu_` Token 交给 Sa-Token 解析�
 **影响范围**:
 - 所有支持租户切换的登录会话刷新、权限路由守卫和持久化登录态恢复链路。
 
-<<<<<<< HEAD
 ## 163. 删除业务应用后保留的停用入口不能永久阻断业务域删除
 
 **发现日期**：2026-08-05
@@ -3906,7 +3905,7 @@ Capability OAuth/OpenAPI 入口为了不把 `fdu_` Token 交给 Sa-Token 解析�
 - 为保持旧调用方兼容，可保留原查询参数名，但应在 Spec 中明确语义已扩展。
 
 **影响范围**：
-- 所有采用”删除聚合时保留子资产供迁移”语义的业务域、应用、菜单入口和设计态元数据。
+- 所有采用“删除聚合时保留子资产供迁移”语义的业务域、应用、菜单入口和设计态元数据。
 
 ## 164. JSqlParser 4.9 会重排 ORDER BY ... FOR UPDATE 导致 SQL 语法错误
 
@@ -3926,3 +3925,41 @@ Mapper XML 里写 `SELECT ... WHERE ... ORDER BY id ASC FOR UPDATE`（MySQL 语�
 **影响范围**:
 - 所有带 `FOR UPDATE` + `ORDER BY` 的 Mapper SQL（本项目唯一受影响的是 `AiProviderMapper.selectIdsForDefaultSwitch`）。
 
+## Pitfall: BaseMapper 子类无 saveBatch 能力
+
+**记录日期**：2026-08-05
+
+`DataBusinessDefinitionServiceImpl` 继承 `ServiceImpl<DataBusinessDefinitionMapper, DataBusinessDefinition>`，有 IService.saveBatch 能力，但只能用于 `DataBusinessDefinition` 实体。`DataBusinessDatasetMapper` 只 extends `BaseMapper<DataBusinessDataset>`（非 IService），无法调用 `saveBatch`。
+
+**规避方式**：批量插入需要为 Mapper 对应实体创建 Service extends IService，或在 Mapper XML 中写批量 INSERT。循环 insert 保留属 P2 范围。
+
+## Pitfall: LEFT JOIN 直接 GROUP BY 导致结果集膨胀
+
+**记录日期**：2026-08-05
+
+分页查询中每行执行相关子查询（COUNT/SUM）时，改为 `LEFT JOIN r ON r.session_id = s.id GROUP BY s.id` 虽然能消除子查询，但如果 JOIN 的表有多行匹配，结果集会膨胀，GROUP BY 需要处理更多行。
+
+**推荐写法**：用派生表先聚合再 JOIN：
+```sql
+LEFT JOIN (
+    SELECT session_id, COUNT(*) AS cnt, SUM(token_usage) AS total
+    FROM ai_chat_record
+    GROUP BY session_id
+) r ON r.session_id = s.id
+```
+派生表先按 session_id 聚合为每 session 一行，JOIN 后结果集不膨胀，性能更优。
+
+## Pitfall: FIND_IN_SET 替代 LIKE 匹配逗号分隔列表
+
+**记录日期**：2026-08-05
+
+候选人列表 `candidate_users` 存储逗号分隔的 userId（如 "1,23,456"），原来用 4 路 LIKE 匹配：
+```sql
+column = #{userId}
+OR column LIKE CONCAT(#{userId}, ',%')
+OR column LIKE CONCAT('%,', #{userId})
+OR column LIKE CONCAT('%,', #{userId}, ',%')
+```
+4 路 LIKE 无法使用索引，全表扫描。
+
+**替代方案**：`FIND_IN_SET(#{userId}, t.candidate_users)` 单条件替代，语义等价且更简洁。

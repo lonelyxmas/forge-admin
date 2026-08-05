@@ -72,4 +72,15 @@
         ORDER BY o.org_name, u.username
     </select>
 
+    <!-- 批量查询用户已读的公告ID集合 -->
+    <select id="selectReadNoticeIds" resultType="java.lang.Long">
+        SELECT DISTINCT notice_id
+        FROM sys_notice_read_record
+        WHERE user_id = #{userId}
+          AND notice_id IN
+          <foreach collection="noticeIds" item="noticeId" open="(" separator="," close=")">
+              #{noticeId}
+          </foreach>
+    </select>
+
 </mapper>

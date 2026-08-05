@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessageReceiver;
 import com.mdframe.forge.plugin.message.domain.vo.MessageVO;
+import com.mdframe.forge.plugin.message.domain.vo.ReceiverStatVO;
 import com.mdframe.forge.plugin.message.domain.vo.ReceiverVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -13,7 +14,8 @@ import java.util.List;
 
 public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver> {
 
-    
+    List<ReceiverStatVO> selectReceiverStatsByMessageIds(@Param("messageIds") List<Long> messageIds);
+
     List<ReceiverVO> selectReceiversWithUserInfo(@Param("messageId") Long messageId);
     
    

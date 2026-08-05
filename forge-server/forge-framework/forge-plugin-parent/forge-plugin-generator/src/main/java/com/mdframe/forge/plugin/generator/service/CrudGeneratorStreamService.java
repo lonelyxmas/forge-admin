@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.generator.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiPageTemplate;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
@@ -191,10 +190,7 @@ public class CrudGeneratorStreamService {
 
             // 尝试用 SchemaGenerator 生成参考配置
             try {
-                List<GenTableColumn> configuredColumns = genTableColumnMapper.selectList(
-                    new LambdaQueryWrapper<GenTableColumn>()
-                        .inSql(GenTableColumn::getTableId,
-                            "SELECT table_id FROM gen_table WHERE table_name = '" + request.getTableName() + "'"));
+                List<GenTableColumn> configuredColumns = genTableColumnMapper.selectConfiguredColumnsByTableName(request.getTableName());
                 if (configuredColumns != null && !configuredColumns.isEmpty()) {
                     var refResult = schemaGenerator.generate(
                         request.getConfigKey(), request.getTableName(), "", configuredColumns);

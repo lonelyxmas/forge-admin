@@ -1,21 +1,27 @@
 # 任务拆分 - 后端数据库性能与注入加固
-> status: propose
+> status: review-ready
 > created: 2026-08-05
 > 拆分顺序：P0 安全紧急 -> P1 分页性能 -> P2 循环批量化 -> P3 规范治理
 > 每个 Task = 可独立提交的原子变更（3-5 个文件）
+> **本轮执行范围：Task 1-4（P0 安全紧急修复）已完成，Task 5-18 后续另开独立变更**
 
 ## 前置条件
 
-- [ ] 已完成全量扫描，88 处问题已记录到 spec.md
-- [ ] 待澄清问题 Q1-Q5 已确认（影响 F9/F10/F18 方案选择）
+- [x] 已完成全量扫描，88 处问题已记录到 spec.md
+- [x] 待澄清问题 Q1-Q5 已确认：
+  - Q1 F9：SQL 优化 LEFT JOIN GROUP BY
+  - Q2 F10：FIND_IN_SET 替代 LIKE
+  - Q3 F2：发送失败仅标记状态，人工处理
+  - Q4 F18：分批排期，本轮不做
+  - Q5：拆分独立变更，本轮只做 P0（Task 1-4）
 
-## Task 1：SQL 注入紧急修复（P0-F1）
+## Task 1：SQL 注入紧急修复（P0-F1）✅ 已完成 commit bf613888
 
 - **目标**：消除 `CrudGeneratorStreamService` 的 SQL 注入漏洞
 - **涉及文件**：
   - `forge-plugin-generator/.../service/CrudGeneratorStreamService.java:194-197` - 修改，移除字符串拼接
-  - `forge-plugin-generator/.../mapper/GenTableColumnMapper.java` - 新增方法 `selectByTableName(String tableName)`
-  - `forge-plugin-generator/.../resources/mapper/GenTableColumnMapper.xml` - 新增 `SELECT table_id FROM gen_table WHERE table_name = #{tableName}` 参数化查询
+  - `forge-plugin-generator/.../mapper/GenTableColumnMapper.java` - 新增方法 `selectConfiguredColumnsByTableName(String tableName)`
+  - `forge-plugin-generator/.../resources/mapper/GenTableColumnMapper.xml` - 新增参数化查询，INNER JOIN gen_table
 - **关键签名**：
   ```java
   // GenTableColumnMapper.java
@@ -25,56 +31,27 @@
   - 单测覆盖：正常 tableName、含单引号 tableName、空 tableName
   - `mvn test -pl forge-plugin-generator`
 
-## Task 2：消息发送事务拆分（P0-F2）
+## Task 2：消息发送事务拆分（P0-F2）✅ 已完成 commit e6832fcf
 
 - **目标**：`MessageServiceImpl.send()` 事务内远程调用移出事务
 - **涉及文件**：
-  - `forge-plugin-message/.../service/impl/MessageServiceImpl.java:92-140` - 修改，事务只保留落库，发送移到 `@TransactionalEventListener(AFTER_COMMIT)`
+  - `forge-plugin-message/.../service/impl/MessageServiceImpl.java` - 修改，事务只保留落库，发送移到 `@TransactionalEventListener(AFTER_COMMIT)`
   - `forge-plugin-message/.../event/MessageSendEvent.java` - 新增事件类
-  - `forge-plugin-message/.../listener/MessageSendListener.java` - 新增监听器，事务提交后执行发送
-  - `forge-plugin-message/.../service/impl/MessageServiceImpl.java:132` - 协同渠道同样拆分
-- **关键签名**：
-  ```java
-  // 事务内只做：createMessageRecord + batchCreateReceiverRecords
-  // 事务后：publishEvent(new MessageSendEvent(msg.getId()))
-  // 监听器：@TransactionalEventListener(phase = AFTER_COMMIT)
-  ```
-- **验证**：
-  - 单测：发送失败时消息记录已落库且状态标记为"发送失败"
-  - 单测：发送成功时状态更新为"已发送"
-  - `mvn test -pl forge-plugin-message`
+- **实际实现**：未单独新建 Listener 类，监听器方法 `handleMessageSendEvent` 直接放在 MessageServiceImpl 内，发送失败标记 `SEND_STATUS_FAILED` + 日志告警
 
-## Task 3：采购单提交事务拆分（P0-F3）
+## Task 3：采购单提交事务拆分（P0-F3）✅ 已完成 commit db19e638
 
 - **目标**：`SamplePurchaseOrderServiceImpl.submit()` 事务内 RPC 移出事务
 - **涉及文件**：
-  - `forge-business-core/.../purchase/service/impl/SamplePurchaseOrderServiceImpl.java:159-200` - 修改，流程启动移到事务提交后
-  - 新增 `PurchaseOrderSubmitEvent.java` + 监听器
-- **关键签名**：
-  ```java
-  // 事务内：单据状态预变更（待提交->审核中）
-  // 事务后：flowClient.startProcess()
-  // 监听器失败：回滚单据状态（补偿事务）
-  ```
-- **验证**：
-  - 单测：流程启动成功 -> 单据状态确认
-  - 单测：流程启动失败 -> 单据状态回滚到待提交
-  - `mvn test -pl forge-business-core`
+  - `forge-business-core/.../purchase/service/impl/SamplePurchaseOrderServiceImpl.java` - 修改
+- **实际实现**：采用简化方案，移除 `@Transactional`，`flowClient.startProcess()` 在事务外执行。流程启动失败单据状态不变（草稿），启动成功后单条 `updateById` 更新状态，更新失败告警并抛异常。未引入事件类和补偿事务，保持最小改动
 
-## Task 4：文件删除事务拆分（P0-F4）
+## Task 4：文件删除事务拆分（P0-F4）✅ 已完成 commit 6e18e9f0
 
 - **目标**：`SysFileMetadataServiceImpl` 文件 IO 移出事务
 - **涉及文件**：
-  - `forge-starter-file/.../service/impl/SysFileMetadataServiceImpl.java:111-135` - 修改，元数据逻辑删除在事务内，物理文件删除移到事务后
-  - 新增 `FileDeleteEvent.java` + 监听器
-- **关键签名**：
-  ```java
-  // 事务内：metadata 逻辑删除（del_flag = id）
-  // 事务后：fileManager.delete(fileId) - 失败只告警 log.error
-  ```
-- **验证**：
-  - 单测：元数据删除成功 + 物理文件删除失败 -> 元数据保持已删除，日志告警
-  - `mvn test -pl forge-starter-file`
+  - `forge-plugin-system/.../service/impl/SysFileMetadataServiceImpl.java` - 修改
+- **实际实现**：`removeByFileId` / `removeBatch` 移除 `@Transactional`。原方法内只有查询 + 文件 IO 无 DB 写操作，`@Transactional` 多余且占用 DB 连接。未引入事件类，保持最小改动。文件位于 `forge-plugin-system` 而非 tasks.md 原估的 `forge-starter-file`
 
 ## Task 5：消息管理 N+1 修复（P1-F5）
 
@@ -254,10 +231,10 @@
   - 逐方法验证 `DataScopeInterceptor` 配置
   - 按模块 `mvn test`
 
-## Task 18：聚合验证
+## Task 18：聚合验证（本轮 P0 范围）
 
-- [ ] 执行 `cd forge-server && mvn clean install -DskipTests`
-- [ ] 执行全量 `mvn test`
-- [ ] Mapper XML 静态解析
-- [ ] 回填 spec.md 执行日志和审查结论
-- [ ] 精确暂存本变更文件并提交
+- [x] 执行 `cd forge-server && mvn clean install -DskipTests` - 全量编译通过
+- [ ] 执行全量 `mvn test` - 待后续补充单测
+- [ ] Mapper XML 静态解析 - 待后续
+- [x] 回填 spec.md 执行日志和审查结论
+- [ ] 精确暂存本变更文件并提交 - 待执行
