@@ -3890,6 +3890,7 @@ Capability OAuth/OpenAPI 入口为了不把 `fdu_` Token 交给 Sa-Token 解析�
 **影响范围**:
 - 所有支持租户切换的登录会话刷新、权限路由守卫和持久化登录态恢复链路。
 
+<<<<<<< HEAD
 ## 163. 删除业务应用后保留的停用入口不能永久阻断业务域删除
 
 **发现日期**：2026-08-05
@@ -3905,4 +3906,23 @@ Capability OAuth/OpenAPI 入口为了不把 `fdu_` Token 交给 Sa-Token 解析�
 - 为保持旧调用方兼容，可保留原查询参数名，但应在 Spec 中明确语义已扩展。
 
 **影响范围**：
-- 所有采用“删除聚合时保留子资产供迁移”语义的业务域、应用、菜单入口和设计态元数据。
+- 所有采用”删除聚合时保留子资产供迁移”语义的业务域、应用、菜单入口和设计态元数据。
+
+## 164. JSqlParser 4.9 会重排 ORDER BY ... FOR UPDATE 导致 SQL 语法错误
+
+**发现日期**: 2026-08-05
+
+**问题描述**:
+Mapper XML 里写 `SELECT ... WHERE ... ORDER BY id ASC FOR UPDATE`（MySQL 语法正确），但执行时被重写成 `... WHERE ... FOR UPDATE ORDER BY id ASC`（非法），MySQL 报 `SQLSyntaxErrorException ... near 'ORDER BY id ASC'`。
+
+**根因**:
+项目实际引入 `jsqlparser:4.9`（经 `mybatis-plus-core:3.5.7` 传递）。`TenantLineInnerInterceptor` 等 MyBatis-Plus 拦截器会用 JSqlParser 解析 SQL 并重新 `toString()` 序列化。JSqlParser 4.9 序列化 `ORDER BY ... FOR UPDATE` 组合时存在 bug：把 `FOR UPDATE` 从句错误地移动到 `ORDER BY` 之前，生成 MySQL 无法解析的语句。改动 XML 的 `FOR UPDATE` 位置无效——运行时 SQL 始终来自 JSqlParser 的重排结果，重启也无法解决。
+
+**解决方案**:
+- 查询锁定语句避免 `ORDER BY ... FOR UPDATE` 组合。删除 `ORDER BY` 子句，使 SQL 以 `FOR UPDATE` 结尾（`SELECT ... WHERE ... FOR UPDATE`），JSqlParser 序列化结果保持不变；
+- 锁行顺序对 `FOR UPDATE` 全行锁定场景无影响，删 `ORDER BY` 不会改变并发语义；
+- 新增任何含 `FOR UPDATE` 的 Mapper 时，用与项目一致的 `jsqlparser:4.9` 验证序列化结果，而不是源码字面顺序。
+
+**影响范围**:
+- 所有带 `FOR UPDATE` + `ORDER BY` 的 Mapper SQL（本项目唯一受影响的是 `AiProviderMapper.selectIdsForDefaultSwitch`）。
+

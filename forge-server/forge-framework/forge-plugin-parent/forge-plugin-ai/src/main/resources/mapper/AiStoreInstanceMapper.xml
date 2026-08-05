@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.knowledge.mapper.AiStoreInstanceMapper">
+
+    <sql id="storeColumns">
+        id, tenant_id, instance_name, category, store_type, config_json, status,
+        create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectStorePage" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiStoreInstance">
+        SELECT <include refid="storeColumns" />
+        FROM ai_store_instance
+        WHERE del_flag = '0'
+        <if test="category != null and category != ''">
+            AND category = #{category}
+        </if>
+        <if test="storeType != null and storeType != ''">
+            AND store_type = #{storeType}
+        </if>
+        <if test="instanceName != null and instanceName != ''">
+            AND instance_name LIKE CONCAT('%', #{instanceName}, '%')
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiStoreInstance">
+        SELECT <include refid="storeColumns" />
+        FROM ai_store_instance
+        WHERE id = #{id} AND del_flag = '0'
+        FOR UPDATE
+    </select>
+
+</mapper>

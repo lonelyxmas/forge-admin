@@ -39,10 +39,10 @@ class AiModelProviderConcurrencyContractTest {
 
         String setDefaultProvider = methodBody(manager, "setDefaultProvider", "lockProviders");
         assertThat(setDefaultProvider)
-                .contains("requireTenantId()", "providerService.lockAllForDefaultSwitch(tenantId)",
-                        "providerService.switchDefaultProvider(tenantId, providerId)");
-        assertThat(setDefaultProvider.indexOf("lockAllForDefaultSwitch(tenantId)"))
-                .isLessThan(setDefaultProvider.indexOf("switchDefaultProvider(tenantId, providerId)"));
+                .contains("providerService.lockAllForDefaultSwitch()",
+                        "providerService.switchDefaultProvider(providerId)");
+        assertThat(setDefaultProvider.indexOf("lockAllForDefaultSwitch()"))
+                .isLessThan(setDefaultProvider.indexOf("switchDefaultProvider(providerId)"));
         assertThat(providerController)
                 .contains("modelProviderManager.setDefaultProvider(id)")
                 .doesNotContain("providerService.setDefault(id)");
@@ -55,8 +55,13 @@ class AiModelProviderConcurrencyContractTest {
                 .contains("id=\"selectByIdForUpdate\"", "FOR UPDATE");
         assertThat(providerMapper)
                 .contains("id=\"selectIdForUpdate\"", "id=\"selectIdsForDefaultSwitch\"",
-                        "tenant_id = #{tenantId}", "ORDER BY id ASC", "FOR UPDATE")
+                        "FOR UPDATE")
                 .contains("<update id=\"clearDefaultProviders\">", "<update id=\"markDefaultProvider\">");
+        // 默认切换 SQL 依赖租户拦截器自动追加 tenant 条件，不手写 tenant_id 避免超级管理员数据(tenant_id=0)查不到
+        assertThat(providerMapper)
+                .doesNotContain("tenant_id = #{tenantId}")
+                .contains("WHERE del_flag = '0'")
+                .containsPattern("WHERE del_flag = '0'\\s+FOR UPDATE");
     }
 
     private void assertProviderLockPrecedesModelLock(String methodBody) {

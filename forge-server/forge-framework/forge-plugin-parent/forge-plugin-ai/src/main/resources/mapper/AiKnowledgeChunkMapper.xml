@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeChunkMapper">
+
+    <sql id="chunkColumns">
+        id, tenant_id, knowledge_id, document_id, chunk_index, content, title,
+        token_count, vector_id, ref_count, content_hash, retrieval_count,
+        create_by, create_time, create_dept, update_by, update_time, del_flag
+    </sql>
+
+    <select id="selectByDocumentId" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledgeChunk">
+        SELECT <include refid="chunkColumns" />
+        FROM ai_knowledge_chunk
+        WHERE document_id = #{documentId} AND del_flag = '0'
+        ORDER BY chunk_index ASC
+    </select>
+
+    <select id="selectByKnowledgeId" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledgeChunk">
+        SELECT <include refid="chunkColumns" />
+        FROM ai_knowledge_chunk
+        WHERE knowledge_id = #{knowledgeId} AND del_flag = '0'
+        ORDER BY document_id ASC, chunk_index ASC
+    </select>
+
+    <insert id="batchInsert">
+        INSERT INTO ai_knowledge_chunk
+        (id, tenant_id, knowledge_id, document_id, chunk_index, content, title,
+         token_count, vector_id, ref_count, content_hash, retrieval_count,
+         create_by, create_time, create_dept, update_by, update_time, del_flag)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.tenantId}, #{item.knowledgeId}, #{item.documentId},
+             #{item.chunkIndex}, #{item.content}, #{item.title}, #{item.tokenCount},
+             #{item.vectorId}, #{item.refCount}, #{item.contentHash}, #{item.retrievalCount},
+             #{item.createBy}, #{item.createTime}, #{item.createDept},
+             #{item.updateBy}, #{item.updateTime}, #{item.delFlag})
+        </foreach>
+    </insert>
+
+    <update id="deleteByDocumentId">
+        UPDATE ai_knowledge_chunk
+        SET del_flag = id, update_time = CURRENT_TIMESTAMP
+        WHERE document_id = #{documentId} AND del_flag = '0'
+    </update>
+
+    <update id="incrementRetrievalCount">
+        UPDATE ai_knowledge_chunk
+        SET retrieval_count = retrieval_count + 1, update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND del_flag = '0'
+    </update>
+
+</mapper>
