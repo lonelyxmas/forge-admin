@@ -16,8 +16,6 @@ public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver>
 
     List<ReceiverStatVO> selectReceiverStatsByMessageIds(@Param("messageIds") List<Long> messageIds);
 
-
-    
     List<ReceiverVO> selectReceiversWithUserInfo(@Param("messageId") Long messageId);
     
    

@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -224,12 +226,12 @@ public class DataBusinessDefinitionServiceImpl
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         Map<Long, DataDataset> datasetMap = datasetIds.isEmpty()
-                ? java.util.Collections.emptyMap()
+                ? Collections.emptyMap()
                 : datasetService.listByIds(datasetIds).stream()
                         .collect(Collectors.toMap(DataDataset::getId, Function.identity(), (left, right) -> left));
 
         // 批量查询所有字段，避免循环 listByDatasetId
-        Map<Long, List<DataDatasetField>> fieldMap = new java.util.HashMap<>();
+        Map<Long, List<DataDatasetField>> fieldMap = new HashMap<>();
         for (Long datasetId : datasetIds) {
             fieldMap.put(datasetId, datasetFieldService.listByDatasetId(datasetId));
         }
@@ -243,7 +245,7 @@ public class DataBusinessDefinitionServiceImpl
             if (onlyAccessible && !datasetAccessService.canAccess(dataset, DataDatasetAccessLevelEnum.QUERY)) {
                 continue;
             }
-            List<DataDatasetField> fields = fieldMap.getOrDefault(binding.getDatasetId(), java.util.Collections.emptyList());
+            List<DataDatasetField> fields = fieldMap.getOrDefault(binding.getDatasetId(), Collections.emptyList());
             result.add(toDatasetVO(binding, fields, onlyAccessible));
         }
         return result;
