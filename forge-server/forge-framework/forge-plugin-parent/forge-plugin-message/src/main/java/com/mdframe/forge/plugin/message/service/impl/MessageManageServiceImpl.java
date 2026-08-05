@@ -6,10 +6,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.message.domain.dto.MessageManageQueryDTO;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessage;
-import com.mdframe.forge.plugin.message.domain.entity.SysMessageReceiver;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessageSendRecord;
 import com.mdframe.forge.plugin.message.domain.vo.MessageDetailVO;
 import com.mdframe.forge.plugin.message.domain.vo.MessageManageVO;
+import com.mdframe.forge.plugin.message.domain.vo.ReceiverStatVO;
 import com.mdframe.forge.plugin.message.domain.vo.ReceiverVO;
 import com.mdframe.forge.plugin.message.mapper.SysMessageMapper;
 import com.mdframe.forge.plugin.message.mapper.SysMessageReceiverMapper;
@@ -20,7 +20,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -78,6 +81,20 @@ public class MessageManageServiceImpl implements MessageManageService {
         
         Page<SysMessage> messagePage = messageMapper.selectPage(page, wrapper);
         
+        List<Long> messageIds = messagePage.getRecords().stream()
+                .map(SysMessage::getId)
+                .collect(Collectors.toList());
+        
+        Map<Long, ReceiverStatVO> statMap;
+        if (messageIds.isEmpty()) {
+            statMap = Collections.emptyMap();
+        } else {
+            List<ReceiverStatVO> stats = receiverMapper.selectReceiverStatsByMessageIds(messageIds);
+            statMap = stats.stream()
+                    .collect(Collectors.toMap(ReceiverStatVO::getMessageId, Function.identity(), (left, right) -> left));
+        }
+        
+        final Map<Long, ReceiverStatVO> finalStatMap = statMap;
         List<MessageManageVO> vos = messagePage.getRecords().stream().map(msg -> {
             MessageManageVO vo = new MessageManageVO();
             vo.setId(msg.getId());
@@ -89,13 +106,16 @@ public class MessageManageServiceImpl implements MessageManageService {
             vo.setCreateTime(msg.getCreateTime());
             vo.setSenderName(msg.getSenderName());
             
-            List<SysMessageReceiver> receivers = receiverMapper.selectList(
-                new LambdaQueryWrapper<SysMessageReceiver>()
-                    .eq(SysMessageReceiver::getMessageId, msg.getId())
-            );
-            vo.setReceiverCount(receivers.size());
-            vo.setReadCount((int) receivers.stream().filter(r -> r.getReadFlag() == 1).count());
-            vo.setUnreadCount((int) receivers.stream().filter(r -> r.getReadFlag() == 0).count());
+            ReceiverStatVO stat = finalStatMap.get(msg.getId());
+            if (stat != null) {
+                vo.setReceiverCount(stat.getReceiverCount());
+                vo.setReadCount(stat.getReadCount());
+                vo.setUnreadCount(stat.getUnreadCount());
+            } else {
+                vo.setReceiverCount(0);
+                vo.setReadCount(0);
+                vo.setUnreadCount(0);
+            }
             
             return vo;
         }).collect(Collectors.toList());
