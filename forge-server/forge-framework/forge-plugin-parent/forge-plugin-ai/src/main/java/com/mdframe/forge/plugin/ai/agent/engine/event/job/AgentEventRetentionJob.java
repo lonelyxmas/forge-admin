@@ -1,6 +1,6 @@
 package com.mdframe.forge.plugin.ai.agent.engine.event.job;
 
-import com.mdframe.forge.plugin.ai.agent.engine.event.persistence.AgentEventMapper;
+import com.mdframe.forge.plugin.ai.agent.engine.event.mapper.AgentEventMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

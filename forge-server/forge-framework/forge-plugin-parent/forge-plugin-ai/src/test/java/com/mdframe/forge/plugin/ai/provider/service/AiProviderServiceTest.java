@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.ai.provider.dto.AiProviderTestDTO;
 import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderCacheEvictionScheduler;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
+import com.mdframe.forge.plugin.ai.provider.support.ProviderModelFetcher;
 import com.mdframe.forge.plugin.ai.health.AiModelHealthRegistry;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,13 +65,16 @@ class AiProviderServiceTest {
     @Mock
     private AiSecretCrypto aiSecretCrypto;
 
+    @Mock
+    private ProviderModelFetcher providerModelFetcher;
+
     private AiProviderService service;
 
     @BeforeEach
     void setUp() {
         // AiSecretCrypto mock: encrypt 返回输入（测试中不验证加密逻辑，只验证调用链）
         lenient().when(aiSecretCrypto.encrypt(any())).thenAnswer(inv -> inv.getArgument(0));
-        service = new AiProviderService(adapterRegistry, evictionScheduler, modelService, healthRegistry, aiSecretCrypto);
+        service = new AiProviderService(adapterRegistry, evictionScheduler, modelService, healthRegistry, aiSecretCrypto, providerModelFetcher);
         ReflectionTestUtils.setField(service, "baseMapper", providerMapper);
     }
 

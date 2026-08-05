@@ -1,6 +1,7 @@
-package com.mdframe.forge.plugin.ai.agent.engine.event.persistence;
+package com.mdframe.forge.plugin.ai.agent.engine.event.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.mdframe.forge.plugin.ai.agent.engine.event.persistence.AgentEventEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

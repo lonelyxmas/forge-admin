@@ -3,6 +3,8 @@ package com.mdframe.forge.plugin.ai.provider.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.ai.constant.AiConstants;
+import com.mdframe.forge.plugin.ai.model.constant.AiModelType;
+import com.mdframe.forge.plugin.ai.model.dto.AiModelSaveDTO;
 import com.mdframe.forge.plugin.ai.model.service.AiModelService;
 import com.mdframe.forge.plugin.ai.provider.adapter.AiModelRuntimeOptions;
 import com.mdframe.forge.plugin.ai.provider.adapter.AiProviderAdapterCode;
@@ -16,6 +18,7 @@ import com.mdframe.forge.plugin.ai.provider.support.AiProviderCacheEvictionSched
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderFailureDiagnostics;
 import com.mdframe.forge.plugin.ai.provider.support.AiProviderSecretMasker;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
+import com.mdframe.forge.plugin.ai.provider.support.ProviderModelFetcher;
 import com.mdframe.forge.plugin.ai.provider.vo.AiProviderVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +50,7 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
     private final AiModelService modelService;
     private final AiModelHealthRegistry healthRegistry;
     private final AiSecretCrypto aiSecretCrypto;
+    private final ProviderModelFetcher providerModelFetcher;
 
     /**
      * 获取默认供应商。
@@ -148,6 +152,76 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
         }
     }
 
+    /**
+     * 拉取供应商可用模型列表（调 OpenAI 兼容的 /v1/models 端点）。
+     *
+     * @param providerId 供应商 ID
+     * @return 拉取到的模型列表
+     */
+    public List<ProviderModelFetcher.FetchedModel> fetchModels(Long providerId) {
+        AiProvider provider = requireProvider(providerId);
+        String apiKey = aiSecretCrypto.isEncrypted(provider.getApiKey())
+                ? aiSecretCrypto.decrypt(provider.getApiKey()) : provider.getApiKey();
+        return providerModelFetcher.fetch(provider.getBaseUrl(), apiKey);
+    }
+
+    /**
+     * 批量导入模型到供应商。
+     * 已存在的模型自动跳过；未导入时从勾选的第一个设为默认；统一按 chat 类型导入。
+     *
+     * @param providerId 供应商 ID
+     * @param modelIds 勾选的模型标识列表
+     * @return 实际导入数量（跳过已存在）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int batchImportModels(Long providerId, List<String> modelIds) {
+        if (providerId == null) {
+            throw new BusinessException("AI供应商ID不能为空");
+        }
+        requireProvider(providerId);
+        if (modelIds == null || modelIds.isEmpty()) {
+            throw new BusinessException("请选择要导入的模型");
+        }
+
+        java.util.Set<String> existing = new java.util.HashSet<>(
+                modelService.listAllByProviderId(providerId).stream()
+                        .map(com.mdframe.forge.plugin.ai.model.domain.AiModel::getModelId)
+                        .toList());
+
+        int imported = 0;
+        boolean hasDefault = modelService.getDefaultModelId(providerId) != null;
+        for (String modelId : modelIds) {
+            String trimmed = modelId == null ? "" : modelId.trim();
+            if (!StringUtils.hasText(trimmed) || existing.contains(trimmed)) {
+                continue;
+            }
+            AiModelSaveDTO dto = new AiModelSaveDTO();
+            dto.setProviderId(providerId);
+            dto.setModelType(AiModelType.CHAT.getCode());
+            dto.setModelId(trimmed);
+            dto.setModelName(trimmed);
+            dto.setStatus(AiConstants.STATUS_NORMAL);
+            // 尚未有默认模型时，第一个导入的设为默认
+            if (!hasDefault) {
+                dto.setIsDefault(AiConstants.IS_DEFAULT_YES);
+                hasDefault = true;
+            } else {
+                dto.setIsDefault(AiConstants.IS_DEFAULT_NO);
+            }
+            modelService.addModel(dto);
+            existing.add(trimmed);
+            imported++;
+        }
+        // 双写同步供应商的 models / defaultModel 摘要
+        if (imported > 0) {
+            updateModelSummary(providerId,
+                    com.alibaba.fastjson2.JSON.toJSONString(modelService.getModelIdListByProviderId(providerId)),
+                    modelService.getDefaultModelId(providerId));
+        }
+        log.info("[AI供应商] 批量导入模型, providerId={}, imported={}", providerId, imported);
+        return imported;
+    }
+
     public AiProviderVO toSafeView(AiProvider provider) {
         if (provider == null) {
             return null;
@@ -190,18 +264,18 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public List<Long> lockAllForDefaultSwitch(Long tenantId) {
-        List<Long> providerIds = baseMapper.selectIdsForDefaultSwitch(tenantId);
+    public List<Long> lockAllForDefaultSwitch() {
+        List<Long> providerIds = baseMapper.selectIdsForDefaultSwitch();
         return providerIds == null ? List.of() : providerIds;
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void switchDefaultProvider(Long tenantId, Long id) {
-        baseMapper.clearDefaultProviders(tenantId);
-        if (baseMapper.markDefaultProvider(tenantId, id) <= 0) {
+    public void switchDefaultProvider(Long id) {
+        baseMapper.clearDefaultProviders();
+        if (baseMapper.markDefaultProvider(id) <= 0) {
             throw new BusinessException("设置默认 AI 供应商失败");
         }
-        log.info("[AI供应商] 设为默认供应商, tenantId={}, id={}", tenantId, id);
+        log.info("[AI供应商] 设为默认供应商, id={}", id);
     }
 
     public void updateModelSummary(Long providerId, String models, String defaultModel) {

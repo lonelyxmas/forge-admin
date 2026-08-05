@@ -298,6 +298,20 @@ export function providerTemplates() {
   return request.get('/ai/provider/templates')
 }
 
+/**
+ * 拉取供应商可用模型列表
+ */
+export function providerFetchModels(id) {
+  return request.post(`/ai/provider/${id}/fetch-models`)
+}
+
+/**
+ * 批量导入模型到供应商
+ */
+export function providerBatchImportModels(id, modelIds) {
+  return request.post(`/ai/provider/${id}/models/batch`, modelIds)
+}
+
 // ========== 模型管理 ==========
 
 /**
@@ -538,8 +552,10 @@ export function agentAiCreateSSE(description, onEvent, onComplete, onError) {
     signal: controller.signal,
   })
     .then((response) => {
-      if (!response.ok) throw new Error(response.statusText)
-      if (!response.body) throw new Error('浏览器不支持流式响应')
+      if (!response.ok)
+        throw new Error(response.statusText)
+      if (!response.body)
+        throw new Error('浏览器不支持流式响应')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -555,11 +571,14 @@ export function agentAiCreateSSE(description, onEvent, onComplete, onError) {
             let eventType = 'message'
             let eventData = ''
             for (const line of eventStr.split(/\r?\n/)) {
-              if (line.startsWith('event:')) eventType = line.slice(6).trim()
-              else if (line.startsWith('data:')) eventData = line.slice(5).trim()
+              if (line.startsWith('event:'))
+                eventType = line.slice(6).trim()
+              else if (line.startsWith('data:'))
+                eventData = line.slice(5).trim()
             }
             if (eventData) {
-              try { eventData = JSON.parse(eventData) } catch { /* keep raw */ }
+              try { eventData = JSON.parse(eventData) }
+              catch { /* keep raw */ }
               onEvent(eventType, eventData)
             }
           }
@@ -641,8 +660,10 @@ export function streamEngineChat(data, onEvent, onComplete, onError) {
     signal: controller.signal,
   })
     .then((response) => {
-      if (!response.ok) throw new Error(response.statusText)
-      if (!response.body) throw new Error('浏览器不支持流式响应')
+      if (!response.ok)
+        throw new Error(response.statusText)
+      if (!response.body)
+        throw new Error('浏览器不支持流式响应')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -658,23 +679,28 @@ export function streamEngineChat(data, onEvent, onComplete, onError) {
             let eventType = 'message'
             let eventData = ''
             for (const line of eventStr.split(/\r?\n/)) {
-              if (line.startsWith('event:')) eventType = line.slice(6).trim()
-              else if (line.startsWith('data:')) eventData = line.slice(5).trim()
+              if (line.startsWith('event:'))
+                eventType = line.slice(6).trim()
+              else if (line.startsWith('data:'))
+                eventData = line.slice(5).trim()
             }
             if (eventData) {
-              try { eventData = JSON.parse(eventData) } catch { /* keep raw */ }
+              try { eventData = JSON.parse(eventData) }
+              catch { /* keep raw */ }
               onEvent(eventType, eventData)
             }
           }
           read()
         }).catch((err) => {
-          if (err.name !== 'AbortError') onError(err)
+          if (err.name !== 'AbortError')
+            onError(err)
         })
       }
       read()
     })
     .catch((err) => {
-      if (err.name !== 'AbortError') onError(err)
+      if (err.name !== 'AbortError')
+        onError(err)
     })
 
   return controller

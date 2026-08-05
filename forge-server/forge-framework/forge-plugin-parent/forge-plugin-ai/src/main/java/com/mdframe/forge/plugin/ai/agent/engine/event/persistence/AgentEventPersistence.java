@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.ai.agent.engine.event.persistence;
 
 import com.mdframe.forge.plugin.ai.agent.engine.event.AgentEvent;
+import com.mdframe.forge.plugin.ai.agent.engine.event.mapper.AgentEventMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
