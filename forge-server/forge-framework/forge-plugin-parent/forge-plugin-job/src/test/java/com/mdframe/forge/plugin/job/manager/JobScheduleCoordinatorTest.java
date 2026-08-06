@@ -83,6 +83,18 @@ class JobScheduleCoordinatorTest {
     }
 
     @Test
+    void shouldRebuildMissingQuartzTriggerAndPersistSyncedState() throws Exception {
+        coordinator.synchronize(1L);
+        quartzScheduler.unscheduleJob(TriggerKey.triggerKey("sampleJob", "DEFAULT"));
+
+        coordinator.rebuild(1L);
+
+        assertEquals("SYNCED", mapperState.entity.getSyncStatus());
+        assertTrue(quartzScheduler.checkExists(JobKey.jobKey("sampleJob", "DEFAULT")));
+        assertTrue(quartzScheduler.checkExists(TriggerKey.triggerKey("sampleJob", "DEFAULT")));
+    }
+
+    @Test
     void shouldPersistFailureAndAllowRetry() throws Exception {
         quartzScheduler.shutdown(true);
 

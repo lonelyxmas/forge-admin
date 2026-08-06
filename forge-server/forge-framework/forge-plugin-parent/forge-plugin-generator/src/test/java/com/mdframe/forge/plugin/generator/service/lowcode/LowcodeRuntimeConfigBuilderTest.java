@@ -144,6 +144,37 @@ class LowcodeRuntimeConfigBuilderTest {
     }
 
     @Test
+    @DisplayName("keeps user and organization labels separate from bigint identifier fields")
+    void selectionLabelsNeverTargetPrimaryIdentifierFields() throws Exception {
+        LowcodeFieldSchema applicant = selectionField("applicantId", "申请人", "userSelect");
+        applicant.setBasicProps(Map.of(
+                "labelValueField", "applicantId",
+                "targetField", "applicantId"
+        ));
+        LowcodeFieldSchema department = selectionField("departmentId", "所属部门", "orgTreeSelect");
+        department.setBasicProps(Map.of(
+                "labelValueField", "departmentId",
+                "targetField", "departmentId"
+        ));
+
+        LowcodeModelSchema schema = new LowcodeModelSchema();
+        schema.setAppType("SINGLE");
+        schema.setTableMode("EXISTING");
+        schema.setTableName("hr_apply");
+        schema.setBusinessName("人事申请");
+        schema.setFields(List.of(applicant, department));
+
+        LowcodeRuntimeConfig runtimeConfig = builder.buildRuntimeConfig("hr_apply", schema, pageSchema());
+        List<Map<String, Object>> editSchema = objectMapper.readValue(runtimeConfig.getEditSchema(), new TypeReference<>() {
+        });
+
+        assertEquals("applicantIdName", ((Map<?, ?>) editSchema.get(0).get("props")).get("labelValueField"));
+        assertEquals("applicantIdName", ((Map<?, ?>) editSchema.get(0).get("props")).get("targetField"));
+        assertEquals("departmentIdName", ((Map<?, ?>) editSchema.get(1).get("props")).get("labelValueField"));
+        assertEquals("departmentIdName", ((Map<?, ?>) editSchema.get(1).get("props")).get("targetField"));
+    }
+
+    @Test
     @DisplayName("does not publish one-to-many child relation as relation name translation")
     void doesNotPublishOneToManyChildRelationAsRelationNameTranslation() throws Exception {
         LowcodeRuntimeConfig runtimeConfig = builder.buildRuntimeConfig(
@@ -176,6 +207,18 @@ class LowcodeRuntimeConfigBuilderTest {
         schema.setBusinessName("库存对象");
         schema.setFields(List.of(itemName));
         return schema;
+    }
+
+    private LowcodeFieldSchema selectionField(String fieldName, String label, String componentType) {
+        LowcodeFieldSchema field = new LowcodeFieldSchema();
+        field.setField(fieldName);
+        field.setColumnName(com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator.camelToSnake(fieldName));
+        field.setLabel(label);
+        field.setDataType("bigint");
+        field.setComponentType(componentType);
+        field.setListVisible(true);
+        field.setFormVisible(true);
+        return field;
     }
 
     private LowcodeModelSchema purchaseOrderModelSchema() {

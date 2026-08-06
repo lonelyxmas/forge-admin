@@ -147,15 +147,7 @@ public class BusinessApplicationObjectService
             JSONObject designerOptions = JSON.parseObject(object.getDesignerOptions());
             JSONObject databaseSync = designerOptions == null ? null : designerOptions.getJSONObject("databaseSync");
             if (databaseSync != null && StringUtils.isNotBlank(databaseSync.getString("status"))) {
-                Integer syncVersion = databaseSync.getInteger("designVersion");
-                if (syncVersion != null && object.getDesignVersion() != null
-                        && !syncVersion.equals(object.getDesignVersion())) {
-                    String lastStatus = databaseSync.getString("status");
-                    object.setSyncStatus("IN_SYNC".equalsIgnoreCase(lastStatus)
-                            ? "UNKNOWN" : lastStatus);
-                } else {
-                    object.setSyncStatus(databaseSync.getString("status"));
-                }
+                object.setSyncStatus(databaseSync.getString("status"));
             }
         } catch (Exception ignored) {
             object.setSyncStatus("UNKNOWN");

@@ -247,7 +247,7 @@
               <n-spin :show="authLoading">
                 <n-data-table
                   :columns="authRoleColumns"
-                  :data="roleTableData"
+                  :data="orderedRoleTableData"
                   :checked-row-keys="checkedRoleKeys"
                   :pagination="rolePaginationConfig"
                   :row-key="row => row.id"
@@ -475,7 +475,7 @@
           <n-spin :show="authLoading">
             <n-data-table
               :columns="authRoleColumns"
-              :data="roleTableData"
+              :data="orderedRoleTableData"
               :checked-row-keys="checkedRoleKeys"
               :pagination="rolePaginationConfig"
               :row-key="row => row.id"
@@ -564,6 +564,7 @@ import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
+import { orderRolesWithCurrentFirst } from './user-role-order'
 
 defineOptions({ name: 'SystemUser' })
 
@@ -613,6 +614,7 @@ const rolePagination = ref({
   pageSize: 10,
   itemCount: 0,
 })
+const orderedRoleTableData = computed(() => orderRolesWithCurrentFirst(roleTableData.value, checkedRoleKeys.value))
 
 // 重置密码相关
 const resetPwdModalVisible = ref(false)
@@ -1979,6 +1981,7 @@ async function loadRoleList(tenantId = resolveOperationTenantId(), orgId = authO
         pageSize: rolePagination.value.pageSize,
         roleName: roleSearchKeyword.value || undefined,
         orgId: normalizeSingleNumber(orgId) || undefined,
+        prioritizedUserId: batchAuthModalVisible.value ? undefined : currentUser.value?.id,
         ...buildTenantParams(tenantId),
       },
     })

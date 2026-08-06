@@ -388,6 +388,15 @@ const tableColumns = computed(() => [
         onClick: handleRetrySynchronization,
         visible: row => canSync.value && shouldRetrySynchronization(row),
       },
+      {
+        label: '重建调度',
+        loadingLabel: '重建中...',
+        failureMessage: '调度重建失败，请检查调度服务状态后再试',
+        key: 'rebuild',
+        type: 'warning',
+        onClick: handleRebuild,
+        visible: row => canSync.value && !isDeletePending(row),
+      },
       { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit, visible: row => canEdit.value && !isDeletePending(row) },
       { label: '立即运行', key: 'trigger', type: 'success', onClick: handleTrigger, visible: row => canTrigger.value && canRunOnce(row) },
       { label: '查看日志', key: 'log', type: 'info', onClick: handleViewLog, visible: () => canViewLogs.value },
@@ -545,6 +554,14 @@ async function handleRetrySynchronization(row) {
     return
   await request.post(`/job/config/${row.id}/sync`)
   window.$message.success('调度同步已恢复')
+  handleRefresh()
+}
+
+async function handleRebuild(row) {
+  if (!canSync.value || isDeletePending(row))
+    return
+  await request.post(`/job/config/${row.id}/rebuild`)
+  window.$message.success('Quartz 调度已重建')
   handleRefresh()
 }
 

@@ -9073,7 +9073,11 @@ function applySelectedTableGlobalAlign(value) {
     return
   const align = ['left', 'center', 'right'].includes(value) ? value : 'left'
   const nextSettings = { ...(selectedBlock.value.props?.fieldSettings || {}) }
-  ;(selectedFieldRefs.value || []).forEach((fieldName) => {
+  const tableRefs = resolveSelectedFieldRefs(selectedBlock.value, 'table')
+  const fieldRefs = tableRefs.length
+    ? tableRefs
+    : props.fields.filter(field => isPageFieldVisible(field, 'table')).map(field => field.field)
+  fieldRefs.forEach((fieldName) => {
     nextSettings[fieldName] = {
       ...(nextSettings[fieldName] || {}),
       align,

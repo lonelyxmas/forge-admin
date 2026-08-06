@@ -185,6 +185,41 @@ class JobSchedulerTest {
     }
 
     @Test
+    void shouldRebuildQuartzStateWhenJobExistsWithoutTrigger() throws Exception {
+        JobConfig config = jobConfig("0 0/5 * * * ?", 1);
+        jobScheduler.addJob(config);
+        quartzScheduler.unscheduleJob(TriggerKey.triggerKey(config.getJobName(), config.getJobGroup()));
+
+        assertTrue(quartzScheduler.checkExists(JobKey.jobKey(config.getJobName(), config.getJobGroup())));
+        assertFalse(quartzScheduler.checkExists(TriggerKey.triggerKey(config.getJobName(), config.getJobGroup())));
+
+        config.setCronExpression("0 0/15 * * * ?");
+        config.setStatus(0);
+        jobScheduler.rebuild(config);
+
+        assertTrue(quartzScheduler.checkExists(JobKey.jobKey(config.getJobName(), config.getJobGroup())));
+        CronTrigger trigger = (CronTrigger) quartzScheduler.getTrigger(
+                TriggerKey.triggerKey(config.getJobName(), config.getJobGroup()));
+        assertEquals("0 0/15 * * * ?", trigger.getCronExpression());
+        assertEquals(Trigger.TriggerState.PAUSED, quartzScheduler.getTriggerState(trigger.getKey()));
+    }
+
+    @Test
+    void shouldNotCompensatePastOnceJobDuringRebuildWhenMisfireIsDoNothing() throws Exception {
+        JobConfig config = jobConfig(null, 1);
+        config.setScheduleType("ONCE");
+        config.setTimezone("Asia/Shanghai");
+        config.setFireOnceTime(LocalDateTime.of(2020, 1, 1, 10, 0));
+        config.setMisfirePolicy("DO_NOTHING");
+
+        JobScheduler.SynchronizeResult result = jobScheduler.rebuild(config);
+
+        assertEquals(JobScheduler.SynchronizeResult.ONCE_MISSED, result);
+        assertFalse(quartzScheduler.checkExists(JobKey.jobKey("sampleJob", "DEFAULT")));
+        assertFalse(quartzScheduler.checkExists(TriggerKey.triggerKey("sampleJob", "DEFAULT")));
+    }
+
+    @Test
     void shouldCompletePastOnceWithoutCreatingTriggerWhenMisfireIsDoNothing() throws Exception {
         JobConfig config = jobConfig(null, 1);
         config.setScheduleType("ONCE");

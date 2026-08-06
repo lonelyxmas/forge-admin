@@ -427,3 +427,18 @@
 - **实施顺序**：先补页面查询设置和后端参数解析/白名单红灯用例；再实现最小协议修复；最后执行目标 Vitest/ESLint、生成器 `test-compile`、定向 JUnit、生产构建和差异检查。
 - **验收标准**：表单字段即使不在对象原始查询 Schema 中，页面选为查询条件后也能生成 WHERE；“包含/等于/区间/多值”和映射字段按页面配置生效；控制参数不进入 SQL 字段；传统对象查询页面保持兼容；不启动数据库、后端、Vite 或浏览器。
 - **结果**：页面运行 Schema 已合并 `searchFieldRefs` 与 `searchFieldSettings`，查询方式、查询组件及映射字段会进入当前 `AiCrudPage`；列表和导出通过独立 `_searchTypes` 控制参数传输查询方式。后端将控制参数与业务字段隔离，只允许动态配置已公开的查询/列表/编辑字段及固定操作符，传统对象查询配置继续作为默认协议。Node `v20.19.0` 下目标 ESLint 0 error/0 warning、3 个 Vitest 文件 19 tests、8792 模块生产构建通过；JDK 17 下生成器 reactor 29 模块测试编译和 2 类 6 个 JUnit 通过；`git diff --check` 无输出。未启动数据库、后端、Vite 或浏览器，真实 Network 与数据库筛选结果留人工验收。
+
+## Task 29: 收口应用创建后的字段、预览、对象状态、值协议与菜单行为
+
+> status: completed
+
+- **目标**：修复新建应用实测中的五类断点，让字段占位、草稿 CRUD、数据库同步摘要、人员/组织保存值和系统菜单生成遵循一致协议。
+- **涉及文件**：
+  - `ForgePropertyPanel.vue` 与占位纯函数/Vitest — 字段名称变化自动同步选择类、输入类占位，保护用户手工值，并覆盖字段资产面板保存入口。
+  - `runtime-crud-props.js`、`GridBlockRenderer.vue`、`AiCrudConfigService.java`、`DynamicCrudService.java` 及定向测试 — 补齐区块基础 API 的设计预览参数，并允许业务应用编辑权限访问草稿 CRUD。
+  - `BusinessApplicationObjectService.java` 及 JUnit — 保留最后一次真实结构检查状态，不因非结构设计版本变化长期显示“待检查”。
+  - `AiFormItem.vue`、`LowcodeRuntimeConfigBuilder.java`、`DynamicCrudService.java` 及前后端测试 — 人员和组织主值只保存 ID，展示名写入独立字段，错误同字段映射自动纠正并拒绝非数字 `bigint` 选择值。
+  - `BusinessApplicationPageMenuPublishService.java`、应用内页面 Schema、业务对象/低代码发布菜单开关及测试 — 默认同步空菜单列表，应用协调发布不创建 AI 能力菜单或通用业务域目录，显式菜单行为和旧低代码发布兼容。
+- **实施顺序**：先补本轮 Spec 与失败测试，再实施前后端最小修复；使用 Node `v20.19.0` 和 JDK 17 执行定向测试、测试编译、聚合构建与差异检查。
+- **验收标准**：字段改名后自动占位正确且手工值不变；应用编辑者可直接使用草稿 CRUD；真实 `IN_SYNC` 摘要不再被版本漂移降级；人员/组织主字段保存 ID、名称字段保存文本且非法姓名写入被拒绝；默认发布不创建任何系统菜单或业务域目录，显式开启时仍可同步；不启动真实服务或数据库，不执行 DDL/Flyway。
+- **结果**：字段名称变化会按输入/选择语义同步默认占位并保护手工占位；应用编辑权限可访问带 `designPreview=1` 的草稿 CRUD，正式运行发布门禁不变；对象列表保留最近一次真实数据库检查状态；人员和组织主字段只保存数字 ID，展示名与主字段同名的错误配置会改写到独立名称字段，后端拒绝姓名/组织名写入 `bigint`；新页面默认不生成系统菜单，应用协调发布与回滚关闭旧低代码菜单同步，不创建 AI 能力下的应用菜单或通用业务域菜单目录，显式开启页面菜单和旧低代码直接发布仍兼容。Node `v20.19.0` 下 ESLint、5 个 Vitest 文件 33 tests、8864 模块生产构建通过；JDK 17 下生成器 105 个测试源编译、两组 16 + 10 个定向 JUnit、Admin 47 模块聚合打包通过；`git diff --check` 无输出。未启动服务、数据库或浏览器，未执行 Flyway、DDL、真实发布或菜单写入。

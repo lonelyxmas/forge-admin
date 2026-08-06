@@ -32,6 +32,14 @@ public class BusinessApplicationPageMenuPublishService {
         if (nodes.isEmpty()) {
             return menuRegisterAdapter.syncApplicationPageMenus(applicationCode, List.of());
         }
+        List<Map<String, Object>> visibleNodes = nodes.stream().filter(this::systemMenuVisible).toList();
+        if (visibleNodes.isEmpty()) {
+            return menuRegisterAdapter.syncApplicationPageMenus(applicationCode, List.of());
+        }
+        java.util.Set<String> visibleNodeIds = visibleNodes.stream()
+                .map(node -> StringUtils.trimToNull(string(node.get("id"))))
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
         String rootPerms = permission(applicationCode, "root");
         List<BusinessApplicationPageMenuDTO> menus = new ArrayList<>();
         BusinessApplicationPageMenuDTO root = menu(ROOT_NODE_ID, null,
@@ -39,16 +47,15 @@ public class BusinessApplicationPageMenuPublishService {
                 "/app-center/application/" + applicationCode + "/runtime", null, rootPerms,
                 string(application.get("icon")), 0, true, true, true, List.of());
         menus.add(root);
-        for (Map<String, Object> node : nodes) {
-            if (!systemMenuVisible(node)) {
-                continue;
-            }
+        for (Map<String, Object> node : visibleNodes) {
             String nodeId = StringUtils.trimToNull(string(node.get("id")));
             if (nodeId == null) {
                 continue;
             }
             boolean directory = "group".equalsIgnoreCase(string(node.get("type")));
-            String parentNodeId = StringUtils.defaultIfBlank(StringUtils.trimToNull(string(node.get("parentId"))), ROOT_NODE_ID);
+            String requestedParentId = StringUtils.trimToNull(string(node.get("parentId")));
+            String parentNodeId = requestedParentId != null && visibleNodeIds.contains(requestedParentId)
+                    ? requestedParentId : ROOT_NODE_ID;
             String title = StringUtils.defaultIfBlank(string(node.get("title")), directory ? "页面组" : "未命名页面");
             Map<String, Object> access = map(firstNonNull(node.get("access"), map(node.get("settings")).get("access")));
             boolean inherit = !"roles".equalsIgnoreCase(string(access.get("mode")));
@@ -108,7 +115,7 @@ public class BusinessApplicationPageMenuPublishService {
 
     private boolean systemMenuVisible(Map<String, Object> node) {
         Object value = firstNonNull(node.get("systemMenuVisible"), map(node.get("settings")).get("systemMenuVisible"));
-        return !(value instanceof Boolean flag) || flag;
+        return Boolean.TRUE.equals(value);
     }
 
     private String permission(String applicationCode, String nodeId) {

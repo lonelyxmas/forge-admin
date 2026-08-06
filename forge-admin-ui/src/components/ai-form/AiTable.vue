@@ -6,7 +6,11 @@
 -->
 
 <template>
-  <div class="ai-table-wrapper" :class="`ai-table-density-${currentSize}`">
+  <div
+    class="ai-table-wrapper"
+    :class="`ai-table-density-${currentSize}`"
+    :style="{ '--ai-table-row-gap': `${normalizedTableRowGap}px` }"
+  >
     <!-- 工具栏 -->
     <div v-if="showToolbar" class="ai-table-toolbar">
       <div class="ai-table-toolbar-left">
@@ -232,6 +236,11 @@ const props = defineProps({
   size: {
     type: String,
     default: 'medium', // 'small' | 'medium' | 'large'
+  },
+  // 低代码列表配置的附加行高，0-32px。
+  tableRowGap: {
+    type: Number,
+    default: 0,
   },
   // 渲染模式
   renderMode: {
@@ -507,6 +516,10 @@ const rowKeyFn = computed(() => {
     return props.rowKey
   }
   return row => row[props.rowKey]
+})
+const normalizedTableRowGap = computed(() => {
+  const value = Number(props.tableRowGap)
+  return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 0
 })
 
 /**
@@ -1417,7 +1430,7 @@ defineExpose({
 }
 
 .ai-table-density-small :deep(.n-data-table-td) {
-  height: 38px;
+  height: calc(38px + var(--ai-table-row-gap, 0px));
   padding: 6px 10px;
 }
 
@@ -1427,7 +1440,7 @@ defineExpose({
 }
 
 .ai-table-density-medium :deep(.n-data-table-td) {
-  height: 44px;
+  height: calc(44px + var(--ai-table-row-gap, 0px));
   padding: 8px 12px;
 }
 
@@ -1437,7 +1450,7 @@ defineExpose({
 }
 
 .ai-table-density-large :deep(.n-data-table-td) {
-  height: 54px;
+  height: calc(54px + var(--ai-table-row-gap, 0px));
   padding: 12px 16px;
 }
 

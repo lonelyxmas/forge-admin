@@ -20,6 +20,9 @@ public class LowcodePublishDTO {
 
     private Integer menuSort;
 
+    /** 是否同步旧低代码系统菜单；未传保持历史默认行为。 */
+    private Boolean syncMenu;
+
     private Long domainId;
 
     private String domainCode;

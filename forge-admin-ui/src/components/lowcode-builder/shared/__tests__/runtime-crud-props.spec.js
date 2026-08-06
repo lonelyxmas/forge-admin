@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendDesignPreviewToApiValue,
+  applyTableColumnLayout,
   buildCrudSearchTypeRequestParams,
   buildRuntimeCrudProps,
   isDesignPreviewCrudProps,
   resolveCrudPreviewReloadKey,
   resolveCrudSearchFieldCatalog,
+  resolveRuntimeBlockApi,
 } from '../runtime-crud-props'
 
 describe('runtime CRUD design preview props', () => {
@@ -41,6 +43,19 @@ describe('runtime CRUD design preview props', () => {
     expect(published.apiConfig.list).toBe('get@/ai/crud/crm_customer/page')
     expect(appendDesignPreviewToApiValue('get@/ai/crud/crm_customer/page?designPreview=1'))
       .toBe('get@/ai/crud/crm_customer/page?designPreview=1')
+  })
+
+  it('adds the design preview marker to a block-level base API', () => {
+    expect(resolveRuntimeBlockApi(
+      'post@/ai/crud/当前配置',
+      'crm_customer',
+      true,
+    )).toBe('post@/ai/crud/crm_customer?designPreview=1')
+    expect(resolveRuntimeBlockApi(
+      'post@/ai/crud/当前配置?designPreview=1',
+      'crm_customer',
+      true,
+    )).toBe('post@/ai/crud/crm_customer?designPreview=1')
   })
 
   it('treats both compiled draft config and designer fallback as design preview', () => {
@@ -181,5 +196,25 @@ describe('runtime CRUD design preview props', () => {
     expect(resolveCrudPreviewReloadKey({
       props: { ...source.props, previewLiveData: false },
     })).not.toBe(sourceKey)
+  })
+
+  it('keeps table row spacing and applies block alignment over compiled columns', () => {
+    const props = buildRuntimeCrudProps({
+      options: { tableRowGap: 18 },
+      columnsSchema: [
+        { prop: 'name', label: '名称', align: 'left', titleAlign: 'left' },
+        { prop: 'status', label: '状态' },
+      ],
+    })
+    const columns = applyTableColumnLayout(props.columns, {
+      globalAlign: 'center',
+      fieldSettings: { status: { align: 'right' } },
+    })
+
+    expect(props.tableRowGap).toBe(18)
+    expect(columns).toEqual([
+      expect.objectContaining({ prop: 'name', align: 'center', titleAlign: 'center' }),
+      expect.objectContaining({ prop: 'status', align: 'right', titleAlign: 'right' }),
+    ])
   })
 })

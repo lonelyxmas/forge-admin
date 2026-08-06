@@ -37,6 +37,7 @@ export function buildRuntimeCrudProps(config = {}, { designPreview = false } = {
     formAssets: options.formAssets || config.formAssets || [],
     editXGap: numberOption(options.editXGap ?? config.editXGap, 12),
     editYGap: numberOption(options.editYGap ?? config.editYGap, 8),
+    tableRowGap: normalizeTableRowGap(options.tableRowGap ?? config.tableRowGap, 8),
     loadDetailOnEdit: options.loadDetailOnEdit ?? config.loadDetailOnEdit ?? true,
     searchGridCols: options.searchGridCols || config.searchGridCols || 4,
     showSearch: options.showSearch ?? config.showSearch ?? true,
@@ -83,6 +84,32 @@ export function resolveCurrentConfigPlaceholder(value, configKey) {
   if (!configKey)
     return ''
   return text.replaceAll('/ai/crud/当前配置', `/ai/crud/${configKey}`)
+}
+
+export function resolveRuntimeBlockApi(value, configKey, designPreview = false) {
+  const resolved = resolveCurrentConfigPlaceholder(value, configKey)
+  return designPreview ? appendDesignPreviewToApiValue(resolved) : resolved
+}
+
+/** 将页面区块的列布局覆盖到已编译的运行列上。 */
+export function applyTableColumnLayout(columns = [], blockProps = {}) {
+  const globalAlign = normalizeAlign(blockProps.globalAlign)
+  const settings = blockProps.fieldSettings && typeof blockProps.fieldSettings === 'object'
+    ? blockProps.fieldSettings
+    : {}
+  return (Array.isArray(columns) ? columns : []).map((column) => {
+    const key = column?.prop || column?.key || column?.dataIndex || ''
+    const fieldAlign = normalizeAlign(settings[key]?.align)
+    const align = fieldAlign || globalAlign
+    return align
+      ? { ...column, align, titleAlign: align }
+      : { ...column }
+  })
+}
+
+export function normalizeTableRowGap(value, fallback = 8) {
+  const number = Number(value)
+  return Number.isFinite(number) ? Math.max(0, Math.min(32, number)) : fallback
 }
 
 /**
@@ -239,4 +266,9 @@ function resolveModalType(formOpenMode, options = {}, config = {}) {
 function numberOption(value, fallback) {
   const number = Number(value)
   return Number.isFinite(number) && number >= 0 ? number : fallback
+}
+
+function normalizeAlign(value) {
+  const align = String(value || '').trim().toLowerCase()
+  return ['left', 'center', 'right'].includes(align) ? align : ''
 }

@@ -82,14 +82,20 @@ public class LowcodePublishService {
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig);
         applyDomainToConfig(config, domainContext);
         applyMenuConfig(config, dto);
-        applyPublishMenuParent(config, dto, domainContext.domain());
+        if (shouldSyncMenu(dto)) {
+            applyPublishMenuParent(config, dto, domainContext.domain());
+        }
         int versionNo = nextVersionNo(config);
         config.setPublishStatus("PUBLISHED");
         config.setPublishedVersion(versionNo);
         config.setPublishTime(LocalDateTime.now());
         config.setPublishBy(SessionHelper.getUserId());
 
-        registerOrUpdateMenu(config);
+        if (shouldSyncMenu(dto)) {
+            registerOrUpdateMenu(config);
+        } else {
+            disablePublishedMenu(config);
+        }
         configService.updateById(config);
         syncBusinessRuntimeEntry(config, dto, domainContext);
         AiCrudConfigVersion version = createVersion(config, versionNo, "publish",
@@ -99,6 +105,11 @@ public class LowcodePublishService {
 
     @Transactional(rollbackFor = Exception.class)
     public void rollback(Long id, Long versionId) {
+        rollback(id, versionId, true);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void rollback(Long id, Long versionId, boolean syncMenu) {
         AiCrudConfig config = appService.requireConfig(id);
         AiCrudConfigVersion targetVersion = versionMapper.selectVersionById(
                 resolveTenantId(config), config.getId(), versionId);
@@ -122,7 +133,11 @@ public class LowcodePublishService {
         config.setPublishedVersion(versionNo);
         config.setPublishTime(LocalDateTime.now());
         config.setPublishBy(SessionHelper.getUserId());
-        registerOrUpdateMenu(config);
+        if (syncMenu) {
+            registerOrUpdateMenu(config);
+        } else {
+            disablePublishedMenu(config);
+        }
         configService.updateById(config);
         syncBusinessRuntimeEntry(config, null, domainContext);
         createVersion(config, versionNo, "rollback", "回滚到版本 " + targetVersion.getVersionNo());
@@ -248,6 +263,16 @@ public class LowcodePublishService {
         config.setMenuName(menuName);
         config.setMenuParentId(parentId);
         config.setMenuSort(sort);
+    }
+
+    private boolean shouldSyncMenu(LowcodePublishDTO dto) {
+        return dto == null || !Boolean.FALSE.equals(dto.getSyncMenu());
+    }
+
+    private void disablePublishedMenu(AiCrudConfig config) {
+        if (config != null && config.getMenuResourceId() != null) {
+            menuRegisterAdapter.disableMenu(config.getMenuResourceId());
+        }
     }
 
     private void syncBusinessRuntimeEntry(AiCrudConfig config, LowcodePublishDTO dto, PublishDomainContext context) {

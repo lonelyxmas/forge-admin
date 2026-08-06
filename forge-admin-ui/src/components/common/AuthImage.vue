@@ -1,5 +1,15 @@
 <template>
-  <div ref="hostRef" class="auth-image-host">
+  <div
+    ref="hostRef"
+    class="auth-image-host"
+    :class="{ 'is-previewable': preview && imageSrc }"
+    :role="preview && imageSrc ? 'button' : undefined"
+    :tabindex="preview && imageSrc ? 0 : undefined"
+    :aria-label="preview && imageSrc ? `预览图片${alt ? `：${alt}` : ''}` : undefined"
+    @click="handlePreviewClick"
+    @keydown.enter.prevent="handlePreviewClick"
+    @keydown.space.prevent="handlePreviewClick"
+  >
     <img
       v-if="imageSrc"
       :src="imageSrc"
@@ -11,6 +21,21 @@
       @error="handleError"
       @load="handleLoad"
     >
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      title="图片预览"
+      class="auth-image-preview-modal"
+      :style="{ width: 'min(900px, 92vw)' }"
+      :mask-closable="true"
+    >
+      <img
+        v-if="imageSrc"
+        :src="imageSrc"
+        :alt="alt"
+        class="auth-image-preview"
+      >
+    </NModal>
   </div>
 </template>
 
@@ -23,6 +48,7 @@
  * <AuthImage :src="fileId" fallback="/default.png" />
  * <AuthImage :src="fileId" :width="100" :height="100" />
  */
+import { NModal } from 'naive-ui'
 import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { removeCachedFileAccessUrl, resolveRenderableFileUrl } from '@/utils'
 
@@ -57,6 +83,11 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  // 是否允许点击打开大图预览
+  preview: {
+    type: Boolean,
+    default: false,
+  },
   // 访问地址缓存有效期（秒）
   expires: {
     type: Number,
@@ -69,6 +100,7 @@ const emit = defineEmits(['load', 'error'])
 const imageSrc = ref('')
 const hostRef = ref(null)
 const retried = ref(false)
+const previewVisible = ref(false)
 let observer = null
 let currentBlobUrl = ''
 
@@ -156,10 +188,17 @@ function handleLoad() {
   emit('load')
 }
 
+function handlePreviewClick() {
+  if (!props.preview || !imageSrc.value)
+    return
+  previewVisible.value = true
+}
+
 // 监听 src 变化
 watch(() => props.src, () => {
   imageSrc.value = ''
   retried.value = false
+  previewVisible.value = false
   nextTick(() => observeLazyLoad())
 }, { immediate: true })
 
@@ -172,3 +211,17 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.auth-image-host.is-previewable {
+  cursor: zoom-in;
+}
+
+.auth-image-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  object-fit: contain;
+}
+</style>

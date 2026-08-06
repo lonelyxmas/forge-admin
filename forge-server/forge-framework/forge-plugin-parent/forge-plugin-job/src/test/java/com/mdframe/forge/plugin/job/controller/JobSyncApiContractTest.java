@@ -1,6 +1,9 @@
 package com.mdframe.forge.plugin.job.controller;
 
+import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.mdframe.forge.plugin.job.constant.JobPermissions;
 import com.mdframe.forge.plugin.job.service.ISysJobConfigService;
+import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.PostMapping;
 
@@ -11,6 +14,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JobSyncApiContractTest {
@@ -22,6 +26,18 @@ class JobSyncApiContractTest {
 
         assertTrue(Arrays.asList(mapping.value()).contains("/{id}/sync"));
         ISysJobConfigService.class.getDeclaredMethod("retrySynchronization", Long.class);
+        Method rebuildMethod = JobConfigController.class.getDeclaredMethod("rebuild", Long.class);
+        PostMapping rebuildMapping = rebuildMethod.getAnnotation(PostMapping.class);
+        assertTrue(Arrays.asList(rebuildMapping.value()).contains("/{id}/rebuild"));
+        ISysJobConfigService.class.getDeclaredMethod("rebuild", Long.class);
+
+        SaCheckPermission rebuildPermission = rebuildMethod.getAnnotation(SaCheckPermission.class);
+        assertNotNull(rebuildPermission);
+        assertTrue(Arrays.asList(rebuildPermission.value()).contains(JobPermissions.CONFIG_SYNC));
+        OperationLog rebuildAudit = rebuildMethod.getAnnotation(OperationLog.class);
+        assertNotNull(rebuildAudit);
+        assertFalse(rebuildAudit.saveRequestParams());
+        assertFalse(rebuildAudit.saveResponseResult());
     }
 
     @Test
@@ -36,7 +52,9 @@ class JobSyncApiContractTest {
         assertTrue(page.contains("sys_job_sync_status"));
         assertTrue(page.contains("调度同步"));
         assertTrue(page.contains("重新同步"));
+        assertTrue(page.contains("重建调度"));
         assertTrue(page.contains("/job/config/${row.id}/sync"));
+        assertTrue(page.contains("/job/config/${row.id}/rebuild"));
         assertTrue(page.contains("/system/job-config/editor/${row.id}"));
         assertTrue(basicSection.contains(":disabled=\"editing\""));
         assertTrue(workbench.contains("配置已保存，调度同步失败"));

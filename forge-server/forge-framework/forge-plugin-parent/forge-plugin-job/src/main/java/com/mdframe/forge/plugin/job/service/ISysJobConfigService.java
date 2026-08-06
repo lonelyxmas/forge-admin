@@ -56,6 +56,11 @@ public interface ISysJobConfigService extends IService<SysJobConfig> {
      * 重新同步数据库期望状态到Quartz
      */
     void retrySynchronization(Long id);
+
+    /**
+     * 删除并重建数据库配置对应的 Quartz Job/Trigger。
+     */
+    void rebuild(Long id);
     
     /**
      * 更新Cron表达式

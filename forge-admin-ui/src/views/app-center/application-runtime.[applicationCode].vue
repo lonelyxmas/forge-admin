@@ -427,6 +427,7 @@
                         :block="resolvePagePreviewBlock(block)"
                         :fields="resolvePageBlockFields(block)"
                         :runtime-crud-props="resolvePageBlockRuntimeCrudProps(block)"
+                        :runtime-crud-loading="isPageBlockRuntimeCrudLoading(block)"
                         :selected="false"
                         :inline-text-editing="editing"
                         readonly
@@ -452,6 +453,7 @@
                     :block="resolvePagePreviewBlock(dragPreviewBlock)"
                     :fields="resolvePageBlockFields(dragPreviewBlock)"
                     :runtime-crud-props="resolvePageBlockRuntimeCrudProps(dragPreviewBlock)"
+                    :runtime-crud-loading="isPageBlockRuntimeCrudLoading(dragPreviewBlock)"
                     :selected="false"
                     readonly
                   />
@@ -782,7 +784,7 @@
 <script setup>
 import { AddOutline, AppsOutline, ArrowBackOutline, ArrowDownOutline, ArrowRedoOutline, ArrowUndoOutline, ArrowUpOutline, BarChartOutline, ColorFillOutline, CopyOutline, CreateOutline, CubeOutline, DocumentTextOutline, DuplicateOutline, EllipsisHorizontalOutline, ExpandOutline, EyeOutline, FolderOpenOutline, FunnelOutline, GitBranchOutline, InformationCircleOutline, ListOutline, MoveOutline, ReaderOutline, RemoveOutline, ResizeOutline, RocketOutline, SaveOutline, SettingsOutline, SquareOutline, StatsChartOutline, SwapHorizontalOutline, TextOutline, TrashOutline } from '@vicons/ionicons5'
 import { NIcon, useMessage } from 'naive-ui'
-import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { crudConfigRender } from '@/api/ai'
@@ -801,6 +803,7 @@ import DesignerAsyncLoader from '@/views/app-center/components/designer/Designer
 import ForgeFormDesigner from '@/views/app-center/components/designer/forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets, createFieldFromComponent } from '@/views/app-center/components/designer/form-first/autoFieldRegistry'
 import { createDefaultFormDesignerSchema, isFieldComponent, normalizeFormDesignerSchema } from '@/views/app-center/components/designer/form-first/formDesignerSchema'
+import { createApplicationRuntimeLoadCoordinator, resolveApplicationRuntimeLoadKey } from './application-runtime-load'
 import {
   createInAppFormAsset,
   createNavigationNode,
@@ -913,8 +916,8 @@ const inspectorTab = ref('properties')
 const componentButtonPosition = ref({ x: null, y: null })
 const componentButtonMoveCtx = ref(null)
 const runtimeCrudPropsByObjectId = ref({})
-const runtimeCrudLoadingObjectIds = new Set()
-const runtimeCrudUnavailableObjectIds = new Set()
+const runtimeCrudLoadingObjectIds = reactive(new Set())
+const runtimeCrudUnavailableObjectIds = reactive(new Set())
 const formDesignerMode = ref(false)
 const activeFormAssetId = ref('')
 const sidebarCollapsed = ref(false)
@@ -928,6 +931,7 @@ const formAssetSelectorKeyword = ref('')
 const formDataProvisioningByAssetId = ref({})
 const objectSetupVisible = ref(false)
 const publishDrawerVisible = ref(false)
+const applicationRuntimeLoadCoordinator = createApplicationRuntimeLoadCoordinator(load)
 
 const componentPickerGroupOptions = [
   { key: 'list', label: '列表' },
@@ -1124,7 +1128,7 @@ watch([
   () => route.query.draft,
 ], ([, edit]) => {
   editing.value = edit === '1'
-  load()
+  applicationRuntimeLoadCoordinator.run(resolveApplicationRuntimeLoadKey(route))
 }, { immediate: true })
 watch(() => route.query.pageId, (pageId) => {
   if (!builder.value)
@@ -1895,6 +1899,18 @@ function resolvePageBlockRuntimeCrudProps(block = {}) {
   if (!runtimeCrudPropsByObjectId.value[cacheKey])
     preloadPageBlockCrudRuntimeProps(block)
   return runtimeCrudPropsByObjectId.value[cacheKey] || null
+}
+
+function isPageBlockRuntimeCrudLoading(block = {}) {
+  if (block.blockType !== 'AiCrudPage')
+    return false
+  const objectRef = resolvePageBlockObjectRef(block)
+  const cacheKey = resolveRuntimeObjectCacheKey(objectRef)
+  if (!cacheKey)
+    return false
+  if (!runtimeCrudPropsByObjectId.value[cacheKey] && !runtimeCrudUnavailableObjectIds.has(cacheKey))
+    preloadPageBlockCrudRuntimeProps(block)
+  return runtimeCrudLoadingObjectIds.has(cacheKey)
 }
 
 function preloadCurrentPageCrudRuntimeProps() {

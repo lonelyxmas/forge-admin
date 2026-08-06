@@ -215,6 +215,20 @@ public class JobConfigController {
         recordAfterSnapshot(beforeData, id);
         return RespInfo.success();
     }
+
+    /**
+     * 删除并重建任务在 Quartz 中的 Job/Trigger。
+     */
+    @PostMapping("/{id}/rebuild")
+    @SaCheckPermission(JobPermissions.CONFIG_SYNC)
+    @OperationLog(module = "定时任务", type = OperationType.UPDATE, desc = "重建定时任务调度",
+            saveRequestParams = false, saveResponseResult = false)
+    public RespInfo<Void> rebuild(@PathVariable Long id) {
+        Map<String, Object> beforeData = recordBeforeSnapshot(id);
+        jobConfigService.rebuild(id);
+        recordAfterSnapshot(beforeData, id);
+        return RespInfo.success();
+    }
     
     /**
      * 更新Cron表达式

@@ -752,6 +752,7 @@ import AiFormSectionTitle from './AiFormSectionTitle.vue'
 import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import { isInputLikeFieldType, isNumberFieldType } from './field-type-utils'
 import { applyRecordFieldMappings, extractSelectorRawRecord, normalizeRecordSelectorConfig } from './record-selector-utils'
+import { resolveSelectionLabelFields as buildSelectionLabelFields } from './selection-label-fields'
 
 const props = defineProps({
   field: {
@@ -1784,46 +1785,8 @@ function resolveSelectionLabelValue(field = {}) {
 }
 
 function resolveSelectionLabelFields(field = {}) {
-  const fieldName = String(field.field || '')
-  const candidates = [
-    field.props?.referenceDisplayField,
-    field.referenceDisplayField,
-    field.props?.displayField,
-    field.displayField,
-    field.props?.labelField,
-    field.labelField,
-    field.props?.targetLabelField,
-    field.targetLabelField,
-    field.props?.labelValueField,
-    field.labelValueField,
-    field.props?.targetField,
-    field.targetField,
-  ]
-  if (fieldName) {
-    candidates.push(`${fieldName}Name`)
-    if (fieldName.endsWith('UserId')) {
-      candidates.push(fieldName.replace(/UserId$/, 'UserName'))
-      candidates.push(fieldName.replace(/UserId$/, 'Name'))
-    }
-    if (fieldName.endsWith('DeptId')) {
-      candidates.push(fieldName.replace(/DeptId$/, 'DeptName'))
-      candidates.push(fieldName.replace(/DeptId$/, 'Name'))
-    }
-    if (fieldName.endsWith('OrgId')) {
-      candidates.push(fieldName.replace(/OrgId$/, 'OrgName'))
-      candidates.push(fieldName.replace(/OrgId$/, 'Name'))
-    }
-    if (fieldName.endsWith('Id'))
-      candidates.push(fieldName.replace(/Id$/, 'Name'))
-    candidates.push(`${fieldName}Label`, `${fieldName}Text`)
-  }
-  if (isUserSelectField(field))
-    candidates.push('userName', 'realName', 'nickname')
-  if (isOrgTreeSelectField(field))
-    candidates.push('orgName', 'deptName', 'departmentName')
-  return candidates
-    .map(value => String(value || '').trim())
-    .filter((value, index, all) => value && all.indexOf(value) === index)
+  const selectionType = isUserSelectField(field) ? 'user' : isOrgTreeSelectField(field) ? 'org' : ''
+  return buildSelectionLabelFields(field, selectionType)
 }
 
 function patchSelectionLabelValue(field = {}, labelValue) {

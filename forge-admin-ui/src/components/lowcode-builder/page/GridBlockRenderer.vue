@@ -297,8 +297,11 @@
     <!-- 系统 AiCrudPage 组件 -->
     <template v-else-if="block.blockType === 'AiCrudPage'">
       <div class="system-component-preview ai-crud-preview">
+        <div v-if="runtimeCrudLoading" class="runtime-crud-loading">
+          <n-spin size="small" />
+        </div>
         <AiCrudPage
-          v-if="effectiveRuntimeCrudProps"
+          v-else-if="effectiveRuntimeCrudProps"
           ref="runtimeCrudRef"
           v-bind="effectiveRuntimeCrudProps"
           @load-list-success="handleCrudPreviewSuccess"
@@ -351,6 +354,7 @@
           :show-render-mode-switch="block.props?.showRenderModeSwitch !== false"
           :enable-tree-add-child="block.props?.enableTreeAddChild === true"
           :table-size="block.props?.tableSize || 'medium'"
+          :table-row-gap="normalizeTableRowGap(block.props?.rowGap, 8)"
           :bordered="!!block.props?.bordered"
           :striped="!!block.props?.striped"
           :hide-selection="block.props?.hideSelection === true"
@@ -389,6 +393,7 @@
           :show-fullscreen="block.props?.showFullscreen === true"
           :show-render-mode-switch="block.props?.showRenderModeSwitch !== false"
           :size="block.props?.size || 'small'"
+          :table-row-gap="normalizeTableRowGap(block.props?.rowGap, 8)"
           :render-mode="block.props?.renderMode || 'table'"
           :row-key="block.props?.rowKey || 'id'"
           :bordered="block.props?.bordered !== false"
@@ -1070,7 +1075,7 @@ import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRe
 import InlineRichText from '@/components/lowcode-builder/shared/InlineRichText.vue'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
-import { appendDesignPreviewToApiValue, buildCrudSearchTypeRequestParams, isDesignPreviewCrudProps, resolveCrudPreviewReloadKey, resolveCrudSearchFieldCatalog, resolveCurrentConfigPlaceholder } from '@/components/lowcode-builder/shared/runtime-crud-props'
+import { appendDesignPreviewToApiValue, applyTableColumnLayout, buildCrudSearchTypeRequestParams, isDesignPreviewCrudProps, normalizeTableRowGap, resolveCrudPreviewReloadKey, resolveCrudSearchFieldCatalog, resolveCurrentConfigPlaceholder, resolveRuntimeBlockApi } from '@/components/lowcode-builder/shared/runtime-crud-props'
 import { matchSimpleExpression, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
@@ -1100,6 +1105,10 @@ const props = defineProps({
   runtimeCrudProps: {
     type: Object,
     default: null,
+  },
+  runtimeCrudLoading: {
+    type: Boolean,
+    default: false,
   },
   runtimeRecord: {
     type: Object,
@@ -1433,7 +1442,7 @@ const tableColumns = computed(() => [
     ellipsis: { tooltip: true },
     render: row => renderTableCell(field, row),
   })),
-  { key: '__actions', title: '操作', width: 96, fixed: 'right' },
+  { key: '__actions', title: '操作', width: 96, fixed: 'right', align: fieldAlign('__actions') },
 ])
 const aiActionColumn = computed(() => {
   const rowActions = (props.block.props?.customActions || []).filter(action => (action.position || 'row') === 'row' && action.visible !== false)
@@ -1444,6 +1453,7 @@ const aiActionColumn = computed(() => {
     title: '操作',
     width: Math.max(96, rowActions.length * 58),
     fixed: 'right',
+    align: fieldAlign('actions'),
     actions: rowActions.map(action => ({
       key: action.key,
       label: action.label || action.key,
@@ -1505,7 +1515,7 @@ const effectiveRuntimeCrudProps = computed(() => {
     return handlers
   }, {})
   const runtimeConfigKey = props.runtimeCrudProps.configKey || ''
-  const runtimeBlockApi = resolveCurrentConfigPlaceholder(blockProps.api, runtimeConfigKey)
+  const runtimeBlockApi = resolveRuntimeBlockApi(blockProps.api, runtimeConfigKey, designPreview)
   const runtimeBlockApiConfig = Object.fromEntries(Object.entries(blockApiConfig.value)
     .map(([key, value]) => {
       const resolved = resolveCurrentConfigPlaceholder(value, runtimeConfigKey)
@@ -1520,7 +1530,10 @@ const effectiveRuntimeCrudProps = computed(() => {
     api: runtimeBlockApi || props.runtimeCrudProps.api || '',
     rowKey: blockProps.rowKey || props.runtimeCrudProps.rowKey || 'id',
     title: blockProps.title || props.runtimeCrudProps.title,
-    columns: props.runtimeCrudProps.columns?.length ? props.runtimeCrudProps.columns : aiTableColumns.value,
+    columns: applyTableColumnLayout(
+      props.runtimeCrudProps.columns?.length ? props.runtimeCrudProps.columns : aiTableColumns.value,
+      blockProps,
+    ),
     searchSchema: hasExplicitSearchFieldRefs.value
       ? aiSearchSchema.value
       : (props.runtimeCrudProps.searchSchema?.length ? props.runtimeCrudProps.searchSchema : aiSearchSchema.value),
@@ -1544,6 +1557,7 @@ const effectiveRuntimeCrudProps = computed(() => {
     editShowFeedback: blockProps.editShowFeedback ?? props.runtimeCrudProps.editShowFeedback,
     editXGap: blockProps.editXGap ?? props.runtimeCrudProps.editXGap,
     editYGap: blockProps.editYGap ?? props.runtimeCrudProps.editYGap,
+    tableRowGap: normalizeTableRowGap(blockProps.rowGap ?? props.runtimeCrudProps.tableRowGap, 8),
     modalWidth: blockProps.modalWidth || props.runtimeCrudProps.modalWidth,
     detailModalWidth: blockProps.detailModalWidth || props.runtimeCrudProps.detailModalWidth,
     formOpenMode: resolveEffectiveFormOpenMode(blockProps, props.runtimeCrudProps),
@@ -1643,7 +1657,7 @@ const livePreviewRecord = computed(() => {
     ? props.runtimeRecord || {}
     : { ...(props.runtimeRecord || {}), [rowKey]: id }
 })
-const blockTableRowHeight = computed(() => `${Math.max(34, 32 + Number(props.block.props?.rowGap ?? 8))}px`)
+const blockTableRowHeight = computed(() => `${Math.max(34, 32 + normalizeTableRowGap(props.block.props?.rowGap, 8))}px`)
 const detailInfoGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, Number(props.block.props?.columnCount || 2)))}, minmax(0, 1fr))`,
 }))
@@ -3314,6 +3328,13 @@ watch(
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.runtime-crud-loading {
+  min-height: 180px;
+  display: grid;
+  flex: 1;
+  place-items: center;
 }
 
 .ai-crud-preview :deep(.ai-crud-page) {
