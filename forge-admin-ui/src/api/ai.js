@@ -412,6 +412,19 @@ export function sessionStatistics() {
   return request.get('/ai/admin/session/statistics')
 }
 
+// 当前用户会话（AI 对话页使用）
+export function sessionList() {
+  return request.get('/ai/session/list')
+}
+
+export function sessionMessagesByUser(sessionId) {
+  return request.get(`/ai/session/${sessionId}/messages`)
+}
+
+export function sessionDeleteByUser(sessionId) {
+  return request.delete(`/ai/session/${sessionId}`)
+}
+
 // ========== AiClient 通用调用 ==========
 
 export function aiClientCall(data) {

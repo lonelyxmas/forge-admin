@@ -1,8 +1,16 @@
 <template>
   <div class="agent-create-page">
     <div class="page-header">
-      <div class="page-title">AI 创建 Agent</div>
-      <div class="page-subtitle">描述你的需求，AI 自动生成 Agent 配置</div>
+      <div class="page-header-row">
+        <div>
+          <div class="page-title">AI 创建 Agent</div>
+          <div class="page-subtitle">描述你的需求，AI 自动生成 Agent 配置</div>
+        </div>
+        <n-button quaternary @click="handleBack">
+          <template #icon><i class="ai-icon:arrow-left" /></template>
+          返回智能体管理
+        </n-button>
+      </div>
     </div>
 
     <!-- Step 1: 描述 -->
@@ -19,7 +27,8 @@
         <n-button
           type="primary"
           size="large"
-          :disabled="!description.trim()"
+          :disabled="!description.trim() || generating"
+          :loading="generating"
           @click="handleStartGenerate"
         >
           开始生成
@@ -48,6 +57,9 @@
             {{ field.status === 'done' ? '完成' : field.status === 'running' ? '生成中' : '等待' }}
           </n-tag>
         </div>
+      </div>
+      <div class="generate-actions">
+        <n-button @click="handleCancelGenerate">取消生成</n-button>
       </div>
     </n-card>
 
@@ -107,10 +119,10 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { agentAiCreateSSE, agentAiCreateConfirm } from '@/api/ai'
+import { agentAiCreateSSE, agentAiCreateConfirm, agentToolAdd } from '@/api/ai'
 
 const router = useRouter()
 const message = useMessage()
@@ -118,7 +130,9 @@ const message = useMessage()
 const step = ref(1)
 const description = ref('')
 const creating = ref(false)
+const generating = ref(false)
 const createdAgentId = ref(null)
+const generatingAbortController = ref(null)
 
 const fieldLabels = {
   agentName: 'Agent 名称',
@@ -150,10 +164,11 @@ const selectedRecommendations = ref([])
 
 function handleStartGenerate() {
   step.value = 2
+  generating.value = true
   // 重置状态
   fieldStatuses.value.forEach(f => f.status = 'pending')
 
-  agentAiCreateSSE(
+  generatingAbortController.value = agentAiCreateSSE(
     description.value,
     (eventType, data) => {
       if (eventType === 'start') {
@@ -174,11 +189,13 @@ function handleStartGenerate() {
         recommendations.value = data.items || []
       } else if (eventType === 'error') {
         message.error(data.message || '生成失败')
+        generating.value = false
         step.value = 1
       }
     },
     () => {
       // 完成
+      generating.value = false
       if (step.value === 2) {
         step.value = 3
         // 确保 presetQuestions 是数组
@@ -191,6 +208,7 @@ function handleStartGenerate() {
       }
     },
     (error) => {
+      generating.value = false
       message.error('生成失败: ' + (error.message || '未知错误'))
       step.value = 1
     }
@@ -202,11 +220,19 @@ function handleStartGenerate() {
   }
 }
 
+function handleCancelGenerate() {
+  if (generatingAbortController.value) {
+    generatingAbortController.value.abort()
+  }
+  generating.value = false
+  step.value = 1
+}
+
 async function handleConfirmCreate() {
   creating.value = true
   try {
     const payload = { ...config }
-    // 添加选中的推荐绑定
+    // 添加选中的推荐绑定（知识库）
     if (selectedRecommendations.value.length > 0) {
       const knowledgeIds = selectedRecommendations.value.filter(id => typeof id === 'number')
       if (knowledgeIds.length > 0) {
@@ -216,6 +242,16 @@ async function handleConfirmCreate() {
     const res = await agentAiCreateConfirm(payload)
     if (res.data) {
       createdAgentId.value = res.data.agentId || res.data
+      // 绑定推荐的工具（工具绑定需在 Agent 创建后写入 ai_agent_tool_config）
+      const toolKeys = selectedRecommendations.value.filter(id => typeof id === 'string')
+      if (toolKeys.length > 0 && createdAgentId.value) {
+        try {
+          await bindRecommendedTools(createdAgentId.value, toolKeys)
+        }
+        catch (e) {
+          message.warning('Agent 已创建，但部分工具绑定失败：' + (e.message || '未知错误'))
+        }
+      }
       step.value = 4
       message.success('Agent 创建成功')
     }
@@ -226,9 +262,43 @@ async function handleConfirmCreate() {
   }
 }
 
-function handleGoToAgent() {
-  router.push('/ai/agent/chat')
+async function bindRecommendedTools(agentId, toolKeys) {
+  const tools = recommendations.value.filter(r => r.type === 'tool')
+  for (const key of toolKeys) {
+    const rec = tools.find(t => t.ref === key)
+    await agentToolAdd({
+      agentId,
+      toolSource: 'mcp',
+      toolKey: key,
+      toolGroup: 'default',
+      enabled: '1',
+    })
+  }
 }
+
+function handleBack() {
+  // 生成中允许直接返回（SSE 已中止则无需额外处理）
+  if (generatingAbortController.value) {
+    generatingAbortController.value.abort()
+    generating.value = false
+  }
+  router.push('/ai/agent')
+}
+
+function handleGoToAgent() {
+  if (createdAgentId.value) {
+    router.push('/ai/agent')
+  }
+  else {
+    router.push('/ai/agent/chat')
+  }
+}
+
+onBeforeUnmount(() => {
+  if (generatingAbortController.value) {
+    generatingAbortController.value.abort()
+  }
+})
 </script>
 
 <style scoped>
@@ -238,6 +308,12 @@ function handleGoToAgent() {
 .page-header {
   margin-bottom: 20px;
 }
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .page-title {
   font-size: 20px;
   font-weight: 600;
@@ -246,6 +322,11 @@ function handleGoToAgent() {
   color: var(--text-color-3);
   font-size: 14px;
   margin-top: 4px;
+}
+.generate-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 .generate-progress {
   text-align: center;
