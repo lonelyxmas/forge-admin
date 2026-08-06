@@ -9,6 +9,8 @@ export const BUSINESS_PROCESS_NODE_TYPE = Object.freeze({
   END: 'END',
 })
 
+export const BUSINESS_PROCESS_NODE_DRAG_MIME = 'application/x-forge-business-process-node'
+
 export const BUSINESS_PROCESS_START_TYPES = Object.freeze([
   BUSINESS_PROCESS_NODE_TYPE.START_MANUAL,
   BUSINESS_PROCESS_NODE_TYPE.START_EVENT,

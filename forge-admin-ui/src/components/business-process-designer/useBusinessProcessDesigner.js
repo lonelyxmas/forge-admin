@@ -53,9 +53,19 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     if (outgoing.length !== 1)
       throw new Error('请在唯一后继连线上插入节点；分支节点需先选择具体出口')
 
+    return insertNodeOnEdge(outgoing[0].id, type, overrides)
+  }
+
+  function insertNodeOnEdge(edgeId, type, overrides = {}) {
+    const currentEdge = getEdge(edgeId)
+    if (!currentEdge)
+      throw new Error('找不到插入位置对应的业务流程连线')
+
     const template = createBusinessProcessNodeTemplate(type)
     if (isBusinessProcessStartType(template.type))
       throw new Error('每个业务流程只能保留一个开始节点')
+    if (template.type === BUSINESS_PROCESS_NODE_TYPE.END)
+      throw new Error('流程结束节点由系统维护，不能插入第二个结束节点')
 
     const next = cloneBusinessProcessSchema(schema.value)
     const newId = overrides.id == null
@@ -74,7 +84,7 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
       },
     }
 
-    const predecessorEdge = next.edges.find(edge => edge.id === outgoing[0].id)
+    const predecessorEdge = next.edges.find(edge => edge.id === currentEdge.id)
     const originalTarget = predecessorEdge.target
     predecessorEdge.target = newId
     next.nodes.push(newNode)
@@ -294,6 +304,7 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     getIncomingEdges,
     selectNode,
     addNode,
+    insertNodeOnEdge,
     copyNode,
     updateNode,
     changeStartType,

@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -67,5 +69,15 @@ class BusinessAppServiceCompatibilityTest {
             assertTrue(xml.contains("entry_mode"));
             assertTrue(xml.contains("config_key"));
         }
+    }
+
+    @Test
+    @DisplayName("empty entry selection means publish no entries")
+    void emptyEntrySelectionDoesNotExpandToAllEntries() {
+        Set<Long> available = Set.of(1L, 2L);
+
+        assertEquals(available, BusinessAppService.resolveSelectedEntryIds(available, null));
+        assertEquals(Set.of(), BusinessAppService.resolveSelectedEntryIds(available, List.of()));
+        assertEquals(Set.of(2L), BusinessAppService.resolveSelectedEntryIds(available, List.of(2L)));
     }
 }

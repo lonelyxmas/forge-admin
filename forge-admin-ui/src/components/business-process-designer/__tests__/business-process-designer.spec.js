@@ -157,6 +157,25 @@ describe('useBusinessProcessDesigner', () => {
     expect(validateBusinessProcessGraph(designer.schema.value).isValid).toBe(true)
   })
 
+  it('inserts a governed node into one concrete condition branch edge', () => {
+    const designer = useBusinessProcessDesigner(
+      createBusinessProcessSchema({ processCode: 'purchase_submit', objectRef }),
+    )
+    const conditionId = designer.addNode('start_manual', 'CONDITION', { name: '判断金额' })
+    const matchedEdge = designer.getOutgoingEdges(conditionId)
+      .find(edge => edge.sourcePort === 'MATCHED')
+
+    const actionId = designer.insertNodeOnEdge(matchedEdge.id, 'ACTION', {
+      name: '记录命中结果',
+    })
+
+    expect(designer.getEdge(matchedEdge.id).target).toBe(actionId)
+    expect(designer.getOutgoingEdges(actionId)).toHaveLength(1)
+    expect(designer.getOutgoingEdges(conditionId)
+      .find(edge => edge.sourcePort === 'OTHERWISE').target).toBe('end_success')
+    expect(validateBusinessProcessGraph(designer.schema.value).isValid).toBe(true)
+  })
+
   it('supports undo, redo, dirty baseline and deep-cloned export', () => {
     const designer = useBusinessProcessDesigner(
       createBusinessProcessSchema({ processCode: 'purchase_submit', objectRef }),
@@ -215,5 +234,23 @@ describe('business process canvas', () => {
 
     await wrapper.find('[data-node-id="end_success"]').trigger('click')
     expect(wrapper.emitted('nodeSelect')[0][0].id).toBe('end_success')
+  })
+
+  it('renders an inline insertion control for every graph edge', async () => {
+    const schema = createBusinessProcessSchema({ processCode: 'purchase_submit', objectRef })
+    const wrapper = mount(BusinessProcessCanvas, {
+      props: { schema, selectedNodeId: 'start_manual' },
+    })
+
+    const insertion = wrapper.find('[data-business-insert-edge]')
+    expect(wrapper.findAll('[data-business-insert-edge]')).toHaveLength(schema.edges.length)
+
+    await insertion.find('button').trigger('click')
+    await insertion.find('[data-business-insert-type="APPROVAL"]').trigger('click')
+
+    expect(wrapper.emitted('insertNode')[0][0]).toEqual({
+      edgeId: schema.edges[0].id,
+      type: 'APPROVAL',
+    })
   })
 })

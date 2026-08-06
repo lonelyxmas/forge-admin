@@ -5,8 +5,27 @@ import { AI_TABLE_CHECKED_ROW_CLASS } from '../table-state-utils'
 
 const NDataTableStub = {
   name: 'NDataTable',
-  props: ['data', 'rowClassName'],
+  props: ['columns', 'data', 'rowClassName'],
   template: '<div class="n-data-table-stub" />',
+}
+
+function mountTable(props) {
+  return mount(AiTable, {
+    props: {
+      showToolbar: false,
+      pagination: false,
+      hideSelection: true,
+      ...props,
+    },
+    global: {
+      directives: {
+        tableScrollEnhance: {},
+      },
+      stubs: {
+        NDataTable: NDataTableStub,
+      },
+    },
+  })
 }
 
 describe('aiTable checked row state', () => {
@@ -37,5 +56,31 @@ describe('aiTable checked row state', () => {
     const rowClassName = wrapper.findComponent(NDataTableStub).props('rowClassName')
     expect(rowClassName(rows[0], 0)).toBe('status-enabled')
     expect(rowClassName(rows[1], 1)).toBe(`status-disabled ${AI_TABLE_CHECKED_ROW_CLASS}`)
+  })
+
+  it('uses one geometric center for the header and rendered body content', () => {
+    const wrapper = mountTable({
+      columns: [{
+        key: 'ownerName',
+        title: '负责人',
+        align: 'center',
+        render: row => row.ownerName,
+      }],
+      dataSource: [{ id: 1, ownerName: '张三' }],
+    })
+
+    const [column] = wrapper.findComponent(NDataTableStub).props('columns')
+    const rendered = column.render({ id: 1, ownerName: '张三' }, 0)
+
+    expect(column.align).toBe('center')
+    expect(column.titleAlign).toBe('center')
+    expect(column.className).toContain('forge-table-align-center')
+    expect(rendered.props.class).toBe('ai-table-cell-content')
+    expect(rendered.props.style).toMatchObject({
+      width: '100%',
+      minWidth: 0,
+      justifyContent: 'center',
+      textAlign: 'center',
+    })
   })
 })

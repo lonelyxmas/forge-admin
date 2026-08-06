@@ -2,6 +2,7 @@
 import { NAlert, NButton } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  BUSINESS_PROCESS_NODE_DRAG_MIME,
   getBusinessProcessNodeDefinition,
   isBusinessProcessStartType,
 } from './business-process-node-types.js'
@@ -48,6 +49,7 @@ const designer = useBusinessProcessDesigner(props.schema)
 const drawerVisible = ref(false)
 const operationError = ref('')
 const issuesExpanded = ref(true)
+const draggingNodeType = ref('')
 let autoSaveTimer = null
 
 const palette = ['CONDITION', 'ACTION', 'APPROVAL', 'SUB_PROCESS']
@@ -109,15 +111,48 @@ function handleAddNode(type) {
   operationError.value = ''
   const insertionNode = selectedNode.value || initialStart
   try {
-    const overrides = type === 'ACTION'
-      ? { config: { objectCode: designer.schema.value.subject?.objectCode } }
-      : {}
-    const nodeId = designer.addNode(insertionNode.id, type, overrides)
-    designer.selectNode(nodeId)
+    const outgoing = designer.getOutgoingEdges(insertionNode.id)
+    if (outgoing.length !== 1)
+      throw new Error('当前节点有多个结果出口，请使用对应分支线上的 + 添加节点')
+    handleInsertNode({ edgeId: outgoing[0].id, type })
   }
   catch (error) {
     operationError.value = error.message
   }
+}
+
+function handleInsertNode({ edgeId, type }) {
+  operationError.value = ''
+  try {
+    const overrides = type === 'ACTION'
+      ? { config: { objectCode: designer.schema.value.subject?.objectCode } }
+      : {}
+    const nodeId = designer.insertNodeOnEdge(edgeId, type, overrides)
+    designer.selectNode(nodeId)
+    drawerVisible.value = true
+    draggingNodeType.value = ''
+  }
+  catch (error) {
+    operationError.value = error.message
+    draggingNodeType.value = ''
+  }
+}
+
+function handlePaletteDragStart(event, type) {
+  if (props.readonly) {
+    event.preventDefault()
+    return
+  }
+  draggingNodeType.value = type
+  if (!event.dataTransfer)
+    return
+  event.dataTransfer.effectAllowed = 'copy'
+  event.dataTransfer.setData(BUSINESS_PROCESS_NODE_DRAG_MIME, type)
+  event.dataTransfer.setData('text/plain', type)
+}
+
+function handlePaletteDragEnd() {
+  draggingNodeType.value = ''
 }
 
 function handleNodeSelect(node) {
@@ -296,7 +331,7 @@ defineExpose({
       <aside class="node-palette">
         <div class="pane-heading">
           <strong>添加节点</strong>
-          <span>插入到当前选中节点之后</span>
+          <span>拖到画布连线，或单击插入到选中节点后</span>
         </div>
         <button
           v-for="item in palette"
@@ -305,6 +340,9 @@ defineExpose({
           class="palette-item"
           :data-node-type="item.type"
           :disabled="readonly"
+          :draggable="!readonly"
+          @dragstart="handlePaletteDragStart($event, item.type)"
+          @dragend="handlePaletteDragEnd"
           @click="handleAddNode(item.type)"
         >
           <span :class="`tone-${item.tone}`" />
@@ -321,7 +359,10 @@ defineExpose({
           :schema="designer.schema.value"
           :selected-node-id="designer.selectedNodeId.value"
           :readonly="readonly"
+          :palette="palette"
+          :dragging-node-type="draggingNodeType"
           @node-select="handleNodeSelect"
+          @insert-node="handleInsertNode"
         />
       </main>
 
@@ -500,6 +541,22 @@ defineExpose({
   padding: 9px 10px;
   text-align: left;
   grid-template-columns: 4px 1fr;
+  cursor: grab;
+}
+
+.palette-item:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.palette-item[draggable='true']::after {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  color: var(--text-color-3, #94a3b8);
+  content: '⋮⋮';
+  font-size: 11px;
+  letter-spacing: -3px;
+  transform: translateY(-50%);
 }
 
 .palette-item:hover:not(:disabled) {

@@ -2,6 +2,14 @@
 
 > 记录开发过程中遇到的常见错误和解决方案，避免重复踩坑
 
+## Naive UI 表格居中不能只设置 `text-align`
+
+**发现日期**：2026-08-07
+
+`n-data-table` 的 `titleAlign` 只改变表头单元格文本对齐；自定义 body renderer 常返回 `inline-flex`、图片/附件容器或操作按钮组，仍可能相对标题中心偏移。可排序/筛选表头还会把图标放进标题 flex 流并增加右侧 padding。
+
+处理原则：最终列配置同时固定 `align`/`titleAlign`，body render 统一包在 `width: 100%; min-width: 0` 的 flex 容器中按 `justify-content` 对齐；居中表头标题脱离图标流并以完整 header 单元格中心定位，图标固定在右侧。回归测试应检查 render VNode 的几何样式，而不只检查列配置值。
+
 ## 消息“批量接口”仍需检查数据库是否逐条更新
 
 **发现日期**：2026-08-05
