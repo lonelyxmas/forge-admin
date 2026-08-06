@@ -103,12 +103,24 @@
               <NButton text type="primary" @click.stop="handleEditAgent(agent)">
                 编辑信息
               </NButton>
+              <NPopconfirm
+                v-if="agent.status === '0'"
+                @positive-click="handleTogglePublish(agent)"
+              >
+                <template #trigger>
+                  <NButton text type="warning" @click.stop>
+                    下线
+                  </NButton>
+                </template>
+                下线后用户将无法访问该智能体，确定下线吗？
+              </NPopconfirm>
               <NButton
+                v-else
                 text
-                :type="agent.status === '0' ? 'warning' : 'success'"
+                type="success"
                 @click.stop="handleTogglePublish(agent)"
               >
-                {{ agent.status === '0' ? '下线' : '发布' }}
+                发布
               </NButton>
               <NPopconfirm @positive-click="handleDeleteAgent(agent)">
                 <template #trigger>
@@ -366,75 +378,86 @@
           </div>
 
           <div class="workbench-actions">
+            <NButton size="small" ghost @click="goToChat" :disabled="!agentForm.id" title="在新页面打开独立对话">
+              对话
+            </NButton>
             <NButton class="draft-save-button" :loading="saveLoading" @click="handleSaveDraft">
               保存
             </NButton>
-            <n-popover v-model:show="publishMenuVisible" trigger="click" placement="bottom-end" :width="336">
-              <template #trigger>
-                <NButton class="publish-button" type="primary" :loading="publishLoading">
-                  发布
-                  <template #icon>
+            <div class="publish-btn-group">
+              <NButton
+                class="publish-main-button"
+                type="primary"
+                :loading="publishLoading"
+                :disabled="publishLoading"
+                @click="handlePublishAgent"
+              >
+                发布
+              </NButton>
+              <n-popover v-model:show="publishMenuVisible" trigger="click" placement="bottom-end" :width="336">
+                <template #trigger>
+                  <NButton class="publish-caret-button" type="primary" :loading="publishLoading">
                     <i class="ai-icon:chevron-down" />
-                  </template>
-                </NButton>
-              </template>
-              <div class="publish-panel">
-                <section class="publish-status-card">
-                  <div class="publish-status-head">
-                    <div>
-                      <div class="publish-eyebrow">
-                        最新发布
+                  </NButton>
+                </template>
+                <div class="publish-panel">
+                  <section class="publish-status-card">
+                    <div class="publish-status-head">
+                      <div>
+                        <div class="publish-eyebrow">
+                          最新发布
+                        </div>
+                        <div class="publish-time-text">
+                          {{ publishTimeText }}
+                        </div>
                       </div>
-                      <div class="publish-time-text">
-                        {{ publishTimeText }}
-                      </div>
+                      <button type="button" class="restore-button" @click="handlePendingPublishAction('恢复')">
+                        恢复
+                      </button>
                     </div>
-                    <button type="button" class="restore-button" @click="handlePendingPublishAction('恢复')">
-                      恢复
+                    <button
+                      type="button"
+                      class="publish-update-button"
+                      :disabled="publishLoading"
+                      @click="handlePublishMenuUpdate"
+                    >
+                      更新
                     </button>
-                  </div>
-                  <button
-                    type="button"
-                    class="publish-update-button"
-                    :disabled="publishLoading"
-                    @click="handlePublishMenuUpdate"
-                  >
-                    更新
-                  </button>
-                </section>
+                  </section>
 
-                <section class="publish-action-card">
-                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('运行')">
-                    <span class="publish-action-left">
-                      <i class="publish-action-icon ai-icon:send" />
-                      <span>运行</span>
-                    </span>
-                    <i class="publish-action-arrow ai-icon:arrow-right" />
-                  </button>
-                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('嵌入网站')">
-                    <span class="publish-action-left">
-                      <i class="publish-action-icon ai-icon:code" />
-                      <span>嵌入网站</span>
-                    </span>
-                    <i class="publish-action-arrow ai-icon:arrow-right" />
-                  </button>
-                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('探索')">
-                    <span class="publish-action-left">
-                      <i class="publish-action-icon ai-icon:message-circle" />
-                      <span>在 “探索” 中打开</span>
-                    </span>
-                    <i class="publish-action-arrow ai-icon:arrow-right" />
-                  </button>
-                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('访问 API')">
-                    <span class="publish-action-left">
-                      <i class="publish-action-icon ai-icon:link" />
-                      <span>访问 API</span>
-                    </span>
-                    <i class="publish-action-arrow ai-icon:arrow-right" />
-                  </button>
-                </section>
-              </div>
-            </n-popover>
+                  <section class="publish-action-card">
+                    <button type="button" class="publish-action-row" @click="handlePendingPublishAction('运行')">
+                      <span class="publish-action-left">
+                        <i class="publish-action-icon ai-icon:send" />
+                        <span>运行</span>
+                      </span>
+                      <i class="publish-action-arrow ai-icon:arrow-right" />
+                    </button>
+                    <button type="button" class="publish-action-row" @click="handlePendingPublishAction('嵌入网站')">
+                      <span class="publish-action-left">
+                        <i class="publish-action-icon ai-icon:code" />
+                        <span>嵌入网站</span>
+                      </span>
+                      <i class="publish-action-arrow ai-icon:arrow-right" />
+                    </button>
+                    <button type="button" class="publish-action-row" @click="handlePendingPublishAction('探索')">
+                      <span class="publish-action-left">
+                        <i class="publish-action-icon ai-icon:message-circle" />
+                        <span>在 “探索” 中打开</span>
+                      </span>
+                      <i class="publish-action-arrow ai-icon:arrow-right" />
+                    </button>
+                    <button type="button" class="publish-action-row" @click="handlePendingPublishAction('访问 API')">
+                      <span class="publish-action-left">
+                        <i class="publish-action-icon ai-icon:link" />
+                        <span>访问 API</span>
+                      </span>
+                      <i class="publish-action-arrow ai-icon:arrow-right" />
+                    </button>
+                  </section>
+                </div>
+              </n-popover>
+            </div>
           </div>
         </div>
       </div>
@@ -456,79 +479,25 @@
           </div>
 
           <div class="orchestration-scroll">
-            <n-form ref="agentFormRef" :model="agentForm" :rules="agentRules" label-placement="top">
-              <div class="panel-section panel-card prompt-card">
-                <div class="section-title compact-section-title">
-                  <i class="ai-icon:user-check" />
-                  <span>提示词</span>
-                  <small>{{ agentForm.agentName || agentForm.agentCode }}</small>
-                </div>
-                <n-grid :cols="1" :x-gap="14">
-                  <n-form-item-gi label="系统提示词" path="systemPrompt">
-                    <n-input
-                      v-model:value="agentForm.systemPrompt"
-                      type="textarea"
-                      :autosize="{ minRows: 8, maxRows: 16 }"
-                      placeholder="定义智能体角色、目标、边界和输出要求"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="开场白">
-                    <n-input
-                      v-model:value="agentForm.extraConfig.openingStatement"
-                      type="textarea"
-                      :rows="3"
-                      placeholder="显示在右侧测试会话的首条消息"
-                    />
-                  </n-form-item-gi>
-                </n-grid>
-              </div>
-
-              <div class="config-entry-grid">
-                <button type="button" class="config-entry-card" @click="toolModalVisible = true">
-                  <div class="config-entry-icon">
-                    <i class="ai-icon:tool" />
-                  </div>
-                  <div class="config-entry-main">
-                    <div class="config-entry-title">
-                      工具与技能
-                    </div>
-                    <div class="config-entry-desc">
-                      {{ selectedMcpToolLabels.length }} 个 MCP · {{ suggestedQuestionCount }} 个推荐问题
-                    </div>
-                    <div class="config-entry-tags">
-                      <NTag
-                        v-for="label in selectedMcpToolLabels.slice(0, 3)"
-                        :key="label"
-                        size="small"
-                        round
-                      >
-                        {{ label }}
-                      </NTag>
-                      <span v-if="!selectedMcpToolLabels.length" class="config-entry-empty">未配置工具</span>
-                    </div>
-                  </div>
-                  <i class="config-entry-arrow ai-icon:chevron-right" />
-                </button>
-
-                <button type="button" class="config-entry-card" @click="contextModalVisible = true">
-                  <div class="config-entry-icon context-entry-icon">
-                    <i class="ai-icon:book-open" />
-                  </div>
-                  <div class="config-entry-main">
-                    <div class="config-entry-title">
-                      上下文
-                    </div>
-                    <div class="config-entry-desc">
-                      {{ contextConfigs.length }} 个配置 · {{ enabledContextCount }} 个启用
-                    </div>
-                    <div class="config-entry-preview">
-                      {{ contextConfigs[0]?.configName || '导入知识、规则或样例作为上下文' }}
-                    </div>
-                  </div>
-                  <i class="config-entry-arrow ai-icon:chevron-right" />
-                </button>
-              </div>
-            </n-form>
+            <AgentConfigForm
+              ref="agentFormRef"
+              :agent-form="agentForm"
+              :model-param-enabled="modelParamEnabled"
+              :provider-options="providerOptions"
+              :model-options="modelOptions"
+              :model-selection-mode-options="modelSelectionModeOptions"
+              :route-policy-options="routePolicyOptions"
+              :model-loading="modelLoading"
+              :mcp-tool-labels="selectedMcpToolLabels"
+              :mcp-tool-count="selectedMcpToolLabels.length"
+              :question-count="suggestedQuestionCount"
+              :context-count="contextConfigs.length"
+              :enabled-context-count="enabledContextCount"
+              :context-preview="contextConfigs[0]?.configName || ''"
+              :rules="agentRules"
+              @open-tools="toolModalVisible = true"
+              @open-context="contextModalVisible = true"
+            />
           </div>
         </section>
 
@@ -641,40 +610,87 @@
         title="工具与技能"
         class="agent-config-modal"
         :bordered="false"
+        style="width: 680px;"
       >
-        <div class="modal-section">
-          <n-form label-placement="top">
-            <n-form-item label="MCP 工具">
-              <div class="w-full">
-                <n-space v-if="selectedMcpToolLabels.length" size="small" class="mb-2">
-                  <n-tag
-                    v-for="tool in selectedMcpToolLabels"
-                    :key="tool"
-                    size="small"
-                    type="warning"
-                    :bordered="false"
-                  >
-                    {{ tool }}（预留）
-                  </n-tag>
-                </n-space>
-                <n-text depth="3">
-                  MCP 能力目录尚未开放配置。历史选项仅保留展示，不会自动启用或改写。
-                </n-text>
+        <n-tabs type="segment" animated>
+          <!-- 工具绑定 Tab -->
+          <n-tab-pane name="tools" tab="工具绑定">
+            <div class="modal-section">
+              <div class="tool-section-header">
+                <span class="tool-section-title">已绑定工具 ({{ agentTools.length }})</span>
+                <n-button size="tiny" type="primary" @click="showAddTool = true">添加工具</n-button>
               </div>
-            </n-form-item>
-            <n-form-item label="推荐问题">
-              <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
-            </n-form-item>
-            <n-form-item label="Skill 预留">
-              <n-dynamic-tags v-model:value="agentForm.extraConfig.skills" />
-            </n-form-item>
-          </n-form>
-        </div>
+              <n-empty v-if="!agentTools.length" description="暂无绑定工具" size="small" class="my-4" />
+              <div v-else class="tool-list">
+                <div v-for="tool in agentTools" :key="tool.id" class="tool-item">
+                  <div class="tool-info">
+                    <n-tag size="tiny" :type="tool.toolSource === 'mcp' ? 'info' : 'default'">{{ tool.toolSource }}</n-tag>
+                    <span class="tool-key">{{ tool.toolKey }}</span>
+                    <span v-if="tool.toolGroup" class="tool-group">{{ tool.toolGroup }}</span>
+                  </div>
+                  <div class="tool-actions">
+                    <n-switch v-model:value="tool.enabled" size="small" @update:value="(val) => updateToolEnabled(tool, val)" />
+                    <n-button text type="error" size="tiny" @click="removeTool(tool)">解除</n-button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 添加工具表单 -->
+              <div v-if="showAddTool" class="add-tool-form">
+                <n-divider />
+                <n-form inline>
+                  <n-form-item label="来源">
+                    <n-input v-model:value="newTool.source" placeholder="mcp/builtin/capability" size="small" style="width: 120px" />
+                  </n-form-item>
+                  <n-form-item label="工具标识">
+                    <n-input v-model:value="newTool.key" placeholder="tool_key" size="small" style="width: 180px" />
+                  </n-form-item>
+                  <n-form-item label="分组">
+                    <n-input v-model:value="newTool.group" placeholder="分组" size="small" style="width: 100px" />
+                  </n-form-item>
+                  <n-button size="small" type="primary" @click="addTool" :disabled="!newTool.source || !newTool.key">确认</n-button>
+                  <n-button size="small" @click="showAddTool = false">取消</n-button>
+                </n-form>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <!-- 技能绑定 Tab -->
+          <n-tab-pane name="skills" tab="技能绑定">
+            <div class="modal-section">
+              <n-spin :show="skillLoading">
+                <n-checkbox-group v-model:value="boundSkillIds">
+                  <div class="skill-check-list">
+                    <div v-for="skill in allSkills" :key="skill.id" class="skill-check-item">
+                      <n-checkbox :value="skill.id">
+                        <span class="skill-label">{{ skill.name }}</span>
+                        <n-tag v-if="skill.category" size="tiny" :bordered="false">{{ skill.category }}</n-tag>
+                      </n-checkbox>
+                    </div>
+                  </div>
+                </n-checkbox-group>
+                <n-empty v-if="!allSkills.length && !skillLoading" description="暂无可用技能" size="small" />
+              </n-spin>
+            </div>
+            <template #footer>
+              <div class="modal-footer">
+                <NButton type="primary" :loading="skillSaveLoading" @click="saveSkillBindings">保存</NButton>
+              </div>
+            </template>
+          </n-tab-pane>
+
+          <!-- 推荐问题 Tab -->
+          <n-tab-pane name="questions" tab="推荐问题">
+            <div class="modal-section">
+              <n-form-item label="推荐问题">
+                <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
+              </n-form-item>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
         <template #footer>
           <div class="modal-footer">
-            <NButton type="primary" @click="toolModalVisible = false">
-              完成
-            </NButton>
+            <NButton type="primary" @click="toolModalVisible = false">完成</NButton>
           </div>
         </template>
       </n-modal>
@@ -790,12 +806,17 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   agentAdd,
   agentDelete,
   agentGetById,
   agentPage,
   agentUpdate,
+  agentToolAdd,
+  agentToolDelete,
+  agentToolPage,
+  agentToolUpdate,
   contextConfigAdd,
   contextConfigDelete,
   contextConfigList,
@@ -803,13 +824,19 @@ import {
   modelListByProvider,
   providerPage,
   routePolicyPage,
+  skillAddAgentSkill,
+  skillDeleteAgentSkill,
+  skillGetAgentSkills,
+  skillPage,
   streamAgentChat,
 } from '@/api/ai'
 import { useDict } from '@/composables/useDict'
 import { generateUUID } from '@/utils'
+import AgentConfigForm from './components/AgentConfigForm.vue'
 
 defineOptions({ name: 'AiAgent' })
 
+const router = useRouter()
 const { dict } = useDict('ai_agent_model_selection_mode')
 
 const viewMode = ref('market')
@@ -819,6 +846,18 @@ const publishLoading = ref(false)
 const modelLoading = ref(false)
 const toolModalVisible = ref(false)
 const contextModalVisible = ref(false)
+
+// 工具管理相关
+const agentTools = ref([])
+const showAddTool = ref(false)
+const newTool = reactive({ source: '', key: '', group: 'default' })
+const toolLoading = ref(false)
+
+// 技能绑定相关
+const allSkills = ref([])
+const boundSkillIds = ref([])
+const skillLoading = ref(false)
+const skillSaveLoading = ref(false)
 const baseModalVisible = ref(false)
 const publishMenuVisible = ref(false)
 const baseSaveLoading = ref(false)
@@ -1343,7 +1382,8 @@ function resetModelParams() {
 }
 
 async function handleCreateAgent() {
-  openBaseModal()
+  // 进入 AI 生成向导页（描述需求 → AI 自动生成配置）
+  router.push('/ai/agent-create')
 }
 
 async function handleEditAgent(agent) {
@@ -1613,6 +1653,109 @@ function backToMarket() {
   stopChat()
   viewMode.value = 'market'
 }
+
+function goToChat() {
+  if (agentForm.id) {
+    router.push({ path: '/ai/agent/chat', query: { agentId: agentForm.id } })
+  }
+}
+
+// ============================================================
+// 工具与技能管理
+// ============================================================
+
+async function loadAgentTools() {
+  if (!agentForm.id) return
+  toolLoading.value = true
+  try {
+    const res = await agentToolPage({ agentId: agentForm.id, pageNum: 1, pageSize: 200 })
+    agentTools.value = res.data?.records || []
+  } catch { agentTools.value = [] }
+  finally { toolLoading.value = false }
+}
+
+async function addTool() {
+  if (!newTool.source || !newTool.key) return
+  try {
+    await agentToolAdd({
+      agentId: agentForm.id,
+      toolSource: newTool.source,
+      toolKey: newTool.key,
+      toolGroup: newTool.group || 'default',
+      enabled: '1',
+    })
+    newTool.source = ''
+    newTool.key = ''
+    showAddTool.value = false
+    await loadAgentTools()
+  } catch (e) {
+    window.$message.error(e.message || '添加失败')
+  }
+}
+
+async function removeTool(tool) {
+  try {
+    await agentToolDelete(tool.id)
+    await loadAgentTools()
+  } catch (e) {
+    window.$message.error(e.message || '删除失败')
+  }
+}
+
+async function updateToolEnabled(tool, enabled) {
+  try {
+    await agentToolUpdate({ ...tool, enabled: enabled ? '1' : '0' })
+  } catch (e) {
+    tool.enabled = !enabled
+    window.$message.error(e.message || '更新失败')
+  }
+}
+
+async function loadSkills() {
+  skillLoading.value = true
+  try {
+    const [skillRes, boundRes] = await Promise.all([
+      skillPage({ pageNum: 1, pageSize: 200 }),
+      skillGetAgentSkills(agentForm.id),
+    ])
+    allSkills.value = skillRes.data?.records || []
+    boundSkillIds.value = (boundRes.data || []).map(s => s.skillId)
+  } catch {
+    allSkills.value = []
+    boundSkillIds.value = []
+  }
+  finally { skillLoading.value = false }
+}
+
+async function saveSkillBindings() {
+  skillSaveLoading.value = true
+  try {
+    const currentBinds = await skillGetAgentSkills(agentForm.id)
+    const currentIds = (currentBinds.data || []).map(s => s.skillId)
+    // 新增绑定
+    const toAdd = boundSkillIds.value.filter(id => !currentIds.includes(id))
+    // 删除绑定
+    const toRemove = currentIds.filter(id => !boundSkillIds.value.includes(id))
+    for (const skillId of toAdd) {
+      await skillAddAgentSkill({ agentId: agentForm.id, skillId })
+    }
+    for (const skillId of toRemove) {
+      await skillDeleteAgentSkill(agentForm.id, skillId)
+    }
+    window.$message.success('技能绑定已保存')
+  } catch (e) {
+    window.$message.error(e.message || '保存失败')
+  }
+  finally { skillSaveLoading.value = false }
+}
+
+// 打开工具与技能弹窗时加载数据
+watch(toolModalVisible, (visible) => {
+  if (visible) {
+    loadAgentTools()
+    loadSkills()
+  }
+})
 
 function resetConversation() {
   stopChat()
@@ -2522,7 +2665,8 @@ onBeforeUnmount(() => {
 }
 
 .draft-save-button,
-.publish-button {
+.publish-main-button,
+.publish-caret-button {
   height: 50px;
   min-width: 78px;
   border-radius: 16px;
@@ -2535,9 +2679,28 @@ onBeforeUnmount(() => {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
 }
 
-.publish-button {
-  min-width: 88px;
+.publish-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.publish-btn-group :deep(.n-button + .n-button) {
+  margin-left: 0;
+}
+
+.publish-main-button {
+  min-width: 72px;
   font-weight: 800;
+  border-radius: 16px 0 0 16px;
+  box-shadow: 0 12px 24px rgba(21, 94, 239, 0.24);
+}
+
+.publish-caret-button {
+  min-width: 34px;
+  padding: 0 6px;
+  border-radius: 0 16px 16px 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
   box-shadow: 0 12px 24px rgba(21, 94, 239, 0.24);
 }
 

@@ -20,15 +20,32 @@
             <span class="session-name">{{ session.name || '新对话' }}</span>
             <span class="session-time">{{ formatTime(session.createTime) }}</span>
           </div>
-          <n-button quaternary circle size="tiny" @click.stop="deleteSession(session.id)">
-            <template #icon><n-icon size="14"><close-outline /></n-icon></template>
-          </n-button>
+          <n-popconfirm @positive-click="deleteSession(session.id)">
+            <template #trigger>
+              <n-button quaternary circle size="tiny" @click.stop>
+                <template #icon><n-icon size="14"><close-outline /></n-icon></template>
+              </n-button>
+            </template>
+            确定删除该会话吗？
+          </n-popconfirm>
         </div>
       </div>
     </div>
 
     <!-- 右侧对话区域 -->
     <div class="chat-main">
+      <!-- Agent 头部信息 -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <n-button v-if="agentId" size="small" text @click="backToBuilder" title="返回Agent设计器">
+            <template #icon><n-icon><arrow-back-outline /></n-icon></template>
+          </n-button>
+          <n-tag v-if="currentAgent" type="info" size="small" :bordered="false">
+            {{ currentAgent.agentName || currentAgent.agentCode }}
+          </n-tag>
+          <span v-if="currentAgent" class="chat-header-title">{{ currentAgent.description }}</span>
+        </div>
+      </div>
       <template v-if="currentSessionId">
         <!-- 消息区域 -->
         <div class="message-area" ref="messageAreaRef">
@@ -83,6 +100,7 @@
               </div>
               <template #action>
                 <n-space>
+                  <n-button size="small" @click="cancelHitl">取消</n-button>
                   <n-button type="error" size="small" @click="handleConfirm(false)">拒绝</n-button>
                   <n-button type="primary" size="small" @click="handleConfirm(true)">确认</n-button>
                 </n-space>
@@ -122,13 +140,16 @@
 
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
-import { NButton, NInput, NIcon, NTag, NCard, NCollapse, NCollapseItem, NSpace, useMessage } from 'naive-ui'
-import { ChatbubblesOutline, CloseOutline } from '@vicons/ionicons5'
-import { streamEngineChat, engineResume, agentList } from '@/api/ai'
+import { useRoute, useRouter } from 'vue-router'
+import { NButton, NInput, NIcon, NTag, NCard, NCollapse, NCollapseItem, NSpace, NPopconfirm, useMessage } from 'naive-ui'
+import { ChatbubblesOutline, CloseOutline, ArrowBackOutline } from '@vicons/ionicons5'
+import { streamEngineChat, engineResume, agentList, agentGetById, sessionList, sessionMessagesByUser, sessionDeleteByUser } from '@/api/ai'
 import { marked } from 'marked'
 
 defineOptions({ name: 'AiAgentChat' })
 
+const route = useRoute()
+const router = useRouter()
 const message = useMessage()
 
 // 会话管理
@@ -137,47 +158,152 @@ const currentSessionId = ref(null)
 const messages = ref([])
 const inputText = ref('')
 const isStreaming = ref(false)
+const loadingSessions = ref(false)
+const loadingMessages = ref(false)
 const pendingConfirm = ref(null)
 const messageAreaRef = ref(null)
 let abortController = null
+let hitlTimer = null
+
+function clearHitlTimer() {
+  if (hitlTimer) {
+    clearTimeout(hitlTimer)
+    hitlTimer = null
+  }
+}
+
+// Agent 信息
+const currentAgent = ref(null)
+const agentId = ref(null)
 
 // Agent 选择
 const agents = ref([])
 const selectedAgentCode = ref('')
 
-onMounted(async () => {
+// 生成 UUID（会话 ID）
+function generateSessionId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+async function loadAgent() {
+  const id = route.query.agentId
+  if (id) {
+    agentId.value = Number(id)
+    try {
+      const res = await agentGetById(agentId.value)
+      currentAgent.value = res.data
+      if (currentAgent.value) {
+        selectedAgentCode.value = currentAgent.value.agentCode
+      }
+    } catch { /* ignore */ }
+  }
+  // 同时加载 agent 列表（供侧栏切换）
   try {
     const res = await agentList()
     agents.value = res.data || []
-    if (agents.value.length > 0) {
-      selectedAgentCode.value = agents.value[0].agentCode
+  } catch { /* ignore */ }
+}
+
+async function loadSessions() {
+  loadingSessions.value = true
+  try {
+    const res = await sessionList()
+    let list = res.data || []
+    // 若指定了 Agent，按 agentCode 过滤
+    if (selectedAgentCode.value) {
+      list = list.filter(s => !s.agentCode || s.agentCode === selectedAgentCode.value)
     }
-  } catch (e) {
-    // ignore
+    sessions.value = list
+    // 若当前没有选中会话且有历史，默认选第一个
+    if (!currentSessionId.value && list.length > 0) {
+      await switchSession(list[0].id)
+    }
   }
+  catch (e) {
+    message.error(e.message || '加载会话失败')
+  }
+  finally {
+    loadingSessions.value = false
+  }
+}
+
+async function loadMessages(sessionId) {
+  loadingMessages.value = true
+  try {
+    const res = await sessionMessagesByUser(sessionId)
+    const records = res.data || []
+    // 后端 record 转前端消息格式
+    messages.value = records.map((r, idx) => {
+      if (r.role === 'user') {
+        return { id: `hist-${r.id}-${idx}`, role: 'user', content: r.content || '' }
+      }
+      return { id: `hist-${r.id}-${idx}`, role: 'assistant', content: r.content || '', thinking: '', toolCalls: [] }
+    })
+  }
+  catch (e) {
+    messages.value = []
+  }
+  finally {
+    loadingMessages.value = false
+  }
+}
+
+function backToBuilder() {
+  if (agentId.value) {
+    router.push({ path: '/ai/agent', query: { agentId: agentId.value, mode: 'builder' } })
+  } else {
+    router.push('/ai/agent')
+  }
+}
+
+onMounted(async () => {
+  await loadAgent()
+  // 如果没有指定 agentId，默认选第一个
+  if (!selectedAgentCode.value && agents.value.length > 0) {
+    selectedAgentCode.value = agents.value[0].agentCode
+  }
+  await loadSessions()
 })
 
 function createSession() {
-  const id = 'session_' + Date.now()
+  const id = generateSessionId()
+  // 新会话不落库，发送首条消息时后端自动创建
   sessions.value.unshift({
     id,
     name: '新对话',
     createTime: new Date().toISOString(),
   })
-  switchSession(id)
-}
-
-function switchSession(id) {
   currentSessionId.value = id
   messages.value = []
   pendingConfirm.value = null
 }
 
-function deleteSession(id) {
-  sessions.value = sessions.value.filter(s => s.id !== id)
-  if (currentSessionId.value === id) {
-    currentSessionId.value = sessions.value.length > 0 ? sessions.value[0].id : null
-    messages.value = []
+async function switchSession(id) {
+  if (currentSessionId.value === id) return
+  currentSessionId.value = id
+  pendingConfirm.value = null
+  await loadMessages(id)
+}
+
+async function deleteSession(id) {
+  try {
+    await sessionDeleteByUser(id)
+    sessions.value = sessions.value.filter(s => s.id !== id)
+    if (currentSessionId.value === id) {
+      currentSessionId.value = sessions.value.length > 0 ? sessions.value[0].id : null
+      if (currentSessionId.value) {
+        await loadMessages(currentSessionId.value)
+      } else {
+        messages.value = []
+      }
+    }
+    message.success('会话已删除')
+  }
+  catch (e) {
+    message.error(e.message || '删除失败')
   }
 }
 
@@ -192,6 +318,12 @@ function handleSend(e) {
 
   const text = inputText.value.trim()
   inputText.value = ''
+
+  // 更新会话名称（首条消息作为标题）
+  const session = sessions.value.find(s => s.id === currentSessionId.value)
+  if (session && session.name === '新对话') {
+    session.name = text.length > 20 ? text.slice(0, 20) + '…' : text
+  }
 
   // 添加用户消息
   messages.value.push({
@@ -269,9 +401,18 @@ function handleSSEEvent(eventType, data, assistantMsg) {
     }
     case 'REQUIRE_USER_CONFIRM': {
       pendingConfirm.value = {
+        interruptId: data?.interruptId || '',
         tool: data?.tool || '',
         args: data?.args || '',
       }
+      // HITL 超时自动拒绝（30 秒无操作）
+      clearHitlTimer()
+      hitlTimer = setTimeout(() => {
+        if (pendingConfirm.value) {
+          message.warning(`工具确认超时，已自动拒绝 "${pendingConfirm.value.tool}"`)
+          handleConfirm(false)
+        }
+      }, 30000)
       break
     }
     case 'HINT_BLOCK': {
@@ -290,14 +431,27 @@ function handleSSEEvent(eventType, data, assistantMsg) {
 
 async function handleConfirm(confirmed) {
   if (!pendingConfirm.value) return
+  const interruptId = pendingConfirm.value.interruptId
   const tool = pendingConfirm.value.tool
+  clearHitlTimer()
   pendingConfirm.value = null
 
   try {
-    await engineResume(currentSessionId.value, confirmed)
+    if (!interruptId) {
+      message.error('确认信息缺失，无法恢复对话')
+      return
+    }
+    await engineResume(interruptId, confirmed)
   } catch (e) {
     message.error('确认操作失败')
   }
+}
+
+function cancelHitl() {
+  // 取消 = 终止当前流式对话，不做确认/拒绝恢复
+  clearHitlTimer()
+  pendingConfirm.value = null
+  stopChat()
 }
 
 function stopChat() {
@@ -316,10 +470,22 @@ function scrollToBottom() {
   })
 }
 
+// 轻量 XSS 清洗：阻止脚本标签与危险协议（marked 默认 html:false 已转义 raw HTML，这里兜底）
+function sanitizeHtml(html) {
+  if (!html) return html
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/onerror\s*=/gi, '')
+    .replace(/onload\s*=/gi, '')
+    .replace(/onclick\s*=/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+}
+
 function renderMarkdown(text) {
   if (!text) return ''
   try {
-    return marked(text)
+    return sanitizeHtml(marked(text))
   } catch {
     return text
   }
@@ -334,123 +500,229 @@ function formatTime(time) {
 
 <style scoped>
 .agent-chat-page {
+  --primary: #2f6fed;
+  --primary-light: #f0f4ff;
+  --primary-soft: #e8efff;
+  --border: #e6e9f0;
+  --text-strong: #1f2329;
+  --text-body: #4e5969;
+  --text-muted: #86909c;
+  --bg-soft: #f7f8fa;
   display: flex;
   height: calc(100vh - 120px);
-  background: var(--n-color);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
 }
 
+:global(.dark) .agent-chat-page {
+  --primary: #4098ff;
+  --primary-light: rgba(64, 152, 255, 0.12);
+  --primary-soft: rgba(64, 152, 255, 0.18);
+  --border: #2c3a4d;
+  --text-strong: #f1f5f9;
+  --text-body: #cbd5e1;
+  --text-muted: #94a3b8;
+  --bg-soft: #111a27;
+  background: #151f2d;
+}
+
+/* ============ 左侧会话列表 ============ */
 .chat-sidebar {
-  width: 240px;
-  border-right: 1px solid var(--n-border-color);
   display: flex;
+  width: 250px;
   flex-direction: column;
+  background: var(--bg-soft);
+  border-right: 1px solid var(--border);
 }
 
 .sidebar-header {
-  padding: 12px;
+  padding: 14px;
+}
+
+.sidebar-header :deep(.n-button) {
+  border-radius: 8px;
+  font-weight: 500;
 }
 
 .session-list {
   flex: 1;
-  overflow-y: auto;
   padding: 0 8px;
+  overflow-y: auto;
 }
 
 .session-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
   margin-bottom: 2px;
+  transition: background 0.15s ease;
 }
 
 .session-item:hover {
-  background: var(--n-color-hover);
+  background: rgba(47, 111, 237, 0.06);
 }
 
 .session-item.active {
-  background: var(--n-color-pressed);
+  background: var(--primary-soft);
+}
+
+.session-item.active .session-name {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .session-info {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   overflow: hidden;
 }
 
 .session-name {
   font-size: 13px;
+  color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .session-time {
+  margin-top: 2px;
   font-size: 11px;
-  color: var(--n-text-color-3);
+  color: var(--text-muted);
 }
 
+/* ============ 右侧对话区 ============ */
 .chat-main {
-  flex: 1;
   display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+
+:global(.dark) .chat-header {
+  background: #151f2d;
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header-title {
+  max-width: 400px;
+  margin-left: 8px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-area {
   flex: 1;
+  padding: 20px 24px;
   overflow-y: auto;
-  padding: 16px;
+  background: #fff;
 }
 
+:global(.dark) .message-area {
+  background: #151f2d;
+}
+
+/* 消息行 */
 .message-bubble {
-  margin-bottom: 12px;
-  max-width: 80%;
+  margin-bottom: 18px;
+  max-width: 82%;
 }
 
 .message-bubble.user {
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .message-bubble.assistant {
   margin-right: auto;
 }
 
+/* 用户消息气泡 */
 .user-content {
-  background: var(--n-primary-color);
+  padding: 10px 16px;
   color: #fff;
-  padding: 8px 12px;
-  border-radius: 12px 12px 2px 12px;
   font-size: 14px;
+  line-height: 1.7;
   word-break: break-word;
+  background: var(--primary);
+  border-radius: 16px 16px 4px 16px;
+  box-shadow: 0 4px 12px rgba(47, 111, 237, 0.18);
 }
 
+/* 助手消息气泡 */
 .assistant-content {
-  background: var(--n-color-embedded);
-  padding: 8px 12px;
-  border-radius: 12px 12px 12px 2px;
+  padding: 12px 16px;
+  color: var(--text-body);
   font-size: 14px;
+  line-height: 1.8;
   word-break: break-word;
+  background: var(--primary-light);
+  border: 1px solid rgba(47, 111, 237, 0.08);
+  border-radius: 4px 16px 16px 16px;
 }
 
+/* 思考过程块（时钟图标 + 折叠） */
 .thinking-block {
   margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.thinking-block :deep(.n-collapse-item__header) {
+  padding: 8px 12px;
   font-size: 12px;
+}
+
+.thinking-block :deep(.n-collapse-item__header-main) {
+  color: var(--text-muted);
+}
+
+.thinking-block :deep(.n-collapse-item__content-inner) {
+  padding-top: 0;
+  padding-bottom: 8px;
 }
 
 .thinking-content {
-  color: var(--n-text-color-3);
+  max-height: 160px;
+  padding: 0 12px;
+  overflow-y: auto;
+  color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
+/* 工具调用卡片 */
 .tool-call-card {
-  background: var(--n-color-embedded);
-  border: 1px solid var(--n-border-color);
-  border-radius: 8px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   margin-bottom: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   font-size: 12px;
 }
 
@@ -460,10 +732,12 @@ function formatTime(time) {
 
 .tool-args, .tool-result {
   margin-top: 4px;
+  color: var(--text-muted);
 }
 
 .tool-label {
   font-weight: 500;
+  color: var(--text-body);
   margin-right: 4px;
 }
 
@@ -478,7 +752,7 @@ function formatTime(time) {
 
 .streaming-cursor {
   animation: blink 1s step-end infinite;
-  color: var(--n-primary-color);
+  color: var(--primary);
 }
 
 @keyframes blink {
@@ -490,25 +764,43 @@ function formatTime(time) {
   max-width: 400px;
 }
 
+/* 输入区域 */
 .input-area {
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--n-border-color);
+  padding: 14px 18px;
   align-items: flex-end;
+  background: #fff;
+  border-top: 1px solid var(--border);
+}
+
+:global(.dark) .input-area {
+  background: #151f2d;
 }
 
 .input-area .n-input {
   flex: 1;
 }
 
+.input-area :deep(.n-input) {
+  border-radius: 10px;
+}
+
+.input-area :deep(.n-input:focus-within) {
+  box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.15);
+}
+
+.input-area .n-button {
+  border-radius: 10px;
+}
+
 .empty-state {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--n-text-color-3);
+  color: var(--text-muted);
 }
 
 .empty-state p {
