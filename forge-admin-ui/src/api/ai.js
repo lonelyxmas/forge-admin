@@ -616,6 +616,14 @@ export function skillGetAgentSkills(agentId) {
   return request.get(`/ai/skill/agent/${agentId}`)
 }
 
+export function skillAddAgentSkill(data) {
+  return request.post(`/ai/skill/agent/${data.agentId}`, { skillId: data.skillId })
+}
+
+export function skillDeleteAgentSkill(agentId, skillId) {
+  return request.delete(`/ai/skill/agent/${agentId}/${skillId}`)
+}
+
 export function skillAdd(data) {
   return request.post('/ai/skill', data)
 }
