@@ -366,6 +366,9 @@
           </div>
 
           <div class="workbench-actions">
+            <NButton size="small" ghost @click="goToChat" :disabled="!agentForm.id" title="在新页面打开独立对话">
+              对话
+            </NButton>
             <NButton class="draft-save-button" :loading="saveLoading" @click="handleSaveDraft">
               保存
             </NButton>
@@ -641,40 +644,87 @@
         title="工具与技能"
         class="agent-config-modal"
         :bordered="false"
+        style="width: 680px;"
       >
-        <div class="modal-section">
-          <n-form label-placement="top">
-            <n-form-item label="MCP 工具">
-              <div class="w-full">
-                <n-space v-if="selectedMcpToolLabels.length" size="small" class="mb-2">
-                  <n-tag
-                    v-for="tool in selectedMcpToolLabels"
-                    :key="tool"
-                    size="small"
-                    type="warning"
-                    :bordered="false"
-                  >
-                    {{ tool }}（预留）
-                  </n-tag>
-                </n-space>
-                <n-text depth="3">
-                  MCP 能力目录尚未开放配置。历史选项仅保留展示，不会自动启用或改写。
-                </n-text>
+        <n-tabs type="segment" animated>
+          <!-- 工具绑定 Tab -->
+          <n-tab-pane name="tools" tab="工具绑定">
+            <div class="modal-section">
+              <div class="tool-section-header">
+                <span class="tool-section-title">已绑定工具 ({{ agentTools.length }})</span>
+                <n-button size="tiny" type="primary" @click="showAddTool = true">添加工具</n-button>
               </div>
-            </n-form-item>
-            <n-form-item label="推荐问题">
-              <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
-            </n-form-item>
-            <n-form-item label="Skill 预留">
-              <n-dynamic-tags v-model:value="agentForm.extraConfig.skills" />
-            </n-form-item>
-          </n-form>
-        </div>
+              <n-empty v-if="!agentTools.length" description="暂无绑定工具" size="small" class="my-4" />
+              <div v-else class="tool-list">
+                <div v-for="tool in agentTools" :key="tool.id" class="tool-item">
+                  <div class="tool-info">
+                    <n-tag size="tiny" :type="tool.toolSource === 'mcp' ? 'info' : 'default'">{{ tool.toolSource }}</n-tag>
+                    <span class="tool-key">{{ tool.toolKey }}</span>
+                    <span v-if="tool.toolGroup" class="tool-group">{{ tool.toolGroup }}</span>
+                  </div>
+                  <div class="tool-actions">
+                    <n-switch v-model:value="tool.enabled" size="small" @update:value="(val) => updateToolEnabled(tool, val)" />
+                    <n-button text type="error" size="tiny" @click="removeTool(tool)">解除</n-button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 添加工具表单 -->
+              <div v-if="showAddTool" class="add-tool-form">
+                <n-divider />
+                <n-form inline>
+                  <n-form-item label="来源">
+                    <n-input v-model:value="newTool.source" placeholder="mcp/builtin/capability" size="small" style="width: 120px" />
+                  </n-form-item>
+                  <n-form-item label="工具标识">
+                    <n-input v-model:value="newTool.key" placeholder="tool_key" size="small" style="width: 180px" />
+                  </n-form-item>
+                  <n-form-item label="分组">
+                    <n-input v-model:value="newTool.group" placeholder="分组" size="small" style="width: 100px" />
+                  </n-form-item>
+                  <n-button size="small" type="primary" @click="addTool" :disabled="!newTool.source || !newTool.key">确认</n-button>
+                  <n-button size="small" @click="showAddTool = false">取消</n-button>
+                </n-form>
+              </div>
+            </div>
+          </n-tab-pane>
+
+          <!-- 技能绑定 Tab -->
+          <n-tab-pane name="skills" tab="技能绑定">
+            <div class="modal-section">
+              <n-spin :show="skillLoading">
+                <n-checkbox-group v-model:value="boundSkillIds">
+                  <div class="skill-check-list">
+                    <div v-for="skill in allSkills" :key="skill.id" class="skill-check-item">
+                      <n-checkbox :value="skill.id">
+                        <span class="skill-label">{{ skill.name }}</span>
+                        <n-tag v-if="skill.category" size="tiny" :bordered="false">{{ skill.category }}</n-tag>
+                      </n-checkbox>
+                    </div>
+                  </div>
+                </n-checkbox-group>
+                <n-empty v-if="!allSkills.length && !skillLoading" description="暂无可用技能" size="small" />
+              </n-spin>
+            </div>
+            <template #footer>
+              <div class="modal-footer">
+                <NButton type="primary" :loading="skillSaveLoading" @click="saveSkillBindings">保存</NButton>
+              </div>
+            </template>
+          </n-tab-pane>
+
+          <!-- 推荐问题 Tab -->
+          <n-tab-pane name="questions" tab="推荐问题">
+            <div class="modal-section">
+              <n-form-item label="推荐问题">
+                <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
+              </n-form-item>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
         <template #footer>
           <div class="modal-footer">
-            <NButton type="primary" @click="toolModalVisible = false">
-              完成
-            </NButton>
+            <NButton type="primary" @click="toolModalVisible = false">完成</NButton>
           </div>
         </template>
       </n-modal>
@@ -790,12 +840,17 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   agentAdd,
   agentDelete,
   agentGetById,
   agentPage,
   agentUpdate,
+  agentToolAdd,
+  agentToolDelete,
+  agentToolPage,
+  agentToolUpdate,
   contextConfigAdd,
   contextConfigDelete,
   contextConfigList,
@@ -803,6 +858,10 @@ import {
   modelListByProvider,
   providerPage,
   routePolicyPage,
+  skillAddAgentSkill,
+  skillDeleteAgentSkill,
+  skillGetAgentSkills,
+  skillPage,
   streamAgentChat,
 } from '@/api/ai'
 import { useDict } from '@/composables/useDict'
@@ -810,6 +869,7 @@ import { generateUUID } from '@/utils'
 
 defineOptions({ name: 'AiAgent' })
 
+const router = useRouter()
 const { dict } = useDict('ai_agent_model_selection_mode')
 
 const viewMode = ref('market')
@@ -819,6 +879,18 @@ const publishLoading = ref(false)
 const modelLoading = ref(false)
 const toolModalVisible = ref(false)
 const contextModalVisible = ref(false)
+
+// 工具管理相关
+const agentTools = ref([])
+const showAddTool = ref(false)
+const newTool = reactive({ source: '', key: '', group: 'default' })
+const toolLoading = ref(false)
+
+// 技能绑定相关
+const allSkills = ref([])
+const boundSkillIds = ref([])
+const skillLoading = ref(false)
+const skillSaveLoading = ref(false)
 const baseModalVisible = ref(false)
 const publishMenuVisible = ref(false)
 const baseSaveLoading = ref(false)
@@ -1613,6 +1685,109 @@ function backToMarket() {
   stopChat()
   viewMode.value = 'market'
 }
+
+function goToChat() {
+  if (agentForm.id) {
+    router.push({ path: '/ai/agent/chat', query: { agentId: agentForm.id } })
+  }
+}
+
+// ============================================================
+// 工具与技能管理
+// ============================================================
+
+async function loadAgentTools() {
+  if (!agentForm.id) return
+  toolLoading.value = true
+  try {
+    const res = await agentToolPage({ agentId: agentForm.id, pageNum: 1, pageSize: 200 })
+    agentTools.value = res.data?.records || []
+  } catch { agentTools.value = [] }
+  finally { toolLoading.value = false }
+}
+
+async function addTool() {
+  if (!newTool.source || !newTool.key) return
+  try {
+    await agentToolAdd({
+      agentId: agentForm.id,
+      toolSource: newTool.source,
+      toolKey: newTool.key,
+      toolGroup: newTool.group || 'default',
+      enabled: '1',
+    })
+    newTool.source = ''
+    newTool.key = ''
+    showAddTool.value = false
+    await loadAgentTools()
+  } catch (e) {
+    window.$message.error(e.message || '添加失败')
+  }
+}
+
+async function removeTool(tool) {
+  try {
+    await agentToolDelete(tool.id)
+    await loadAgentTools()
+  } catch (e) {
+    window.$message.error(e.message || '删除失败')
+  }
+}
+
+async function updateToolEnabled(tool, enabled) {
+  try {
+    await agentToolUpdate({ ...tool, enabled: enabled ? '1' : '0' })
+  } catch (e) {
+    tool.enabled = !enabled
+    window.$message.error(e.message || '更新失败')
+  }
+}
+
+async function loadSkills() {
+  skillLoading.value = true
+  try {
+    const [skillRes, boundRes] = await Promise.all([
+      skillPage({ pageNum: 1, pageSize: 200 }),
+      skillGetAgentSkills(agentForm.id),
+    ])
+    allSkills.value = skillRes.data?.records || []
+    boundSkillIds.value = (boundRes.data || []).map(s => s.skillId)
+  } catch {
+    allSkills.value = []
+    boundSkillIds.value = []
+  }
+  finally { skillLoading.value = false }
+}
+
+async function saveSkillBindings() {
+  skillSaveLoading.value = true
+  try {
+    const currentBinds = await skillGetAgentSkills(agentForm.id)
+    const currentIds = (currentBinds.data || []).map(s => s.skillId)
+    // 新增绑定
+    const toAdd = boundSkillIds.value.filter(id => !currentIds.includes(id))
+    // 删除绑定
+    const toRemove = currentIds.filter(id => !boundSkillIds.value.includes(id))
+    for (const skillId of toAdd) {
+      await skillAddAgentSkill({ agentId: agentForm.id, skillId })
+    }
+    for (const skillId of toRemove) {
+      await skillDeleteAgentSkill(agentForm.id, skillId)
+    }
+    window.$message.success('技能绑定已保存')
+  } catch (e) {
+    window.$message.error(e.message || '保存失败')
+  }
+  finally { skillSaveLoading.value = false }
+}
+
+// 打开工具与技能弹窗时加载数据
+watch(toolModalVisible, (visible) => {
+  if (visible) {
+    loadAgentTools()
+    loadSkills()
+  }
+})
 
 function resetConversation() {
   stopChat()

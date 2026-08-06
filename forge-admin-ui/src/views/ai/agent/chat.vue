@@ -29,6 +29,18 @@
 
     <!-- 右侧对话区域 -->
     <div class="chat-main">
+      <!-- Agent 头部信息 -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <n-button v-if="agentId" size="small" text @click="backToBuilder" title="返回Agent设计器">
+            <template #icon><n-icon><arrow-back-outline /></n-icon></template>
+          </n-button>
+          <n-tag v-if="currentAgent" type="info" size="small" :bordered="false">
+            {{ currentAgent.agentName || currentAgent.agentCode }}
+          </n-tag>
+          <span v-if="currentAgent" class="chat-header-title">{{ currentAgent.description }}</span>
+        </div>
+      </div>
       <template v-if="currentSessionId">
         <!-- 消息区域 -->
         <div class="message-area" ref="messageAreaRef">
@@ -122,13 +134,16 @@
 
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { NButton, NInput, NIcon, NTag, NCard, NCollapse, NCollapseItem, NSpace, useMessage } from 'naive-ui'
-import { ChatbubblesOutline, CloseOutline } from '@vicons/ionicons5'
-import { streamEngineChat, engineResume, agentList } from '@/api/ai'
+import { ChatbubblesOutline, CloseOutline, ArrowBackOutline } from '@vicons/ionicons5'
+import { streamEngineChat, engineResume, agentList, agentGetById } from '@/api/ai'
 import { marked } from 'marked'
 
 defineOptions({ name: 'AiAgentChat' })
 
+const route = useRoute()
+const router = useRouter()
 const message = useMessage()
 
 // 会话管理
@@ -141,19 +156,46 @@ const pendingConfirm = ref(null)
 const messageAreaRef = ref(null)
 let abortController = null
 
+// Agent 信息
+const currentAgent = ref(null)
+const agentId = ref(null)
+
 // Agent 选择
 const agents = ref([])
 const selectedAgentCode = ref('')
 
-onMounted(async () => {
+async function loadAgent() {
+  const id = route.query.agentId
+  if (id) {
+    agentId.value = Number(id)
+    try {
+      const res = await agentGetById(agentId.value)
+      currentAgent.value = res.data
+      if (currentAgent.value) {
+        selectedAgentCode.value = currentAgent.value.agentCode
+      }
+    } catch { /* ignore */ }
+  }
+  // 同时加载 agent 列表（供侧栏切换）
   try {
     const res = await agentList()
     agents.value = res.data || []
-    if (agents.value.length > 0) {
-      selectedAgentCode.value = agents.value[0].agentCode
-    }
-  } catch (e) {
-    // ignore
+  } catch { /* ignore */ }
+}
+
+function backToBuilder() {
+  if (agentId.value) {
+    router.push({ path: '/ai/agent', query: { agentId: agentId.value, mode: 'builder' } })
+  } else {
+    router.push('/ai/agent')
+  }
+}
+
+onMounted(async () => {
+  await loadAgent()
+  // 如果没有指定 agentId，默认选第一个
+  if (!selectedAgentCode.value && agents.value.length > 0) {
+    selectedAgentCode.value = agents.value[0].agentCode
   }
 })
 
@@ -396,6 +438,31 @@ function formatTime(time) {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--n-border-color);
+  background: var(--n-color-embedded);
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header-title {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  margin-left: 8px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-area {

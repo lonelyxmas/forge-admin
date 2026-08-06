@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 技能包管理控制器
@@ -49,6 +50,20 @@ public class AiSkillController {
     @SaCheckPermission("ai:skill:list")
     public RespInfo<List<AiAgentSkill>> getAgentSkills(@PathVariable Long agentId) {
         return RespInfo.success(skillService.getAgentSkills(agentId));
+    }
+
+    @PostMapping("/agent/{agentId}")
+    @SaCheckPermission("ai:skill:add")
+    public RespInfo<Void> bindAgentSkill(@PathVariable Long agentId, @RequestBody Map<String, Long> body) {
+        skillService.bindAgentSkill(agentId, body.get("skillId"));
+        return RespInfo.success();
+    }
+
+    @DeleteMapping("/agent/{agentId}/{skillId}")
+    @SaCheckPermission("ai:skill:delete")
+    public RespInfo<Void> unbindAgentSkill(@PathVariable Long agentId, @PathVariable Long skillId) {
+        skillService.unbindAgentSkill(agentId, skillId);
+        return RespInfo.success();
     }
 
     @PostMapping

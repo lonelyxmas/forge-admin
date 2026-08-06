@@ -78,6 +78,41 @@ public class AiSkillService extends ServiceImpl<AiSkillMapper, AiSkill> {
     }
 
     /**
+     * 为 Agent 绑定技能
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void bindAgentSkill(Long agentId, Long skillId) {
+        AiSkill skill = getById(skillId);
+        if (skill == null) {
+            throw new BusinessException("技能不存在");
+        }
+        // 检查是否已绑定
+        List<AiAgentSkill> existing = agentSkillMapper.selectByAgentId(agentId);
+        boolean alreadyBound = existing.stream().anyMatch(s -> s.getSkillId().equals(skillId));
+        if (alreadyBound) {
+            return; // 已绑定，幂等
+        }
+        AiAgentSkill binding = new AiAgentSkill();
+        binding.setAgentId(agentId);
+        binding.setSkillId(skillId);
+        agentSkillMapper.insert(binding);
+    }
+
+    /**
+     * 解除 Agent 技能绑定
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void unbindAgentSkill(Long agentId, Long skillId) {
+        List<AiAgentSkill> bindings = agentSkillMapper.selectByAgentId(agentId);
+        for (AiAgentSkill binding : bindings) {
+            if (binding.getSkillId().equals(skillId)) {
+                agentSkillMapper.deleteById(binding.getId());
+                return;
+            }
+        }
+    }
+
+    /**
      * 新增技能
      */
     @Transactional(rollbackFor = Exception.class)
