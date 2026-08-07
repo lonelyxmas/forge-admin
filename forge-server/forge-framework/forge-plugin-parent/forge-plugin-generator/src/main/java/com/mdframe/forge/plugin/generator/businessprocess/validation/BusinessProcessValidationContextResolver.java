@@ -16,7 +16,7 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessPermissionMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessProcessVersionMapper;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
-import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessFlowModelVO;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessageTemplate;
 import com.mdframe.forge.plugin.message.service.MessageTemplateService;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -105,11 +106,23 @@ public class BusinessProcessValidationContextResolver {
         if (schema == null) {
             return context;
         }
-        resolveFlowModels(schema, objectIdsByCode.keySet(), context);
+        resolveFlowModels(schema, context);
         resolveFormAssets(schema, objects, context);
         resolveMessageTemplates(schema, context);
         resolvePublishedSubProcesses(tenantId, applicationId, context);
         return context;
+    }
+
+    /**
+     * 返回当前租户有权引用且能够通过发布检查的审批模型目录。
+     */
+    public List<BusinessProcessFlowModelVO> resolveAvailableFlowModels(Long tenantId, Long applicationId) {
+        if (tenantId == null || tenantId <= 0 || applicationId == null || applicationId <= 0) {
+            throw new BusinessException("缺少有效的租户或业务应用上下文");
+        }
+        // Flowable 模型是租户级可复用审批资产，不能通过主对象 FLOW Binding
+        // 反向推导应用流程的可选目录。
+        return resolveFlowModelCatalog();
     }
 
     private Map<Long, AiBusinessObjectDesignVersion> loadPublishedObjectVersions(
@@ -176,48 +189,69 @@ public class BusinessProcessValidationContextResolver {
     }
 
     private void resolveFlowModels(BusinessProcessSchema schema,
-                                   Set<String> applicationObjectCodes,
                                    BusinessProcessValidationContext context) {
-        Set<String> available = new LinkedHashSet<>();
-        for (String modelKey : safeList(schema.getDependencies().getFlowModels())) {
-            try {
-                boolean belongsToApplication = safeList(
-                        businessFlowService.listBusinessBindingsByModelKey(modelKey)).stream()
-                        .map(BusinessBindingSummaryVO::getObjectCode)
-                        .anyMatch(applicationObjectCodes::contains);
-                if (belongsToApplication && isPublishedFlowModel(modelKey)) {
-                    available.add(modelKey);
-                }
-            } catch (Exception exception) {
-                log.debug("业务流程校验无法解析流程模型: modelKey={}", modelKey, exception);
-                // 不可解析的模型保持不可用，由校验器返回稳定问题码。
-            }
-        }
+        Set<String> required = new LinkedHashSet<>(safeList(schema.getDependencies().getFlowModels()));
+        Set<String> available = resolveFlowModelCatalog().stream()
+                .map(BusinessProcessFlowModelVO::getModelKey)
+                .filter(required::contains)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         context.setAvailableFlowModelKeys(available);
     }
 
-    private boolean isPublishedFlowModel(String modelKey) {
+    private List<BusinessProcessFlowModelVO> resolveFlowModelCatalog() {
         FlowClient flowClient = flowClientProvider.getIfAvailable();
         if (flowClient == null) {
-            return false;
+            return List.of();
         }
         try {
-            FlowResult<Map<String, Object>> response = flowClient.getModelByKey(modelKey);
+            FlowResult<List<Map<String, Object>>> response = flowClient.getModelList(null, 1);
             if (response == null || !response.isSuccess() || response.getData() == null) {
-                return false;
+                return List.of();
             }
-            Map<String, Object> model = response.getData();
-            Integer status = integer(model.get("status"));
-            Integer version = integer(model.get("version"));
-            return Integer.valueOf(1).equals(status)
-                    && version != null
-                    && version > 0
-                    && StringUtils.isNotBlank(text(model.get("processDefinitionId")))
-                    && StringUtils.isNotBlank(text(model.get("deploymentId")));
+            List<BusinessProcessFlowModelVO> result = new ArrayList<>();
+            for (Map<String, Object> model : response.getData()) {
+                if (!isPublishedFlowModel(model)) {
+                    continue;
+                }
+                String designerType = StringUtils.trimToNull(text(model.get("designerType")));
+                if ("business".equalsIgnoreCase(designerType)) {
+                    continue;
+                }
+                BusinessProcessFlowModelVO item = new BusinessProcessFlowModelVO();
+                item.setModelId(StringUtils.firstNonBlank(text(model.get("modelId")), text(model.get("id"))));
+                item.setModelKey(StringUtils.firstNonBlank(text(model.get("modelKey")), text(model.get("key"))));
+                if (StringUtils.isBlank(item.getModelKey())) {
+                    continue;
+                }
+                item.setModelName(StringUtils.firstNonBlank(
+                        text(model.get("modelName")), text(model.get("name")), item.getModelKey()));
+                item.setStatus(integer(model.get("status")));
+                item.setVersion(integer(model.get("version")));
+                item.setProcessDefinitionId(text(model.get("processDefinitionId")));
+                item.setDeploymentId(text(model.get("deploymentId")));
+                item.setDeployed(Boolean.TRUE);
+                result.add(item);
+            }
+            result.sort(Comparator.comparing(BusinessProcessFlowModelVO::getModelName,
+                    Comparator.nullsLast(String::compareToIgnoreCase)));
+            return result;
         } catch (Exception exception) {
-            log.debug("业务流程校验无法确认流程模型发布状态: modelKey={}", modelKey, exception);
+            log.debug("业务流程校验无法读取租户审批模型目录", exception);
+            return List.of();
+        }
+    }
+
+    private boolean isPublishedFlowModel(Map<String, Object> model) {
+        if (model == null || model.isEmpty()) {
             return false;
         }
+        Integer status = integer(model.get("status"));
+        Integer version = integer(model.get("version"));
+        return Integer.valueOf(1).equals(status)
+                && version != null
+                && version > 0
+                && StringUtils.isNotBlank(text(model.get("processDefinitionId")))
+                && StringUtils.isNotBlank(text(model.get("deploymentId")));
     }
 
     private void resolveFormAssets(BusinessProcessSchema schema,

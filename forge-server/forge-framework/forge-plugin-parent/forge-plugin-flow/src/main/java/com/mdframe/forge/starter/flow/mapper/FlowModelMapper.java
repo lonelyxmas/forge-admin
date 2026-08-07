@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.job.flow.JobFlowBindingSnapshot;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,6 +30,12 @@ public interface FlowModelMapper extends BaseMapper<FlowModel> {
     Map<String, Object> selectStatusStatistics(@Param("modelName") String modelName,
                                                @Param("category") String category,
                                                @Param("createBy") String createBy);
+
+    /**
+     * 查询当前租户已发布流程模型目录。
+     */
+    List<FlowModel> selectEnabledModels(@Param("tenantId") Long tenantId,
+                                        @Param("category") String category);
 
     JobFlowBindingSnapshot selectPublishedJobBinding(
             @Param("tenantId") Long tenantId,

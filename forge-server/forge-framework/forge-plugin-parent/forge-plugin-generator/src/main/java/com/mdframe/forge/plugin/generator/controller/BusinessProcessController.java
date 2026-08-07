@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.generator.dto.businessprocess.BusinessProcessDTO
 import com.mdframe.forge.plugin.generator.dto.businessprocess.BusinessProcessSchemaDTO;
 import com.mdframe.forge.plugin.generator.service.businessprocess.BusinessProcessService;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessFlowModelVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 应用级业务流程定义控制面接口。
@@ -85,6 +88,13 @@ public class BusinessProcessController {
     @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务流程设计草稿")
     public RespInfo<BusinessProcessVO> designer(@PathVariable Long id) {
         return RespInfo.success(businessProcessService.getDesigner(id));
+    }
+
+    @GetMapping("/{id}/flow-models")
+    @SaCheckPermission("ai:businessProcess:list")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询当前流程可引用审批模型")
+    public RespInfo<List<BusinessProcessFlowModelVO>> availableFlowModels(@PathVariable Long id) {
+        return RespInfo.success(businessProcessService.availableFlowModels(id));
     }
 
     @PutMapping("/{id}/schema")

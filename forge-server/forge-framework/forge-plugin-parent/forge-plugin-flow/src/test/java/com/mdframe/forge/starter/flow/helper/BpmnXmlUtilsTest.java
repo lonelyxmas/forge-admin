@@ -3,6 +3,7 @@ package com.mdframe.forge.starter.flow.helper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -83,5 +84,25 @@ class BpmnXmlUtilsTest {
 
         assertFalse(result.hasRepairs());
         assertEquals(xml, result.getBpmnXml());
+    }
+
+    @Test
+    void shouldRejectDoctypeBeforeReadingExternalEntities() {
+        String xml = """
+                <?xml version="1.0"?>
+                <!DOCTYPE definitions [
+                  <!ENTITY external SYSTEM "file:///etc/passwd">
+                ]>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                  <process id="unsafe" isExecutable="true">
+                    <documentation>&external;</documentation>
+                  </process>
+                </definitions>
+                """;
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> BpmnXmlUtils.normalizeDuplicateSequenceFlows(xml));
+
+        assertTrue(exception.getMessage().startsWith("BPMN XML 解析失败："));
     }
 }

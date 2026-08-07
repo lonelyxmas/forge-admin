@@ -11,6 +11,7 @@ const processApiMocks = vi.hoisted(() => ({
   createBusinessProcess: vi.fn(),
   copyBusinessProcess: vi.fn(),
   businessProcessDesigner: vi.fn(),
+  businessProcessFlowModels: vi.fn(),
   saveBusinessProcessSchema: vi.fn(),
   validateBusinessProcess: vi.fn(),
   updateBusinessProcessStatus: vi.fn(),
@@ -340,12 +341,22 @@ describe('full-screen business process designer page', () => {
     Object.values(processApiMocks).forEach(mock => mock.mockReset())
     Object.values(applicationApiMocks).forEach(mock => mock.mockReset())
     Object.values(catalogApiMocks).forEach(mock => mock.mockReset())
-    flowApiMocks.getModelList.mockReset()
     messageApiMocks.getTemplatePage.mockReset()
     routerMocks.push.mockReset()
     routeGuardState.callback = null
 
     processApiMocks.businessProcessDesigner.mockResolvedValue(designerResponse())
+    processApiMocks.businessProcessFlowModels.mockResolvedValue({
+      data: [{
+        modelId: '2001',
+        modelKey: 'sample_purchase_order_approval',
+        modelName: '采购审批',
+        status: 1,
+        version: 1,
+        deploymentId: 'dep-1',
+        deployed: true,
+      }],
+    })
     processApiMocks.businessProcessPage.mockResolvedValue(processPageResponse())
     processApiMocks.saveBusinessProcessSchema.mockResolvedValue(designerResponse({ draftSchemaHash: 'b'.repeat(64) }))
     processApiMocks.validateBusinessProcess.mockResolvedValue({
@@ -355,7 +366,6 @@ describe('full-screen business process designer page', () => {
     catalogApiMocks.businessObjectFields.mockResolvedValue({ data: [{ fieldCode: 'status', fieldName: '状态' }] })
     catalogApiMocks.businessObjectActions.mockResolvedValue({ data: [{ actionCode: 'submit', actionName: '提交', status: 1 }] })
     catalogApiMocks.businessFlowFormAssets.mockResolvedValue({ data: { formAssets: [{ formKey: 'purchase_form' }] } })
-    flowApiMocks.getModelList.mockResolvedValue({ data: [{ id: '2001', modelKey: 'sample_purchase_order_approval', status: 1, deploymentId: 'dep-1' }] })
     messageApiMocks.getTemplatePage.mockResolvedValue({ data: { records: [{ templateCode: 'purchase_notice', templateName: '采购通知', status: 1 }] } })
     window.$message = { success: vi.fn(), error: vi.fn(), warning: vi.fn() }
   })
@@ -371,7 +381,7 @@ describe('full-screen business process designer page', () => {
 
     expect(processApiMocks.businessProcessDesigner).toHaveBeenCalledWith(processRecord.id)
     expect(catalogApiMocks.businessObjectFields).toHaveBeenCalledWith(applicationObjects[0].objectId)
-    expect(flowApiMocks.getModelList).toHaveBeenCalledWith({ status: 1 })
+    expect(processApiMocks.businessProcessFlowModels).toHaveBeenCalledWith(processRecord.id)
 
     await wrapper.find('[data-dirty]').trigger('click')
     await wrapper.find('[data-save]').trigger('click')

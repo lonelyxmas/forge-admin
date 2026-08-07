@@ -12,7 +12,6 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessPermissionMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessProcessVersionMapper;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
-import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessageTemplate;
 import com.mdframe.forge.plugin.message.service.MessageTemplateService;
 import org.junit.jupiter.api.DisplayName;
@@ -65,16 +64,16 @@ class BusinessProcessValidationContextResolverTest {
                 .thenReturn(List.of(objectVersion));
         when(processVersionMapper.selectCurrentPublishedByApplication(1L, 10L))
                 .thenReturn(List.of(childVersion));
-        BusinessBindingSummaryVO binding = new BusinessBindingSummaryVO();
-        binding.setObjectCode("order");
-        when(flowService.listBusinessBindingsByModelKey("order_approval"))
-                .thenReturn(List.of(binding));
         when(flowClientProvider.getIfAvailable()).thenReturn(flowClient);
-        when(flowClient.getModelByKey("order_approval")).thenReturn(FlowResult.success(Map.of(
+        when(flowClient.getModelList(null, 1)).thenReturn(FlowResult.success(List.of(Map.of(
                 "status", 1,
+                "id", "model-100",
+                "modelKey", "order_approval",
+                "modelName", "订单审批",
+                "designerType", "approval",
                 "version", 3,
                 "processDefinitionId", "order_approval:3:100",
-                "deploymentId", "deployment-1")));
+                "deploymentId", "deployment-1"))));
         when(flowService.getFormAssets("order")).thenReturn(Map.of(
                 "formAssets", List.of(Map.of("formKey", "order_form"))));
         when(permissionMapper.selectExistingPermissions(
@@ -103,18 +102,25 @@ class BusinessProcessValidationContextResolverTest {
         assertTrue(context.getSubProcessDependencies().get("child_process").contains("leaf_process"));
         assertFalse(context.isCapabilityBridgeAvailable());
 
-        when(flowClient.getModelByKey("order_approval")).thenReturn(FlowResult.success(Map.of(
+        var availableModels = resolver.resolveAvailableFlowModels(1L, 10L);
+        assertEquals(1, availableModels.size());
+        assertEquals("model-100", availableModels.get(0).getModelId());
+        assertEquals("order_approval", availableModels.get(0).getModelKey());
+        assertEquals("订单审批", availableModels.get(0).getModelName());
+        when(flowClient.getModelList(null, 1)).thenReturn(FlowResult.success(List.of(Map.of(
                 "status", 0,
-                "deploymentId", "")));
+                "modelKey", "order_approval",
+                "deploymentId", ""))));
         BusinessProcessValidationContext unpublishedContext = resolver.resolve(
                 1L, 10L, "order_submit", schema);
         assertFalse(unpublishedContext.getAvailableFlowModelKeys().contains("order_approval"));
 
-        when(flowClient.getModelByKey("order_approval")).thenReturn(FlowResult.success(Map.of(
+        when(flowClient.getModelList(null, 1)).thenReturn(FlowResult.success(List.of(Map.of(
                 "status", 1,
+                "modelKey", "order_approval",
                 "version", 0,
                 "processDefinitionId", "order_approval:0:100",
-                "deploymentId", "deployment-0")));
+                "deploymentId", "deployment-0"))));
         BusinessProcessValidationContext invalidVersionContext = resolver.resolve(
                 1L, 10L, "order_submit", schema);
         assertFalse(invalidVersionContext.getAvailableFlowModelKeys().contains("order_approval"));

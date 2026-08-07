@@ -480,3 +480,53 @@
 - [ ] 旧配置和运行中实例在迁移、停写和回滚阶段均可追溯，不物理删除。
 - [ ] 状态、审批权限、定时身份、外部调用和迁移完成专项人工审查。
 - [ ] `spec.md/tasks.md/test-spec.md/execution-log.md` 与实际实现和验证结果一致。
+
+## Task 20：业务流程设计器可用性修复
+
+**状态：completed（2026-08-07）**。上一轮只覆盖构造图，并错误要求审批模型必须存在对象 `FLOW Binding`；本轮已按 20A/20B/20C 完成纠偏。真实 Admin/Flow 发布和审批实例联调仍属于 Task 19，不用受控前端回归代替。
+
+- **目标**：修复应用级业务流程设计器中审批模型目录、条件分支、画布连线、中文语义和节点删除的产品断层，使新增、配置、删除、保存和发布形成一致闭环。
+- **涉及文件**：
+  - `forge-server/forge-flow/forge-flow-client/src/main/java/com/mdframe/forge/flow/client/FlowClient.java` — 修正模型列表响应类型，供应用级目录读取租户已发布审批资产。
+  - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/controller/BusinessProcessController.java` — 提供当前流程可引用的租户已发布审批模型目录，不要求对象 `FLOW Binding`。
+  - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessprocess/BusinessProcessService.java` — 保持流程所属应用权限校验，但不把对象绑定作为模型目录门禁。
+  - `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/businessprocess/validation/BusinessProcessValidationContextResolver.java` — 目录和发布检查统一验证模型状态、版本、部署和权限可见性。
+  - `forge-admin-ui/src/api/business-process.js` 与 `forge-admin-ui/src/views/app-center/business-process.[processId].vue` — 改用当前流程审批模型目录，并把不可用原因以中文业务提示展示。
+  - `forge-admin-ui/src/components/flow-designer/panel/condition-expression.js` — 抽取原审批设计器已有的结构化规则归一化、表达式生成和反解析能力。
+  - `forge-admin-ui/src/components/flow-designer/panel/ConditionConfig.vue` — 消费共享表达式工具，保持既有 BPMN 条件配置兼容。
+  - `forge-admin-ui/src/components/business-process-designer/BusinessProcessConditionConfig.vue` — 提供中文字段、关系、取值、AND/OR 和默认分支配置，不向普通用户暴露技术端口或表达式。
+  - `forge-admin-ui/src/components/business-process-designer/useBusinessProcessDesigner.js` — 原子同步条件 branches、ports 与 outgoing edges；支持安全删除多出口节点并恢复 DAG。
+  - `forge-admin-ui/src/components/business-process-designer/business-process-layout.js` — 新增业务 DAG 分层布局和端口/汇合锚点路由，不再把业务卡片当作 BPMN 网关。
+  - `forge-admin-ui/src/components/business-process-designer/BusinessProcessCanvas.vue`、`BusinessProcessNodeRenderer.vue`、`BusinessProcessDesigner.vue` — 接入独立布局，统一中文结果标签，并把删除按钮直接放在可删除节点卡片上。
+- **测试先行**：
+  - 条件节点插入后保持开始、条件、公共后继主轴居中，二至多分支连线和插入按钮互不重叠。
+  - 新增、删除、重命名条件分支时，节点端口与真实出边一一同步且图校验通过。
+  - 删除条件/审批多出口节点时，所有入边安全接回唯一公共后继，不残留悬空边或重复边。
+  - 节点卡片只显示“审批通过、审批驳回、审批取消、执行失败、条件满足、其他情况”等中文业务语义，删除按钮可单独点击且不触发节点选择。
+  - 审批模型目录只返回当前租户有权限且已发布/已部署的模型；不要求对象 `FLOW Binding`，失效模型以中文问题提示阻断发布。
+- **验收**：新建流程后可直接选择租户已发布审批模型；条件分支可用结构化规则完成配置；不同下游、汇合、共享后继和旧草稿读入均保持稳定；普通用户界面不出现 `APPROVED/MATCHED/OTHERWISE` 等技术枚举。
+
+### Task 20A：审批目录解除对象绑定门禁
+
+- [x] 修改 `FlowClient.getModelList` 返回 `FlowResult<List<Map<String,Object>>>`，通过 Flow Client 编译及 Generator 目录映射回归验证响应合同。
+- [x] `BusinessProcessValidationContextResolver` 从模型列表构造目录，只保留已启用且具有正版本、部署 ID 和流程定义 ID 的模型；删除按对象代码查询 `FLOW Binding` 的目录门禁。
+- [x] 目录与发布校验共用同一模型有效性判定，覆盖“无对象 FLOW Binding 仍可选择/发布”“未部署模型不可选择”“失效版本阻断发布”和可信租户隔离。
+
+### Task 20B：业务画布独立 DAG 布局
+
+- [x] 新增纯函数 `business-process-layout.js`，使用 `dagre` 多边图从节点入度/出度分层，固定业务卡片尺寸，按端口顺序分配源端锚点和汇合节点入端锚点，保证每条边有唯一路径。
+- [x] `BusinessProcessCanvas.vue` 改用该布局；插入按钮使用真实路径最长线段中点；不修改 BPMN `layout-engine.js` 和 DingFlowDesigner 行为。
+- [x] 覆盖条件多分支分别进入下游卡片再汇合、审批多结果共享后继、跨层直达边绕过中间卡片、绕行线与汇合线不重叠；孤立、重复或悬空边继续由图校验失败关闭，不以 JSON 可解析替代合法性。
+
+### Task 20C：旧草稿归一化与用户语义
+
+- [x] 读入旧草稿时恢复审批固定端口顺序和条件分支顺序；重复、孤立或悬空连线无法安全推断时保留并生成阻断问题，不静默把错误分支接到其它节点。
+- [x] 条件分支继续复用 `condition-expression.js`，默认分支不生成条件表达式；结果标签和问题提示全部使用中文。
+- [x] 卡片删除、分支增删、下游插入后执行客户端图校验并保留撤销记录；受控浏览器回归覆盖真实 Schema 装配、结构化条件和卡片删除。
+
+## Task 21：低代码应用/对象信息架构收口
+
+- [ ] `BusinessObjectDesignerShell.vue` 与 `object-designer.[objectCode].vue`：对象普通导航只保留基本信息、数据结构、关联关系、表单资产和对象级检查；旧流程、触发器、动作和应用数据权限入口迁移到高级兼容区并标明只读/迁移状态。
+- [ ] `application-workspace/ApplicationWorkspaceNav.vue`、`ApplicationProcessPanel.vue` 和页面设计入口：应用工作台收口页面/列表视图、业务流程/自动化、角色数据权限和发布；列表设计从对象入口迁移为应用页面配置，支持继承对象默认列表预设。
+- [ ] 增加产品文案和发布就绪检查映射：对象缺字段/关系/表单是对象问题，流程模型/触发器/角色范围是应用问题，不再出现跨层复合错误。
+- [ ] 为导航唯一写入口、列表视图归属、关系保留在对象层和数据权限两层合同增加前端路由/组件测试；迁移前旧配置只读可查，不物理删除。

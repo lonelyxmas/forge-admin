@@ -56,6 +56,7 @@ class BusinessProcessControllerTest {
         Method copy = BusinessProcessController.class.getDeclaredMethod("copy", Long.class, BusinessProcessDTO.class);
         Method update = BusinessProcessController.class.getDeclaredMethod("update", BusinessProcessDTO.class);
         Method designer = BusinessProcessController.class.getDeclaredMethod("designer", Long.class);
+        Method flowModels = BusinessProcessController.class.getDeclaredMethod("availableFlowModels", Long.class);
         Method saveSchema = BusinessProcessController.class.getDeclaredMethod(
                 "saveSchema", Long.class, BusinessProcessSchemaDTO.class);
         Method validate = BusinessProcessController.class.getDeclaredMethod("validate", Long.class);
@@ -67,6 +68,7 @@ class BusinessProcessControllerTest {
         assertArrayEquals(new String[]{"/{id}/copy"}, copy.getAnnotation(PostMapping.class).value());
         assertNotNull(update.getAnnotation(PutMapping.class));
         assertArrayEquals(new String[]{"/{id}/designer"}, designer.getAnnotation(GetMapping.class).value());
+        assertArrayEquals(new String[]{"/{id}/flow-models"}, flowModels.getAnnotation(GetMapping.class).value());
         assertArrayEquals(new String[]{"/{id}/schema"}, saveSchema.getAnnotation(PutMapping.class).value());
         assertArrayEquals(new String[]{"/{id}/validate"}, validate.getAnnotation(PostMapping.class).value());
         assertArrayEquals(new String[]{"/{id}/status"}, status.getAnnotation(PutMapping.class).value());
@@ -76,6 +78,7 @@ class BusinessProcessControllerTest {
         assertPermission(copy, "ai:businessProcess:copy");
         assertPermission(update, "ai:businessProcess:edit");
         assertPermission(designer, "ai:businessProcess:list");
+        assertPermission(flowModels, "ai:businessProcess:list");
         assertPermission(saveSchema, "ai:businessProcess:edit");
         assertPermission(validate, "ai:businessProcess:validate");
         assertPermission(status, "ai:businessProcess:status");

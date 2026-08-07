@@ -78,7 +78,9 @@ const canCopySelected = computed(() => canEditSelected.value
   && !isBusinessProcessStartType(selectedNode.value.type)
   && selectedNode.value.type !== 'END'
   && designer.getOutgoingEdges(selectedNode.value.id).length === 1)
-const canDeleteSelected = computed(() => canCopySelected.value)
+const canDeleteSelected = computed(() => canEditSelected.value
+  && !isBusinessProcessStartType(selectedNode.value.type)
+  && selectedNode.value.type !== 'END')
 
 const initialStart = designer.schema.value.nodes.find(node => isBusinessProcessStartType(node.type))
 designer.selectNode(initialStart?.id)
@@ -173,12 +175,29 @@ function handleCopyNode() {
   }
 }
 
-function handleDeleteNode() {
-  if (!canDeleteSelected.value)
+function handleDeleteNode(node = selectedNode.value) {
+  if (!node || props.readonly || isBusinessProcessStartType(node.type) || node.type === 'END')
     return
+  designer.selectNode(node.id)
+  const dialog = window.$dialog
+  if (!dialog) {
+    performDeleteNode(node)
+    return
+  }
+  dialog.warning({
+    title: '删除节点',
+    content: `确认删除“${node.name || '当前节点'}”吗？删除后会自动恢复前后节点连线。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => performDeleteNode(node),
+  })
+}
+
+function performDeleteNode(node) {
   operationError.value = ''
   try {
-    designer.deleteNode(selectedNode.value.id)
+    designer.deleteNode(node.id)
+    drawerVisible.value = false
   }
   catch (error) {
     operationError.value = error.message
@@ -189,19 +208,27 @@ function handleDrawerSave(node, metadata = {}) {
   const current = designer.getNode(node.id)
   if (!current)
     return
-  if (isBusinessProcessStartType(current.type) && node.type !== current.type) {
-    designer.changeStartType(node.id, node.type, {
+  operationError.value = ''
+  try {
+    if (isBusinessProcessStartType(current.type) && node.type !== current.type) {
+      designer.changeStartType(node.id, node.type, {
+        name: node.name,
+        config: node.config,
+        recordIdSource: metadata.recordIdSource,
+      })
+      return
+    }
+    designer.updateNode(node.id, {
       name: node.name,
+      ports: node.ports,
       config: node.config,
-      recordIdSource: metadata.recordIdSource,
     })
-    return
   }
-  designer.updateNode(node.id, {
-    name: node.name,
-    ports: node.ports,
-    config: node.config,
-  })
+  catch (error) {
+    metadata.reject?.()
+    operationError.value = error.message
+    drawerVisible.value = true
+  }
 }
 
 function handleValidate() {
@@ -238,6 +265,11 @@ function locateIssue(item) {
   if (item.nodeId)
     designer.selectNode(item.nodeId)
   emit('locateIssue', item)
+}
+
+function issueLocation(item) {
+  const node = item?.nodeId ? designer.getNode(item.nodeId) : null
+  return node ? `节点：${node.name || '未命名节点'}` : '流程结构'
 }
 
 function handleBeforeUnload(event) {
@@ -293,7 +325,7 @@ defineExpose({
         <NButton size="small" :disabled="!canCopySelected" @click="handleCopyNode">
           复制节点
         </NButton>
-        <NButton size="small" type="error" secondary :disabled="!canDeleteSelected" @click="handleDeleteNode">
+        <NButton size="small" type="error" secondary :disabled="!canDeleteSelected" @click="handleDeleteNode()">
           删除节点
         </NButton>
         <NButton data-designer-action="validate" size="small" @click="handleValidate">
@@ -362,6 +394,7 @@ defineExpose({
           :palette="palette"
           :dragging-node-type="draggingNodeType"
           @node-select="handleNodeSelect"
+          @node-delete="handleDeleteNode"
           @insert-node="handleInsertNode"
         />
       </main>
@@ -383,7 +416,7 @@ defineExpose({
             @click="locateIssue(item)"
           >
             <strong>{{ item.message }}</strong>
-            <span>{{ item.code }}<template v-if="item.nodeId"> · {{ item.nodeId }}</template></span>
+            <span>{{ issueLocation(item) }}</span>
           </button>
           <div v-if="!issues.length" class="issue-empty">
             当前图结构完整；发布前仍需执行服务端依赖与权限校验。

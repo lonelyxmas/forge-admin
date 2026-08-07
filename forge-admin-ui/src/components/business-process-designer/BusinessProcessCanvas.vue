@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import EdgeLayer from '../flow-designer/canvas/EdgeLayer.vue'
 import FlowCanvas from '../flow-designer/canvas/FlowCanvas.vue'
-import { layoutFlow } from '../flow-designer/canvas/layout-engine.js'
+import { layoutBusinessProcess } from './business-process-layout.js'
 import {
   BUSINESS_PROCESS_NODE_DRAG_MIME,
   getBusinessProcessNodeDefinition,
@@ -18,7 +18,7 @@ const props = defineProps({
   draggingNodeType: { type: String, default: '' },
 })
 
-const emit = defineEmits(['nodeSelect', 'canvasClick', 'insertNode'])
+const emit = defineEmits(['nodeSelect', 'nodeDelete', 'canvasClick', 'insertNode'])
 
 const DEFAULT_PALETTE = ['CONDITION', 'ACTION', 'APPROVAL', 'SUB_PROCESS']
   .map(type => ({ type, ...getBusinessProcessNodeDefinition(type) }))
@@ -28,21 +28,11 @@ const activeDropEdgeId = ref('')
 const effectivePalette = computed(() => props.palette.length ? props.palette : DEFAULT_PALETTE)
 
 const layoutInput = computed(() => ({
-  nodes: (props.schema?.nodes || []).map(node => ({
-    id: node.id,
-    nodeType: layoutNodeType(node.type),
-  })),
-  edges: (props.schema?.edges || []).map(edge => ({ ...edge })),
+  nodes: props.schema?.nodes || [],
+  edges: props.schema?.edges || [],
 }))
 
-const layoutResult = computed(() => layoutFlow(layoutInput.value, {
-  NODE_WIDTH: 288,
-  NODE_HEIGHT: 92,
-  V_GAP: 72,
-  H_GAP: 84,
-  MARGIN_TOP: 64,
-  MARGIN_LEFT: 220,
-}))
+const layoutResult = computed(() => layoutBusinessProcess(layoutInput.value))
 
 const insertionTargets = computed(() => layoutInput.value.edges.map((edge) => {
   const path = layoutResult.value.edgePaths.get(edge.id)?.points || []
@@ -51,16 +41,6 @@ const insertionTargets = computed(() => layoutInput.value.edges.map((edge) => {
     position: insertionPosition(path, edge),
   }
 }).filter(target => target.position))
-
-function layoutNodeType(type) {
-  if (type?.startsWith('START_'))
-    return 'start'
-  if (type === 'CONDITION')
-    return 'condition'
-  if (type === 'END')
-    return 'end'
-  return 'service'
-}
 
 function handleNodeSelect(node) {
   emit('nodeSelect', node)
@@ -173,6 +153,7 @@ defineExpose({
           :selected="selectedNodeId === node.id"
           :readonly="readonly"
           @select="handleNodeSelect"
+          @delete="emit('nodeDelete', $event)"
         />
 
         <BusinessProcessAddNodeButton

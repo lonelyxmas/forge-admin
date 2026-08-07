@@ -13,6 +13,7 @@
 - 协议基线：冻结 `businessProcessJson 1.0`、三类完整样例、可信身份矩阵、Process/Node/Approval 状态机与 CAS 条件。
 - 安全结论：DAG、单活动审批、受限定时普通用户、同应用子流程深度 5、分阶段旧入口停写、禁止自由 Webhook；任一身份/权限/版本/关联不可信时失败关闭。
 - 已启动服务：无。
+
 - 数据库/运行态变更：无。
 - 文档检查：四份变更文档通过 `git diff --no-index --check`，无空白错误。
 - 协议检查：Ruby `JSON.parse` 成功解析 `test-spec.md` 中 3 个 JSON 协议样例；Ruby 输出一条系统目录权限 warning，不影响解析结论。
@@ -168,4 +169,62 @@
 - 聚合编译：边界修正后重跑 `JAVA_HOME=<JDK17> mvn -pl forge-admin-server -am -DskipTests compile`，47/47 模块 `BUILD SUCCESS`；仅保留仓库既有 deprecation、unchecked 和 Lombok `@Builder` warning。
 - generator 全量基线（边界修正前）：执行 `mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator test`，共 561 项，555 项通过，2 failures + 4 errors。失败为未被 Task 12 修改的 `FormulaExecutionEngineLookupTest`、`FormulaValueMaskerTest`、`BusinessBindingApplicationTargetTest`、`BusinessExtensionVersionServiceTest`（2 项）和 `LowcodeRuntimeConfigBuilderTest`；Task 12 定向类全部通过，本轮未越界修改这些存量失败。边界修正后未重复消耗时间执行同一已知失败全量，改以覆盖修改类的 `46/46` 定向测试和 47 模块聚合编译闭环。
 - 跳过项：未启动 Admin/Flow，未执行 Flyway、真实数据库发布/回滚、加密 HTTP 或 Flowable 部署联调；本任务没有新增数据库脚本，真实新旧实例并存验收留待 Task 19。
+- 已启动服务：无；数据库/Flowable 运行态变更：无。
+
+## 2026-08-07 业务画布审批结果连线错乱修复
+
+- 问题复现：默认草稿插入审批节点后，四条审批结果边都指向原 `end_success`。共享布局器把同一个结束节点当成四个独立分支头，首次回归得到结束节点 `x=-338`、主轴 `x=220`，与用户截图中的左移结束节点和长水平折线一致。
+- TDD 红灯：新增“共享审批后继保持居中且结果路由可区分”用例；首次执行业务画布测试为 `13 passed / 1 failed`，失败断言为 `expected -338 to be 220`，确认测试覆盖真实根因。
+- 布局修复：`BusinessProcessCanvas` 只读适配层按入度为业务 DAG 节点补充 `mergeNode` 布局提示，不写回持久化协议；多条同源同目标结果边按来源端口顺序使用独立起止锚点和插入位置。`BusinessProcessNodeRenderer` 将可见端口改为等宽栅格，使标签、连线和添加按钮保持同序对齐。
+- 定向测试：Node `v20.19.0` 下单文件回归 `14/14` 通过；组合执行业务设计器、工作台、BPMN roundtrip、JSON→BPMN、layout-algorithm、FlowCanvas 和 layout-engine 共 7 个测试文件，结果 `68/68` 通过，Failures/Errors/Skipped 均为 0。
+- 静态检查：三份目标文件 ESLint 通过；目标差异 `git diff --check` 通过。
+- 浏览器证据：按 `webapp-testing` 流程临时启动受控 Vite `127.0.0.1:3018` 并拦截控制面 API，真实路由渲染 3 个节点和 5 条边；开始/审批/结束屏幕 x 坐标均为 `1121.34375`，四个结果插入目标 x 分别为 `1162.9/1220.5/1278.1/1335.7`，四条结果 SVG 路径唯一，页面脚本错误为 0；截图保存于 `/tmp/forge-business-process-canvas-fixed.png`。
+- 浏览器环境告警：首轮通过时有 1 条未定位资源的 `net::ERR_CONNECTION_REFUSED` 控制台提示；后续复跑遇到开发态 UnoCSS 工具类未及时生成，等候 `position:absolute` 超时。该告警未出现在组件测试或生产构建，未将复跑标记为通过；所有临时 `3018` Vite/preview 进程均已由脚本停止。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8874` 个模块并成功构建（`built in 1m 54s`）。保留仓库既有组件命名冲突、动态/静态 import 和 CSS `//` 注释警告，无新增阻断。
+- 跳过项：未启动 Admin/Flow，未调用真实加密 HTTP、未读取或保存用户真实草稿，未执行 MySQL/Flyway 或改变 Flowable 运行态。
+- 已启动服务：仅浏览器验证临时启动 Vite/preview，均已停止；数据库/Flowable 运行态变更：无。
+
+## 2026-08-07 Flowable BPMN XML 解析兼容性修复
+
+- 根因：`BpmnXmlUtils` 直接向当前 JAXP `DocumentBuilderFactory`/`TransformerFactory` 设置 `ACCESS_EXTERNAL_*` 属性；旧 parser/provider 不识别 `http://javax.xml.XMLConstants/property/accessExternalDTD`，导致部署在 XML 归一化前失败。
+- 修复：将外部访问属性改为兼容性设置；保留 `disallow-doctype-decl`、外部实体禁用和不展开实体的强制安全配置。`process id` 已匹配模型 Key 时降为 debug 日志。
+- 回归测试：`JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-flow -Dtest=BpmnXmlUtilsTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 结果：`3/3` 通过（重复连线归一化、条件连线保留、DOCTYPE 拒绝）；Flow 模块生产编译/打包成功。测试输出包含 XML parser 对预期 DOCTYPE 拒绝的标准 Fatal Error 日志。
+- 环境限制：未启动 Admin/Flow，未访问真实数据库或 Flowable 运行态；上游 reactor 测试编译仍存在既有 `MessageServiceImplTest` 构造器参数不匹配，未修改无关测试。
+- 已启动服务：无。
+- 发布校验回归：`JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessValidationContextResolverTest,BusinessProcessSchemaValidatorTest,BusinessApplicationReadinessServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 结果：`15/15` 通过，确认 Flowable 模型仍需“当前应用对象绑定 + 已发布部署版本”；本轮未删除归属门禁。
+
+## 2026-08-07 Task 20：业务流程设计器可用性修复
+
+- 审批目录与发布门禁：新增 `GET /ai/business/process/{id}/flow-models`，只返回当前业务流程所属应用内、启用对象存在有效 `FLOW` Binding 且 Flowable `status=1`、`version>0`、`processDefinitionId/deploymentId` 完整的模型；前端选择目录与 `BusinessProcessValidationContextResolver` 发布校验复用同一目录判定，未放宽跨应用、未发布或失效引用门禁。
+- 条件配置：从原 Flowable `ConditionConfig` 抽取共享 `condition-expression.js`，业务流程条件抽屉复用 AND/OR、比较、区间、包含、空值、表达式生成和旧表达式反解析；普通用户只编辑中文业务字段、判断关系和值，不展示 SpEL 或技术端口。
+- 图协议修复：条件 branches、节点 ports 和 outgoing edges 在一次更新中原子同步；新增、改名、删除、默认分支都会同步真实 edge。协议规范化保留节点 port 的业务顺序，避免按字母排序后把“条件 2”排到“条件 1”之前。
+- 布局与删除：多入边后继按汇合点布局，同源同目标的条件/审批结果边使用独立锚点、路径和插入按钮；条件和审批多出口均指向唯一公共后继时允许从卡片右上角红色按钮删除并恢复 DAG，尚未汇合时失败关闭并给中文原因。
+- 中文化：普通页面统一显示“审批通过、审批驳回、审批取消、执行失败、条件 N、其他情况”，不显示 `APPROVED/MATCHED/OTHERWISE/BRANCH_*`；问题列表也改为中文节点位置。
+- 前端定向回归：Node `v20.19.0` 下组合执行 `business-process-designer.spec.js`、`business-process-designer-workbench.spec.js`、`business-process-workspace.spec.js`、`ConditionConfig.spec.js` 和 `bpmn-to-json-condition.spec.js`，结果 `5 files / 50 tests passed`，Failures/Errors/Skipped 均为 0。
+- 前端静态与构建：目标 ESLint 无输出通过；最终执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8877` 个模块并成功构建（`built in 1m 39s`）。保留仓库既有 `UserSelectModal` 命名冲突、动态/静态 import 和 CSS `//` 注释告警，无新增构建阻断。
+- 后端定向回归：JDK 17 下执行 `BusinessProcessControllerTest,BusinessProcessSchemaValidatorTest,BusinessProcessValidationContextResolverTest,BusinessProcessServiceTest,BusinessProcessPublishServiceTest,BusinessApplicationReadinessServiceTest`，结果 `34/34` 通过，Failures/Errors/Skipped 均为 0，`BUILD SUCCESS`。
+- Flowable XML 回归：执行 `BpmnXmlUtilsTest`，结果 `3/3` 通过；输出中的 DOCTYPE Fatal Error 是拒绝恶意 DOCTYPE 用例的预期日志。Generator 独立 `compile` 同步通过。
+- 静态校验：`xmllint --noout BusinessBindingMapper.xml` 和 `git diff --check` 均无输出通过。
+- 浏览器验证：先执行 `with_server.py --help`，再用受控 API 临时启动 Vite `127.0.0.1:4173` 装配真实全屏路由。验证当前应用“请假审批”模型可回显；新增条件、添加第三分支并配置“请假天数”两条规则后，页面显示“三天及以上 / 三天以内 / 其他情况”；8 条真实 SVG 连线全部唯一，8 个插入按钮最小中心距 `57.6px`；卡片删除后恢复为 5 条边；条件配置和节点删除分别触发草稿保存。console error、page error、request failure 均为 0。
+- 浏览器截图：`artifacts/business-process-condition-configured.png`、`artifacts/business-process-after-card-delete.png`；人工检查确认节点保持主轴、分支线无折返/重叠、中文标签与锚点同序、删除按钮清晰可用。
+- 已知无关基线：此前带 `-am` 的聚合测试在 `forge-plugin-message/src/test/.../MessageServiceImplTest.java` 测试编译失败，原因是既有测试构造器缺少新增 `ApplicationEventPublisher` 参数；本轮未越界修改消息模块，以 Generator 独立 34 项定向测试和编译闭环。
+- 环境门禁：未启动真实 Admin/Flow，未访问或修改 MySQL/Flyway/Flowable 运行态，也未写入用户真实流程草稿；真实应用发布和审批实例运行仍由 Task 19 目标环境联调，不能用受控浏览器结果替代。
+- 已启动服务：浏览器验证仅临时启动 Vite `4173`，已由 `with_server.py` 停止；无遗留服务进程。
+
+## 2026-08-07 Task 20 审批目录与跨层连线最终纠偏
+
+- 历史口径说明：上一条 Task 20 记录保留当时错误的对象 `FLOW Binding` 实现和测试证据，不能覆盖为已正确；本条记录其后续纠偏结果，当前实现和 Spec 第 14 节以本条为准。
+- 审批目录：应用业务流程仍先按 `processId -> applicationId` 校验当前应用访问边界，但可选审批模型改为当前可信租户的 Flowable 已发布资产，不再要求业务对象配置旧 `FLOW Binding`。目录与发布校验统一要求 `status=1`、`version>0`、`processDefinitionId/deploymentId` 完整，并排除业务编排模型。
+- 租户边界：Flow 模型列表改为 Mapper XML 显式接收 `SessionHelper.getTenantId()`；缺少可信租户上下文时返回空目录且不访问 Mapper。未使用默认租户或跨租户忽略查询。
+- 条件发布门禁：只有默认分支的条件节点不再被当作有效流程；服务端要求至少一个判断分支和一个唯一默认分支，默认分支不得配置判断规则，普通页面继续只显示结构化中文条件。
+- 布局最终修复：业务画布改用独立 `business-process-layout.js`。除共享后继和分支顺序外，路由会检测跨层边是否穿越中间卡片，命中时使用卡片外侧独立通道；绕行线与其它分支汇合线不共用线段，条件分支下游卡片顺序与配置顺序一致。
+- Generator 定向测试：执行 `JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-generator -Dtest=BusinessProcessControllerTest,BusinessProcessSchemaValidatorTest,BusinessProcessValidationContextResolverTest,BusinessProcessServiceTest,BusinessProcessPublishServiceTest,BusinessApplicationReadinessServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`，结果 `36/36` 通过，Failures/Errors/Skipped 均为 0。
+- Flow 定向测试：执行 `JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-flow -Dtest=BpmnXmlUtilsTest,FlowModelServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false test`，结果 `5/5` 通过；DOCTYPE Fatal Error 仍是安全拒绝用例的预期输出。
+- Flow Client 编译：执行 `JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH mvn -pl forge-flow/forge-flow-client -am -DskipTests compile`，响应泛型修改编译成功。
+- 前端组合回归：Node `v20.19.0` 下组合执行 `business-process-designer.spec.js`、`business-process-designer-workbench.spec.js`、`business-process-workspace.spec.js`、`ConditionConfig.spec.js` 和 `bpmn-to-json-condition.spec.js`，结果 `5 files / 54 tests passed`，Failures/Errors/Skipped 均为 0。
+- 静态检查：目标 ESLint 无输出通过；`xmllint --noout` 校验 `FlowModelMapper.xml` 和业务绑定 Mapper XML 通过；`git diff --check` 通过。
+- 生产构建：Node `v20.19.0` 下执行 `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`，Vite 转换 `8878` 个模块并成功构建（`built in 2m 8s`）。仅保留仓库既有组件命名冲突、动态/静态 import 和 CSS `//` 注释告警。
+- 环境门禁：未启动真实 Admin/Flow，未执行 Flyway、真实加密 HTTP、应用发布或审批实例运行，也未改变 MySQL/Flowable 运行态；真实“选择审批模型 -> 保存 -> 发布 -> 发起审批”仍需 Task 19 目标环境联调。
 - 已启动服务：无；数据库/Flowable 运行态变更：无。

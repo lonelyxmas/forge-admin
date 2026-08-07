@@ -116,7 +116,7 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
     if (index < 0)
       throw new Error('找不到要更新的业务流程节点')
     const current = next.nodes[index]
-    next.nodes[index] = {
+    const updated = {
       ...current,
       ...deepClone(patch || {}),
       id: current.id,
@@ -124,6 +124,11 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
       config: patch?.config == null
         ? current.config
         : { ...current.config, ...deepClone(patch.config) },
+    }
+    next.nodes[index] = updated
+    if (current.type === BUSINESS_PROCESS_NODE_TYPE.CONDITION
+      && Array.isArray(patch?.config?.branches)) {
+      synchronizeConditionEdges(next, current, updated)
     }
     replaceSchema(next)
     return getNode(nodeId)
@@ -163,12 +168,18 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
 
     const incoming = getIncomingEdges(nodeId)
     const outgoing = getOutgoingEdges(nodeId)
-    if (outgoing.length !== 1)
-      throw new Error('带多个结果出口的节点需先收拢分支后删除')
+    if (!outgoing.length)
+      throw new Error('当前节点没有可恢复的后继节点，无法安全删除')
+
+    const successorIds = new Set(outgoing.map(edge => edge.target))
+    if (successorIds.size !== 1)
+      throw new Error('当前节点的多个分支尚未汇合，请先让分支连接到同一后继节点再删除')
 
     const successorId = outgoing[0].target
+    if (incoming.some(edge => edge.source === successorId))
+      throw new Error('删除节点会形成循环，请先调整前后节点')
     const incomingIds = new Set(incoming.map(edge => edge.id))
-    const connectedIds = new Set([...incomingIds, outgoing[0].id])
+    const connectedIds = new Set([...incomingIds, ...outgoing.map(edge => edge.id)])
     const next = cloneBusinessProcessSchema(schema.value)
     next.nodes = next.nodes.filter(node => node.id !== nodeId)
     next.edges = next.edges
@@ -266,7 +277,8 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
   function appendSuccessorEdges(next, node, target) {
     const item = getBusinessProcessNodeDefinition(node.type)
     const branches = Array.isArray(node.config?.branches) ? node.config.branches : []
-    for (const port of item.ports) {
+    const ports = Array.isArray(node.ports) && node.ports.length ? node.ports : item.ports
+    for (const port of ports) {
       const branch = branches.find(candidate => candidate?.port === port)
       next.edges.push({
         id: nextGraphId('edge', next),
@@ -276,6 +288,74 @@ export function useBusinessProcessDesigner(initialSchema, options = {}) {
         condition: deepClone(branch?.condition || {}),
         isDefault: branch?.isDefault === true ? true : null,
       })
+    }
+  }
+
+  function synchronizeConditionEdges(next, previousNode, updatedNode) {
+    const previousBranches = Array.isArray(previousNode.config?.branches)
+      ? previousNode.config.branches
+      : []
+    const updatedBranches = updatedNode.config.branches
+    const ports = updatedBranches.map((branch, index) => normalizeConditionPort(branch?.port, index))
+    if (new Set(ports).size !== ports.length)
+      throw new Error('条件分支标识重复，请删除重复分支后重试')
+
+    updatedBranches.forEach((branch, index) => {
+      branch.port = ports[index]
+    })
+    updatedNode.ports = ports
+
+    const outgoing = next.edges.filter(edge => edge.source === previousNode.id)
+    if (!outgoing.length)
+      throw new Error('条件节点没有可用连线，请撤销后重新添加条件节点')
+    const outgoingByPort = new Map(outgoing.map(edge => [edge.sourcePort, edge]))
+    const usedEdgeIds = new Set()
+    const orderedEdges = []
+    const fallbackTarget = conditionFallbackTarget(previousBranches, outgoing)
+
+    updatedBranches.forEach((branch, index) => {
+      const previousPort = previousBranches[index]?.port
+      const edge = outgoingByPort.get(branch.port)
+        || (previousPort ? outgoingByPort.get(previousPort) : null)
+      if (edge && !usedEdgeIds.has(edge.id)) {
+        edge.sourcePort = branch.port
+        edge.condition = deepClone(branch.condition || {})
+        edge.isDefault = branch.isDefault === true ? true : null
+        usedEdgeIds.add(edge.id)
+        orderedEdges.push(edge)
+        return
+      }
+      orderedEdges.push({
+        id: nextGraphId('edge', next),
+        source: previousNode.id,
+        target: fallbackTarget,
+        sourcePort: branch.port,
+        condition: deepClone(branch.condition || {}),
+        isDefault: branch.isDefault === true ? true : null,
+      })
+    })
+
+    const removedEdges = outgoing.filter(edge => !usedEdgeIds.has(edge.id))
+    assertRemovedBranchesHaveNoExclusiveNodes(next, removedEdges, usedEdgeIds)
+    next.edges = next.edges
+      .filter(edge => edge.source !== previousNode.id)
+      .concat(orderedEdges)
+  }
+
+  function conditionFallbackTarget(previousBranches, outgoing) {
+    const defaultPort = previousBranches.find(branch => branch?.isDefault)?.port
+    const defaultEdge = outgoing.find(edge => edge.sourcePort === defaultPort)
+    return defaultEdge?.target || outgoing[0].target
+  }
+
+  function assertRemovedBranchesHaveNoExclusiveNodes(next, removedEdges, usedEdgeIds) {
+    for (const removed of removedEdges) {
+      const stillConnected = next.edges.some(edge => edge.id !== removed.id
+        && (!usedEdgeIds.size || usedEdgeIds.has(edge.id))
+        && edge.target === removed.target)
+      if (!stillConnected) {
+        throw new Error('该分支已有独立下游节点，请先删除分支线上的节点再删除分支')
+      }
     }
   }
 
@@ -346,6 +426,14 @@ function requireNewEdgeId(edgeId, schema) {
   if (schema.edges.some(edge => edge.id === normalized))
     throw new Error('连线 ID 已存在')
   return normalized
+}
+
+function normalizeConditionPort(value, index) {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, '_')
+  return normalized || `BRANCH_${index + 1}`
 }
 
 function deepClone(value) {

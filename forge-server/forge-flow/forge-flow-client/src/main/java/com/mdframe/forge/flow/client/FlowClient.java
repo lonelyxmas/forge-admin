@@ -433,11 +433,11 @@ public class FlowClient {
      * @param category 分类（可为 null）
      * @param status   状态（可为 null，1=已部署）
      */
-    public FlowResult<Map<String, Object>> getModelList(String category, Integer status) {
+    public FlowResult<List<Map<String, Object>>> getModelList(String category, Integer status) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(flowServiceUrl + "/api/flow/model/list");
         Optional.ofNullable(category).ifPresent(v -> builder.queryParam("category", v));
         Optional.ofNullable(status).ifPresent(v -> builder.queryParam("status", v));
-        return get(builder.toUriString(), new TypeReference<FlowResult<Map<String, Object>>>() {});
+        return get(builder.toUriString(), new TypeReference<FlowResult<List<Map<String, Object>>>>() {});
     }
 
     /**

@@ -72,11 +72,12 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
 
     @Override
     public List<FlowModel> getEnabledModels(String category) {
-        LambdaQueryWrapper<FlowModel> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FlowModel::getStatus, 1)
-                .eq(category != null && !category.isEmpty(), FlowModel::getCategory, category)
-                .orderByDesc(FlowModel::getCreateTime);
-        return list(wrapper);
+        Long tenantId = SessionHelper.getTenantId();
+        if (tenantId == null || tenantId <= 0) {
+            log.warn("查询流程模型目录时缺少可信租户上下文");
+            return List.of();
+        }
+        return this.getBaseMapper().selectEnabledModels(tenantId, category);
     }
 
     @Override
@@ -238,9 +239,14 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         
         // 将 BPMN XML 中的 process id 替换为 modelKey，确保启动流程时能找到正确的流程定义
         String modelKey = model.getModelKey();
+        String originalProcessId = extractProcessKey(bpmnXml);
         bpmnXml = replaceProcessId(bpmnXml, modelKey);
         bpmnXml = normalizeBpmnXml(bpmnXml, "部署流程模型");
-        log.info("已将流程ID替换为：{}", modelKey);
+        if (Objects.equals(originalProcessId, modelKey)) {
+            log.debug("流程ID已与模型Key一致：{}", modelKey);
+        } else {
+            log.info("已将流程ID替换为：{}", modelKey);
+        }
 
         validateSequenceFlowRefs(bpmnXml);
 
@@ -634,7 +640,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
             }
             
             if (currentProcessId.equals(modelKey)) {
-                log.info("流程ID已经是 {}，无需替换", modelKey);
+                log.debug("流程ID已经是 {}，无需替换", modelKey);
                 return bpmnXml;
             }
             
