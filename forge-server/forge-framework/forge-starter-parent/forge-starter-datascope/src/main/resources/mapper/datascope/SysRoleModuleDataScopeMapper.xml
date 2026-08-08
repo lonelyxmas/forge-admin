@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.datascope.mapper.SysRoleModuleDataScopeMapper">
+
+    <resultMap id="SysRoleModuleDataScopeResultMap" type="com.mdframe.forge.starter.datascope.entity.SysRoleModuleDataScope">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="roleId" column="role_id"/>
+        <result property="moduleCode" column="module_code"/>
+        <result property="dataScope" column="data_scope"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="createDept" column="create_dept"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="selectByRole" resultMap="SysRoleModuleDataScopeResultMap">
+        SELECT id,
+               tenant_id,
+               role_id,
+               module_code,
+               data_scope,
+               create_by,
+               create_time,
+               create_dept,
+               update_by,
+               update_time
+        FROM sys_role_module_data_scope
+        WHERE tenant_id = #{tenantId}
+          AND role_id = #{roleId}
+        ORDER BY module_code ASC
+    </select>
+
+    <select id="selectAllRoleModuleDataScopes" resultMap="SysRoleModuleDataScopeResultMap">
+        SELECT id,
+               tenant_id,
+               role_id,
+               module_code,
+               data_scope,
+               create_by,
+               create_time,
+               create_dept,
+               update_by,
+               update_time
+        FROM sys_role_module_data_scope
+        ORDER BY tenant_id ASC, role_id ASC, module_code ASC
+    </select>
+
+</mapper>

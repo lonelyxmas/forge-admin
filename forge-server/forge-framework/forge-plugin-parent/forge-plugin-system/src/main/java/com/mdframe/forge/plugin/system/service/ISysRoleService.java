@@ -1,14 +1,14 @@
 package com.mdframe.forge.plugin.system.service;
 
-import com.mdframe.forge.plugin.system.entity.SysUser;
-
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mdframe.forge.plugin.system.dto.RoleUserQuery;
+import com.mdframe.forge.plugin.system.dto.RoleDataScopeSettingsDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysRole;
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.mdframe.forge.plugin.system.vo.RoleDataScopeSettingsVO;
 
 import java.util.List;
 
@@ -109,6 +109,26 @@ public interface ISysRoleService extends IService<SysRole> {
      * @return 资源ID列表
      */
     List<Long> selectRoleResourceIds(Long roleId, String clientCode);
+
+    /**
+     * 查询角色指定客户端下的资源ID列表。
+     *
+     * @param roleId 角色ID
+     * @param clientCode 客户端编码
+     * @param includeParents 是否包含父级资源ID
+     * @return 资源ID列表
+     */
+    List<Long> selectRoleResourceIds(Long roleId, String clientCode, boolean includeParents);
+
+    /**
+     * 查询角色默认及业务模块数据范围。
+     */
+    RoleDataScopeSettingsVO getRoleDataScopeSettings(Long roleId);
+
+    /**
+     * 保存角色默认及业务模块数据范围。
+     */
+    boolean saveRoleDataScopeSettings(Long roleId, RoleDataScopeSettingsDTO settings);
 
     /**
      * 查询角色适用组织ID列表。

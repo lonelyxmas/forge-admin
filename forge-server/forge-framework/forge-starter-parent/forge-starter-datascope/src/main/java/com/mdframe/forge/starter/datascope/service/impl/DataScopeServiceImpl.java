@@ -10,12 +10,14 @@ import com.mdframe.forge.starter.datascope.config.DataScopeProperties;
 import com.mdframe.forge.starter.datascope.context.DataScopeContext;
 import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
 import com.mdframe.forge.starter.datascope.entity.SysRoleDataScope;
+import com.mdframe.forge.starter.datascope.entity.SysRoleModuleDataScope;
 import com.mdframe.forge.starter.datascope.enums.DataScopeType;
 import com.mdframe.forge.starter.datascope.mapper.DataScopeOrgMapper;
 import com.mdframe.forge.starter.datascope.mapper.DataScopeRegionMapper;
 import com.mdframe.forge.starter.datascope.mapper.DataScopeRoleMapper;
 import com.mdframe.forge.starter.datascope.mapper.SysDataScopeConfigMapper;
 import com.mdframe.forge.starter.datascope.mapper.SysRoleDataScopeMapper;
+import com.mdframe.forge.starter.datascope.mapper.SysRoleModuleDataScopeMapper;
 import com.mdframe.forge.starter.datascope.model.DataScopeOrgInfo;
 import com.mdframe.forge.starter.datascope.model.DataScopeRegionInfo;
 import com.mdframe.forge.starter.datascope.model.DataScopeRoleInfo;
@@ -54,6 +56,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
     private final DataScopeRoleMapper roleMapper;
     private final DataScopeOrgMapper orgMapper;
     private final SysRoleDataScopeMapper roleDataScopeMapper;
+    private final SysRoleModuleDataScopeMapper roleModuleDataScopeMapper;
     private final DataScopeRegionMapper regionMapper;
     private final DataScopeProperties properties;
 
@@ -64,6 +67,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
     private volatile Map<String, SysDataScopeConfig> defaultConfigByMapper = Collections.emptyMap();
     private volatile Map<Long, Integer> roleDataScopeByRoleId = Collections.emptyMap();
     private volatile Map<Long, Set<Long>> customOrgIdsByRoleId = Collections.emptyMap();
+    private volatile Map<Long, Map<String, Integer>> roleModuleDataScopesByRoleId = Collections.emptyMap();
     private volatile Map<Long, Set<Long>> orgAndChildIdsByOrgId = Collections.emptyMap();
     private volatile Map<String, Set<String>> regionAndChildCodesByCode = Collections.emptyMap();
 
@@ -79,6 +83,11 @@ public class DataScopeServiceImpl implements IDataScopeService {
 
     @Override
     public DataScopeContext getCurrentUserDataScope() {
+        return getCurrentUserDataScope(null);
+    }
+
+    @Override
+    public DataScopeContext getCurrentUserDataScope(String moduleCode) {
         LoginUser loginUser = ExecutionIdentityContextHolder.current()
                 .map(identity -> identity.loginUser())
                 .orElse(null);
@@ -125,7 +134,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
 
         ensureMetadataLoaded();
         Integer minDataScope = roleIds.stream()
-                .map(roleDataScopeByRoleId::get)
+                .map(roleId -> resolveEffectiveDataScope(roleId, moduleCode))
                 .filter(Objects::nonNull)
                 .min(Integer::compareTo)
                 .orElse(DataScopeType.SELF.getCode());
@@ -157,6 +166,19 @@ public class DataScopeServiceImpl implements IDataScopeService {
         context.setRegionCode(loginUser.getRegionCode());
         context.setRegionLevel(loginUser.getRegionLevel());
         context.setRegionAncestors(loginUser.getRegionAncestors());
+    }
+
+    private Integer resolveEffectiveDataScope(Long roleId, String moduleCode) {
+        if (roleId == null) {
+            return null;
+        }
+        if (StrUtil.isNotBlank(moduleCode)) {
+            Map<String, Integer> moduleScopes = roleModuleDataScopesByRoleId.get(roleId);
+            if (moduleScopes != null && moduleScopes.containsKey(moduleCode)) {
+                return moduleScopes.get(moduleCode);
+            }
+        }
+        return roleDataScopeByRoleId.get(roleId);
     }
 
     @Override
@@ -220,12 +242,13 @@ public class DataScopeServiceImpl implements IDataScopeService {
             defaultConfigByMapper = snapshot.defaultConfigByMapper();
             roleDataScopeByRoleId = snapshot.roleDataScopeByRoleId();
             customOrgIdsByRoleId = snapshot.customOrgIdsByRoleId();
+            roleModuleDataScopesByRoleId = snapshot.roleModuleDataScopesByRoleId();
             orgAndChildIdsByOrgId = snapshot.orgAndChildIdsByOrgId();
             regionAndChildCodesByCode = snapshot.regionAndChildCodesByCode();
             metadataLoaded = true;
-            log.info("数据权限平台元数据缓存已刷新: configs={}, roles={}, customRoles={}, orgs={}, regions={}",
+            log.info("数据权限平台元数据缓存已刷新: configs={}, roles={}, customRoles={}, moduleOverrides={}, orgs={}, regions={}",
                     tenantConfigByMapper.size(), roleDataScopeByRoleId.size(), customOrgIdsByRoleId.size(),
-                    orgAndChildIdsByOrgId.size(), regionAndChildCodesByCode.size());
+                    roleModuleDataScopesByRoleId.size(), orgAndChildIdsByOrgId.size(), regionAndChildCodesByCode.size());
         }
     }
 
@@ -243,6 +266,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
         List<SysDataScopeConfig> configs = dataScopeConfigMapper.selectEnabledConfigs();
         List<DataScopeRoleInfo> roles = roleMapper.selectActiveRoleDataScopes();
         List<SysRoleDataScope> roleDataScopes = roleDataScopeMapper.selectAllRoleDataScopes();
+        List<SysRoleModuleDataScope> roleModuleDataScopes = roleModuleDataScopeMapper.selectAllRoleModuleDataScopes();
         List<DataScopeOrgInfo> orgs = orgMapper.selectAllOrgAncestors();
         List<DataScopeRegionInfo> regions = regionMapper.selectAllRegions();
 
@@ -251,6 +275,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
                 buildDefaultConfigMap(configs),
                 buildRoleDataScopeMap(roles),
                 buildCustomOrgMap(roleDataScopes),
+                buildRoleModuleDataScopeMap(roleModuleDataScopes),
                 buildOrgChildMap(orgs),
                 buildRegionChildMap(regions)
         );
@@ -312,6 +337,22 @@ public class DataScopeServiceImpl implements IDataScopeService {
             }
         }
         return unmodifiableNestedLongMap(mutable);
+    }
+
+    private Map<Long, Map<String, Integer>> buildRoleModuleDataScopeMap(List<SysRoleModuleDataScope> roleModuleDataScopes) {
+        Map<Long, Map<String, Integer>> mutable = new HashMap<>();
+        if (roleModuleDataScopes != null) {
+            for (SysRoleModuleDataScope item : roleModuleDataScopes) {
+                if (item == null || item.getRoleId() == null || StrUtil.isBlank(item.getModuleCode()) || item.getDataScope() == null) {
+                    continue;
+                }
+                mutable.computeIfAbsent(item.getRoleId(), key -> new HashMap<>())
+                        .put(item.getModuleCode(), item.getDataScope());
+            }
+        }
+        Map<Long, Map<String, Integer>> result = new HashMap<>();
+        mutable.forEach((roleId, moduleMap) -> result.put(roleId, Collections.unmodifiableMap(new HashMap<>(moduleMap))));
+        return Collections.unmodifiableMap(result);
     }
 
     private Map<Long, Set<Long>> buildOrgChildMap(List<DataScopeOrgInfo> orgs) {
@@ -424,6 +465,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
             Map<String, SysDataScopeConfig> defaultConfigByMapper,
             Map<Long, Integer> roleDataScopeByRoleId,
             Map<Long, Set<Long>> customOrgIdsByRoleId,
+            Map<Long, Map<String, Integer>> roleModuleDataScopesByRoleId,
             Map<Long, Set<Long>> orgAndChildIdsByOrgId,
             Map<String, Set<String>> regionAndChildCodesByCode) {
     }

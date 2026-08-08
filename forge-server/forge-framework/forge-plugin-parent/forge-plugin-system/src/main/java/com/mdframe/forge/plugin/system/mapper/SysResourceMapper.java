@@ -14,6 +14,11 @@ import java.util.List;
 public interface SysResourceMapper extends BaseMapper<SysResource> {
 
     /**
+     * 查询租户下用于业务模块名称解析的资源信息。
+     */
+    List<SysResource> selectModuleNamingResources(@Param("tenantId") Long tenantId);
+
+    /**
      * 根据角色ID列表和客户端代码查询资源列表
      */
     List<SysResource> selectUserResourcesByRoleIds(@Param("roleIds") List<Long> roleIds, @Param("clientCode") String clientCode);

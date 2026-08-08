@@ -2,25 +2,42 @@
   <div class="system-role-page">
     <MasterDetailWorkspace
       class="role-workspace"
-      aside-width="minmax(0, 1fr)"
-      :main-width="520"
+      :aside-width="260"
+      main-width="minmax(0, 1fr)"
     >
       <template #aside>
         <div class="role-list-panel">
           <div class="role-selector-header">
             <div class="role-selector-title">
-              <span>角色管理</span>
-              <small>{{ roleList.length }} 个角色</small>
+              <span class="role-selector-icon">
+                <i class="i-material-symbols:shield-outline-rounded" />
+              </span>
+              <span class="role-selector-copy">
+                <strong>角色管理</strong>
+                <small>{{ roleList.length }} 个角色</small>
+              </span>
             </div>
-            <n-button size="small" type="primary" @click="handleAddRole">
+            <n-button size="small" type="primary" circle title="新增角色" @click="handleAddRole">
               <template #icon>
                 <i class="i-material-symbols:add-rounded" />
               </template>
-              新增
             </n-button>
           </div>
 
           <div class="role-selector-tools">
+            <n-input
+              v-model:value="roleKeyword"
+              class="role-search"
+              clearable
+              size="small"
+              placeholder="搜索角色名称..."
+              @clear="handleRoleSearch"
+              @keyup.enter="handleRoleSearch"
+            >
+              <template #prefix>
+                <i class="i-material-symbols:search-rounded" />
+              </template>
+            </n-input>
             <div class="role-tabs">
               <button
                 v-for="tab in roleTypeTabs"
@@ -32,19 +49,6 @@
                 {{ tab.label }}
               </button>
             </div>
-            <n-input
-              v-model:value="roleKeyword"
-              class="role-search"
-              clearable
-              size="small"
-              placeholder="搜索角色"
-              @clear="handleRoleSearch"
-              @keyup.enter="handleRoleSearch"
-            >
-              <template #prefix>
-                <i class="i-material-symbols:search-rounded" />
-              </template>
-            </n-input>
           </div>
 
           <n-spin :show="roleListLoading" class="role-list-spin">
@@ -61,22 +65,21 @@
                 @keydown.space.prevent="handleSelectRole(role)"
               >
                 <span class="role-list-main">
-                  <strong :title="role.roleName">{{ role.roleName }}</strong>
+                  <span class="role-list-title">
+                    <strong :title="role.roleName">{{ role.roleName }}</strong>
+                    <span v-if="isRoleDisabled(role)" class="role-disabled-badge">
+                      {{ resolveRoleStatusLabel(role) }}
+                    </span>
+                  </span>
                   <span class="role-card-meta">
-                    <small :title="role.roleKey || '-'">{{ role.roleKey || '-' }}</small>
-                    <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="role.roleStatus" size="small" force-tag />
+                    <span>{{ resolveRoleDataScopeLabel(role) }}</span>
                   </span>
                 </span>
                 <span class="role-list-side" @click.stop>
-                  <NTag v-if="currentRole.id === role.id" size="small" type="info" :bordered="false">
-                    当前
-                  </NTag>
-                  <NTag v-if="Number(role.isSystem) === 1" size="small" :bordered="false">
-                    系统
-                  </NTag>
                   <n-dropdown
                     trigger="click"
                     placement="bottom-end"
+                    :menu-props="getRoleDropdownMenuProps"
                     :options="getRoleActionOptions(role)"
                     @select="key => handleRoleCardAction(key, role)"
                   >
@@ -95,10 +98,21 @@
       <section class="role-user-panel">
         <header class="role-user-header">
           <div class="role-user-title">
-            <h2>{{ currentRole.roleName || '请选择角色' }}</h2>
-            <NTag v-if="currentRole.id" size="small" :type="currentRoleScopeTagType" :bordered="false">
-              {{ currentRoleScopeLabel }}
-            </NTag>
+            <div class="role-user-heading">
+              <h2>{{ currentRole.roleName || '请选择角色' }}</h2>
+              <small v-if="currentRole.roleKey">{{ currentRole.roleKey }}</small>
+            </div>
+            <div v-if="currentRole.id" class="role-user-badges">
+              <NTag size="small" type="info" :bordered="false">
+                {{ currentRoleDataScopeLabel }}
+              </NTag>
+              <NTag size="small" :type="currentRoleScopeTagType" :bordered="false">
+                {{ currentRoleScopeLabel }}
+              </NTag>
+              <NTag size="small" :bordered="false">
+                共 {{ roleUserTotal }} 名成员
+              </NTag>
+            </div>
           </div>
           <n-space size="small">
             <n-button
@@ -118,7 +132,7 @@
               circle
               title="刷新"
               :disabled="!currentRole.id"
-              @click="loadRoleUsers"
+              @click="refreshRoleUsers"
             >
               <template #icon>
                 <i class="i-material-symbols:refresh-rounded" />
@@ -171,42 +185,26 @@
           </div>
         </div>
 
-        <div class="role-user-cards">
-          <n-spin :show="usersLoading" class="role-member-spin">
-            <div v-if="roleUsers.length > 0" class="role-member-grid">
-              <article v-for="user in roleUsers" :key="user.id" class="role-member-card">
-                <div class="role-member-avatar">
-                  {{ resolveUserDisplayName(user).slice(0, 1) || '用' }}
-                </div>
-                <div class="role-member-main">
-                  <div class="role-member-name">
-                    <strong :title="resolveUserDisplayName(user)">{{ resolveUserDisplayName(user) }}</strong>
-                    <DictTag :dict-type="USER_STATUS_DICT" :value="user.userStatus" size="small" />
-                  </div>
-                  <div class="role-member-meta">
-                    <span :title="user.username || '-'">{{ user.username || '-' }}</span>
-                    <span>{{ user.phone || '未填写手机号' }}</span>
-                  </div>
-                </div>
-                <button type="button" class="role-member-remove" @click="handleRemoveUserRole(user)">
-                  移除
-                </button>
-              </article>
-            </div>
-            <n-empty v-else description="暂无角色用户" size="small" class="role-member-empty" />
-          </n-spin>
-
-          <div v-if="userPagination.itemCount > 0" class="role-member-pagination">
-            <n-pagination
-              :page="userPagination.page"
-              :page-size="userPagination.pageSize"
-              :item-count="userPagination.itemCount"
-              show-size-picker
-              :page-sizes="[10, 20, 50, 100]"
-              @update:page="handleUserPageChange"
-              @update:page-size="handleUserPageSizeChange"
-            />
-          </div>
+        <div class="member-body">
+          <AiCrudPage
+            v-if="currentRole.id"
+            ref="roleUserCrudRef"
+            api="/system/role"
+            :api-config="roleUserApiConfig"
+            :search-schema="[]"
+            :columns="roleUserTableColumns"
+            :before-load-list="beforeLoadRoleUserList"
+            row-key="id"
+            :hide-add="true"
+            :hide-batch-delete="true"
+            :hide-selection="true"
+            :show-search="false"
+            :show-render-mode-switch="false"
+            :page-size="10"
+            :scroll-x="760"
+            :table-props="{ dragScroll: false }"
+            @load-list-success="handleRoleUserLoadSuccess"
+          />
         </div>
       </section>
     </MasterDetailWorkspace>
@@ -240,28 +238,47 @@
       />
     </div>
 
-    <!-- 授权弹窗 -->
+    <!-- 角色权限配置弹窗 -->
     <n-modal
       v-model:show="authModalVisible"
-      :title="`角色授权 - ${currentRole.roleName || ''}`"
       preset="card"
-      style="width: 900px"
+      class="role-permission-modal"
+      style="width: 100vw; max-width: 100vw"
       :mask-closable="false"
     >
       <div class="auth-modal-content">
-        <div class="auth-summary">
-          <div class="auth-role-meta">
-            <span class="auth-role-name">{{ currentRole.roleName || '-' }}</span>
-            <span class="auth-role-key">{{ currentRole.roleKey || '-' }}</span>
+        <header class="auth-workspace-header">
+          <div class="auth-header-main">
+            <div class="auth-breadcrumb">
+              <span>角色综合授权</span>
+              <span class="auth-breadcrumb-divider">/</span>
+              <span class="auth-role-badge">
+                <i class="i-material-symbols:business-center" />
+                {{ currentRole.roleName || '-' }}
+              </span>
+            </div>
+            <div class="auth-role-key">
+              {{ currentRole.roleKey || '-' }}
+            </div>
           </div>
-          <div class="auth-counts">
-            <span>{{ currentAuthClientName }}</span>
-            <span>可分配 {{ resourceCount }}</span>
-            <span>已选择 {{ checkedResourceKeys.length }}</span>
-          </div>
-        </div>
 
-        <div class="auth-client-tabs">
+          <div class="auth-header-actions">
+            <span class="auth-client-badge">{{ currentAuthClientName }}</span>
+            <n-button @click="authModalVisible = false">
+              取消
+            </n-button>
+            <n-button
+              type="primary"
+              :loading="authSubmitLoading"
+              :disabled="authLoading || dataScopeLoading || authLoadFailed || dataScopeLoadFailed"
+              @click="handleSubmitAuth"
+            >
+              保存配置
+            </n-button>
+          </div>
+        </header>
+
+        <div v-if="authClientTabs.length > 1" class="auth-client-tabs">
           <n-tabs
             type="segment"
             size="small"
@@ -277,198 +294,33 @@
           </n-tabs>
         </div>
 
-        <div class="auth-toolbar">
-          <n-space size="small" align="center">
-            <n-button size="small" :disabled="authLoading" @click="toggleExpandAll">
-              <template #icon>
-                <i :class="treeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-              </template>
-              {{ treeExpandAll ? '折叠全部' : '展开全部' }}
-            </n-button>
-            <n-button size="small" :disabled="authLoading" @click="handleCheckAll">
-              <template #icon>
-                <i class="i-material-symbols:check-box-outline" />
-              </template>
-              全选
-            </n-button>
-            <n-button size="small" :disabled="authLoading" @click="handleUncheckAll">
-              <template #icon>
-                <i class="i-material-symbols:check-box-outline-blank" />
-              </template>
-              全不选
-            </n-button>
-            <n-checkbox v-model:checked="treeCascade" :disabled="authLoading" @update:checked="handleTreeCascadeChange">
-              父子联动
-            </n-checkbox>
-          </n-space>
-        </div>
+        <n-alert v-if="authLoadFailed || dataScopeLoadFailed" type="error" :show-icon="false" class="auth-load-alert">
+          权限配置加载不完整，请关闭弹窗后重试
+        </n-alert>
 
-        <n-tabs v-model:value="activeResourceTab" type="line" animated class="auth-tabs">
-          <n-tab-pane name="all" tab="全部资源">
-            <div class="auth-tree-container">
-              <n-spin :show="authLoading">
-                <div v-if="authLoading" class="auth-tree-skeleton">
-                  <div
-                    v-for="index in 10"
-                    :key="index"
-                    class="auth-tree-skeleton-row"
-                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
-                  >
-                    <n-skeleton circle size="small" />
-                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
-                  </div>
-                </div>
-                <PremiumTree
-                  v-else-if="resourceTreeData.length > 0"
-                  :data="resourceTreeData"
-                  :cascade-data="resourceTreeData"
-                  checkable
-                  :cascade="treeCascade"
-                  :expanded-keys="treeExpandedKeys"
-                  :checked-keys="checkedResourceKeys"
-                  key-field="id"
-                  label-field="resourceName"
-                  children-field="children"
-                  :get-node-icon="getResourceNodeIcon"
-                  :get-node-meta="getResourceNodeMeta"
-                  :get-node-tone="getResourceNodeTone"
-                  show-meta
-                  @update:expanded-keys="handleExpandedKeysChange"
-                  @update:checked-keys="handleCheckedKeysChange"
-                />
-                <n-empty v-else description="暂无资源数据" />
-              </n-spin>
-            </div>
-          </n-tab-pane>
+        <RolePermissionSettings
+          v-model:checked-keys="checkedResourceKeys"
+          v-model:data-scope-settings="dataScopeSettings"
+          :resource-tree="resourceTreeData"
+          :loading="authLoading"
+          :data-scope-loading="dataScopeLoading"
+          :data-scope-options="manageableDataScopeOptions"
+        />
 
-          <n-tab-pane name="menu" tab="菜单">
-            <div class="auth-tree-container">
-              <n-spin :show="authLoading">
-                <div v-if="authLoading" class="auth-tree-skeleton">
-                  <div
-                    v-for="index in 10"
-                    :key="index"
-                    class="auth-tree-skeleton-row"
-                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
-                  >
-                    <n-skeleton circle size="small" />
-                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
-                  </div>
-                </div>
-                <PremiumTree
-                  v-else-if="menuTreeData.length > 0"
-                  :data="menuTreeData"
-                  :cascade-data="resourceTreeData"
-                  checkable
-                  :cascade="treeCascade"
-                  :expanded-keys="treeExpandedKeys"
-                  :checked-keys="checkedResourceKeys"
-                  key-field="id"
-                  label-field="resourceName"
-                  children-field="children"
-                  :get-node-icon="getResourceNodeIcon"
-                  :get-node-meta="getResourceNodeMeta"
-                  :get-node-tone="getResourceNodeTone"
-                  show-meta
-                  @update:expanded-keys="handleExpandedKeysChange"
-                  @update:checked-keys="handleCheckedKeysChange"
-                />
-                <n-empty v-else description="暂无菜单数据" />
-              </n-spin>
-            </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="button" tab="按钮">
-            <div class="auth-tree-container">
-              <n-spin :show="authLoading">
-                <div v-if="authLoading" class="auth-tree-skeleton">
-                  <div
-                    v-for="index in 10"
-                    :key="index"
-                    class="auth-tree-skeleton-row"
-                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
-                  >
-                    <n-skeleton circle size="small" />
-                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
-                  </div>
-                </div>
-                <PremiumTree
-                  v-else-if="buttonTreeData.length > 0"
-                  :data="buttonTreeData"
-                  :cascade-data="resourceTreeData"
-                  checkable
-                  :cascade="treeCascade"
-                  :expanded-keys="treeExpandedKeys"
-                  :checked-keys="checkedResourceKeys"
-                  key-field="id"
-                  label-field="resourceName"
-                  children-field="children"
-                  :get-node-icon="getResourceNodeIcon"
-                  :get-node-meta="getResourceNodeMeta"
-                  :get-node-tone="getResourceNodeTone"
-                  show-meta
-                  @update:expanded-keys="handleExpandedKeysChange"
-                  @update:checked-keys="handleCheckedKeysChange"
-                />
-                <n-empty v-else description="暂无按钮数据" />
-              </n-spin>
-            </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="api" tab="API接口">
-            <div class="auth-tree-container">
-              <n-spin :show="authLoading">
-                <div v-if="authLoading" class="auth-tree-skeleton">
-                  <div
-                    v-for="index in 10"
-                    :key="index"
-                    class="auth-tree-skeleton-row"
-                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
-                  >
-                    <n-skeleton circle size="small" />
-                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
-                  </div>
-                </div>
-                <PremiumTree
-                  v-else-if="apiTreeData.length > 0"
-                  :data="apiTreeData"
-                  :cascade-data="resourceTreeData"
-                  checkable
-                  :cascade="treeCascade"
-                  :expanded-keys="treeExpandedKeys"
-                  :checked-keys="checkedResourceKeys"
-                  key-field="id"
-                  label-field="resourceName"
-                  children-field="children"
-                  :get-node-icon="getResourceNodeIcon"
-                  :get-node-meta="getResourceNodeMeta"
-                  :get-node-tone="getResourceNodeTone"
-                  show-meta
-                  @update:expanded-keys="handleExpandedKeysChange"
-                  @update:checked-keys="handleCheckedKeysChange"
-                />
-                <n-empty v-else description="暂无API数据" />
-              </n-spin>
-            </div>
-          </n-tab-pane>
-        </n-tabs>
-      </div>
-
-      <template #footer>
-        <n-space justify="end">
+        <div class="auth-floating-actions">
           <n-button @click="authModalVisible = false">
             取消
           </n-button>
           <n-button
             type="primary"
             :loading="authSubmitLoading"
-            :disabled="authLoading"
+            :disabled="authLoading || dataScopeLoading || authLoadFailed || dataScopeLoadFailed"
             @click="handleSubmitAuth"
           >
-            确定
+            保存配置
           </n-button>
-        </n-space>
-      </template>
+        </div>
+      </div>
     </n-modal>
 
     <!-- 添加用户弹窗 -->
@@ -559,15 +411,17 @@
 
 <script setup>
 import { NTag } from 'naive-ui'
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
 import PremiumTree from '@/components/common/PremiumTree.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
 import UserSelectPanel from '@/components/UserSelectPanel.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
+import RolePermissionSettings from './components/RolePermissionSettings.vue'
 
 defineOptions({ name: 'SystemRole' })
 
@@ -578,6 +432,7 @@ const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 const YES_NO_DICT = 'sys_yes_no'
 
 const crudRef = ref(null)
+const roleUserCrudRef = ref(null)
 const userStore = useUserStore()
 const tenantOptions = ref([])
 const roleList = ref([])
@@ -590,19 +445,17 @@ const ROLE_ORG_SCOPE_CUSTOM = 2
 // 授权相关
 const authModalVisible = ref(false)
 const authLoading = ref(false)
+const authLoadFailed = ref(false)
 const authSubmitLoading = ref(false)
 const resourceTreeData = ref([])
 const checkedResourceKeys = ref([])
-const treeExpandAll = ref(true)
-const treeExpandedKeys = ref([])
-const treeCascade = ref(true) // 父子联动开关
-const activeResourceTab = ref('all') // 当前选中的资源类型标签
+const dataScopeLoading = ref(false)
+const dataScopeLoadFailed = ref(false)
+const dataScopeSettings = ref({ defaultDataScope: 5, modules: [] })
 const clientList = ref([])
 const currentAuthClientCode = ref('pc')
 
 // 用户列表相关
-const usersLoading = ref(false)
-const roleUsers = ref([]) // 角色下的用户列表
 const currentRole = ref({})
 const addUserModalVisible = ref(false)
 const addUserLoading = ref(false)
@@ -611,13 +464,10 @@ const roleUserOrgId = ref(null)
 const roleUserKeyword = ref('')
 const roleApplicableOrgIds = ref([])
 const roleOrgTreeData = ref([])
+const roleUserTotal = ref(0)
+const roleUserCountMap = ref({})
 const userSearchParams = ref({
   userStatus: null,
-})
-const userPagination = ref({
-  page: 1,
-  pageSize: 10,
-  itemCount: 0,
 })
 
 // 角色适用组织
@@ -649,7 +499,7 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
 const roleTypeTabs = computed(() => {
   const options = roleTypeOptions.value || []
   if (options.length > 0)
-    return options.map(item => ({ label: item.label, value: item.value }))
+    return options.map(item => ({ label: resolveRoleTypeShortLabel(item.label), value: item.value }))
   return [{ label: '角色', value: null }]
 })
 const isCurrentRoleGlobalScope = computed(() =>
@@ -686,6 +536,11 @@ const currentRoleScopeTagType = computed(() => {
     return 'success'
   return roleApplicableOrgIds.value.length > 0 ? 'info' : 'warning'
 })
+const currentRoleDataScopeLabel = computed(() => {
+  if (!currentRole.value?.id)
+    return ''
+  return resolveRoleDataScopeLabel(currentRole.value)
+})
 const canAddUserToCurrentRole = computed(() => {
   if (!currentRole.value?.id || roleUserOrgOptions.value.length === 0)
     return false
@@ -698,8 +553,66 @@ const addUserButtonText = computed(() => {
     return '无授权组织'
   return roleUserOrgId.value ? '添加用户' : '先选组织'
 })
+const roleUserApiConfig = computed(() => ({
+  list: currentRole.value?.id
+    ? `get@/system/role/${currentRole.value.id}/users`
+    : '',
+  detail: 'post@/system/user/getById',
+}))
+const roleUserTableColumns = computed(() => [
+  {
+    prop: 'username',
+    label: '成员信息',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: resolveUserDisplayName(row),
+      subtitle: resolveUserAccountLabel(row),
+      interactive: true,
+      avatar: true,
+      tooltip: `查看用户详情：${row.username || '-'}`,
+      onActivate: () => roleUserCrudRef.value?.showDetail?.(row),
+    }),
+  },
+  {
+    prop: 'orgName',
+    label: '所属组织',
+    width: 180,
+    render: row => h('span', { class: 'role-member-plain', title: resolveUserOrgLabel(row) }, resolveUserOrgLabel(row)),
+  },
+  {
+    prop: 'phone',
+    label: '联系方式',
+    width: 180,
+    render: row => h('span', { class: 'role-member-plain role-member-phone', title: row.phone || '' }, row.phone || '未填写手机号'),
+  },
+  {
+    prop: 'userStatus',
+    label: '状态',
+    width: 110,
+    render: row => h('span', {
+      class: ['role-member-status', { 'is-disabled': !isUserEnabled(row) }],
+    }, [
+      h('span', { class: 'role-member-status-dot' }),
+      h('span', { class: 'role-member-status-text' }, resolveUserStatusLabel(row)),
+    ]),
+  },
+  {
+    prop: 'actions',
+    label: '操作',
+    width: 90,
+    fixed: 'right',
+    actions: [
+      {
+        label: '移除',
+        key: 'remove',
+        type: 'primary',
+        onClick: row => handleRemoveUserRole(row),
+      },
+    ],
+  },
+])
 function getRoleActionOptions(role = {}) {
-  return [
+  const options = [
     {
       label: '编辑角色',
       key: 'edit',
@@ -715,14 +628,24 @@ function getRoleActionOptions(role = {}) {
       key: 'auth',
       icon: () => h('i', { class: 'i-material-symbols:admin-panel-settings-outline-rounded' }),
     },
-    ...(role?.id && Number(role.id) !== 1
-      ? [{
-          label: '删除角色',
-          key: 'delete',
-          icon: () => h('i', { class: 'i-material-symbols:delete-outline-rounded' }),
-        }]
-      : []),
   ]
+  if (role?.id && Number(role.id) !== 1) {
+    options.push(
+      { type: 'divider', key: 'delete-divider' },
+      {
+        label: () => h('span', { class: 'role-action-danger' }, '删除角色'),
+        key: 'delete',
+        icon: () => h('i', { class: 'i-material-symbols:delete-outline-rounded role-action-danger' }),
+      },
+    )
+  }
+  return options
+}
+
+function getRoleDropdownMenuProps() {
+  return {
+    class: 'role-action-dropdown-menu',
+  }
 }
 
 async function handleRoleCardAction(key, role) {
@@ -760,28 +683,6 @@ const roleOrgScopeTagType = computed(() => {
   return roleScopeMode.value === 'global' ? 'success' : 'info'
 })
 
-// 资源类型映射
-const resourceTypeMap = {
-  1: { text: '目录', type: 'info', icon: 'i-material-symbols:folder-outline' },
-  2: { text: '菜单', type: 'success', icon: 'i-material-symbols:menu' },
-  3: { text: '按钮', type: 'warning', icon: 'i-material-symbols:smart-button-outline' },
-  4: { text: 'API', type: 'error', icon: 'i-material-symbols:api' },
-}
-
-// 计算属性：过滤不同类型的资源
-const menuTreeData = computed(() => {
-  return filterResourceByType(resourceTreeData.value, [1, 2])
-})
-
-const buttonTreeData = computed(() => {
-  return filterResourceByType(resourceTreeData.value, [3])
-})
-
-const apiTreeData = computed(() => {
-  return filterResourceByType(resourceTreeData.value, [4])
-})
-
-const resourceCount = computed(() => countResources(resourceTreeData.value))
 const authClientTabs = computed(() => {
   if (clientList.value.length > 0)
     return clientList.value
@@ -808,70 +709,6 @@ watch(roleTypeTabs, (tabs) => {
   activeRoleType.value = tabs[0].value
   loadRoleList()
 }, { immediate: true })
-
-function countResources(data) {
-  if (!Array.isArray(data))
-    return 0
-  return data.reduce((count, item) => count + 1 + countResources(item.children), 0)
-}
-
-// 过滤指定类型的资源
-function filterResourceByType(data, types) {
-  if (!data || !Array.isArray(data))
-    return []
-
-  return data.reduce((result, item) => {
-    // 如果当前节点类型匹配
-    if (types.includes(item.resourceType)) {
-      const newItem = { ...item }
-      // 递归处理子节点
-      if (item.children && item.children.length > 0) {
-        newItem.children = filterResourceByType(item.children, types)
-      }
-      result.push(newItem)
-    }
-    else {
-      // 当前节点类型不匹配，但需要检查子节点
-      if (item.children && item.children.length > 0) {
-        const filteredChildren = filterResourceByType(item.children, types)
-        if (filteredChildren.length > 0) {
-          result.push({
-            ...item,
-            children: filteredChildren,
-          })
-        }
-      }
-    }
-    return result
-  }, [])
-}
-
-function getResourceNodeIcon(node = {}) {
-  return resourceTypeMap[Number(node.resourceType)]?.icon || 'i-material-symbols:radio-button-unchecked'
-}
-
-function getResourceNodeTone(node = {}) {
-  const type = Number(node.resourceType)
-  if (type === 1)
-    return 'folder'
-  if (type === 2)
-    return 'menu'
-  if (type === 3)
-    return 'action'
-  if (type === 4)
-    return 'api'
-  return 'root'
-}
-
-function getResourceNodeMeta(node = {}) {
-  const childCount = node.children?.length || 0
-  if (!childCount)
-    return null
-  return {
-    label: '下级',
-    value: childCount,
-  }
-}
 
 // 搜索表单配置
 const searchSchema = computed(() => [
@@ -1129,8 +966,68 @@ function normalizeNumberList(value) {
     .filter(item => item !== null)))
 }
 
+function resolveOptionLabel(options = [], value, fallback = '') {
+  const matched = options.find(option => String(option?.value) === String(value))
+  return matched?.label || fallback
+}
+
+function resolveRoleTypeShortLabel(label = '') {
+  const text = String(label || '').trim()
+  return text.replace(/角色/g, '') || text || '角色'
+}
+
+function resolveRoleDictValue(row = {}, field) {
+  const aliasMap = {
+    roleType: ['roleType', 'role_type', 'type'],
+    dataScope: ['dataScope', 'data_scope'],
+    roleStatus: ['roleStatus', 'role_status', 'status'],
+  }
+  const keys = aliasMap[field] || [field]
+  const value = keys.map(key => row[key]).find(item => item !== null && item !== undefined && item !== '')
+  return normalizeSingleNumber(value, value ?? '')
+}
+
+function resolveRoleDataScopeLabel(row = {}) {
+  const value = resolveRoleDictValue(row, 'dataScope')
+  return resolveOptionLabel(dataScopeOptions.value, value, row.dataScope || '-')
+}
+
+function resolveRoleStatusLabel(row = {}) {
+  const value = resolveRoleDictValue(row, 'roleStatus')
+  return Number(value) === 1 ? '正常' : '停用'
+}
+
+function isRoleDisabled(row = {}) {
+  return Number(resolveRoleDictValue(row, 'roleStatus')) !== 1
+}
+
+function resolveRoleMemberCount(row = {}) {
+  const count = row.userCount ?? roleUserCountMap.value[row.id] ?? row.memberCount ?? row.users
+  if (count === null || count === undefined || count === '')
+    return null
+  const numericCount = Number(count)
+  return Number.isNaN(numericCount) ? null : numericCount
+}
+
 function resolveUserDisplayName(row = {}) {
   return row.realName || row.name || row.nickname || row.username || `用户${row.id}`
+}
+
+function resolveUserAccountLabel(row = {}) {
+  const username = String(row.username || '').trim()
+  return username && username !== resolveUserDisplayName(row) ? `@${username}` : ''
+}
+
+function resolveUserOrgLabel(row = {}) {
+  return row.orgName || row.org || row.deptName || row.departmentName || '-'
+}
+
+function resolveUserStatusLabel(row = {}) {
+  return Number(row.userStatus) === 1 ? '正常' : '停用'
+}
+
+function isUserEnabled(row = {}) {
+  return Number(row.userStatus) === 1
 }
 
 function flattenOrgNodes(list = []) {
@@ -1249,8 +1146,7 @@ async function loadRoleList() {
         }
         else {
           currentRole.value = {}
-          roleUsers.value = []
-          userPagination.value.itemCount = 0
+          roleUserTotal.value = 0
         }
       }
     }
@@ -1286,14 +1182,14 @@ async function handleSelectRole(row) {
   userSearchParams.value = {
     userStatus: null,
   }
-  userPagination.value.page = 1
   roleUserOrgId.value = null
+  roleUserTotal.value = resolveRoleMemberCount(row) ?? 0
   try {
     await Promise.all([
       loadRoleOrgTree(row.tenantId),
       loadRoleApplicableOrgIds(row.id),
     ])
-    await loadRoleUsers()
+    await searchRoleUsers()
   }
   catch (error) {
     console.error('加载角色用户上下文失败:', error)
@@ -1392,7 +1288,7 @@ async function handleSubmitRoleOrgs() {
       if (!isCurrentRoleGlobalScope.value && roleUserOrgId.value && !roleApplicableOrgIds.value.includes(roleUserOrgId.value)) {
         roleUserOrgId.value = null
       }
-      await loadRoleUsers()
+      await searchRoleUsers()
     }
   }
   catch (error) {
@@ -1415,54 +1311,60 @@ async function handleViewUsers(row) {
   await handleSelectRole(row)
 }
 
-// 加载角色用户列表
-async function loadRoleUsers() {
+function beforeLoadRoleUserList(params = {}) {
+  const keyword = String(roleUserKeyword.value || '').trim()
+  const nextParams = {
+    ...params,
+    username: keyword || undefined,
+    userStatus: userSearchParams.value.userStatus,
+    orgId: roleUserOrgId.value || undefined,
+  }
+  Object.keys(nextParams).forEach((key) => {
+    if (nextParams[key] === '' || nextParams[key] === null || nextParams[key] === undefined)
+      delete nextParams[key]
+  })
+  return nextParams
+}
+
+function handleRoleUserLoadSuccess({ total = 0 } = {}) {
+  roleUserTotal.value = total
+  if (currentRole.value?.id) {
+    roleUserCountMap.value = {
+      ...roleUserCountMap.value,
+      [currentRole.value.id]: total,
+    }
+    currentRole.value.userCount = total
+    const listRole = roleList.value.find(item => Number(item.id) === Number(currentRole.value.id))
+    if (listRole)
+      listRole.userCount = total
+  }
+}
+
+async function refreshRoleUsers() {
   if (!currentRole.value?.id) {
-    roleUsers.value = []
-    userPagination.value.itemCount = 0
+    roleUserTotal.value = 0
     return
   }
-  try {
-    usersLoading.value = true
-    const keyword = String(roleUserKeyword.value || '').trim()
-    const params = {
-      username: keyword || undefined,
-      userStatus: userSearchParams.value.userStatus,
-      pageNum: userPagination.value.page,
-      pageSize: userPagination.value.pageSize,
-      orgId: roleUserOrgId.value || undefined,
-    }
-    // 过滤空值
-    Object.keys(params).forEach((key) => {
-      if (params[key] === '' || params[key] === null || params[key] === undefined) {
-        delete params[key]
-      }
-    })
+  await nextTick()
+  roleUserCrudRef.value?.refresh?.()
+}
 
-    const res = await request.get(`/system/role/${currentRole.value.id}/users`, { params })
-    if (res.code === 200) {
-      roleUsers.value = res.data.records || []
-      userPagination.value.itemCount = res.data.total || 0
-    }
+async function searchRoleUsers() {
+  if (!currentRole.value?.id) {
+    roleUserTotal.value = 0
+    return
   }
-  catch (error) {
-    console.error('加载角色用户失败:', error)
-    window.$message.error('加载角色用户失败')
-  }
-  finally {
-    usersLoading.value = false
-  }
+  await nextTick()
+  roleUserCrudRef.value?.search?.({})
 }
 
 // 用户搜索
 function handleUserSearch() {
-  userPagination.value.page = 1
-  loadRoleUsers()
+  searchRoleUsers()
 }
 
 function handleRoleUserOrgChange() {
-  userPagination.value.page = 1
-  loadRoleUsers()
+  searchRoleUsers()
 }
 
 // 用户搜索重置
@@ -1471,21 +1373,7 @@ function handleUserSearchReset() {
   userSearchParams.value = {
     userStatus: null,
   }
-  userPagination.value.page = 1
-  loadRoleUsers()
-}
-
-// 用户分页变化
-function handleUserPageChange(page) {
-  userPagination.value.page = page
-  loadRoleUsers()
-}
-
-// 用户分页大小变化
-function handleUserPageSizeChange(pageSize) {
-  userPagination.value.pageSize = pageSize
-  userPagination.value.page = 1
-  loadRoleUsers()
+  searchRoleUsers()
 }
 
 // 移除角色用户
@@ -1509,7 +1397,7 @@ async function handleRemoveUserRole(user) {
           })
           if (res.code === 200) {
             window.$message.success('移除成功')
-            await loadRoleUsers()
+            await refreshRoleUsers()
           }
           return
         }
@@ -1528,7 +1416,7 @@ async function handleRemoveUserRole(user) {
         })
         if (res.code === 200) {
           window.$message.success('移除成功')
-          await loadRoleUsers()
+          await refreshRoleUsers()
         }
       }
       catch (error) {
@@ -1613,7 +1501,7 @@ async function handleConfirmAddUsers(userIds) {
     }
     window.$message.success(`成功添加 ${userIds.length} 个用户`)
     addUserModalVisible.value = false
-    await loadRoleUsers()
+    await refreshRoleUsers()
   }
   catch (error) {
     console.error('添加用户失败:', error)
@@ -1631,8 +1519,14 @@ async function handleAuth(row) {
   if (currentRole.value?.id !== row.id)
     await handleSelectRole(row)
   authModalVisible.value = true
+  authLoadFailed.value = false
+  dataScopeLoadFailed.value = false
+  dataScopeSettings.value = createFallbackDataScopeSettings()
 
-  await loadClientList()
+  await Promise.all([
+    loadClientList(),
+    loadRoleDataScopes(),
+  ])
   if (!authClientTabs.value.some(item => item.clientCode === currentAuthClientCode.value)) {
     currentAuthClientCode.value = authClientTabs.value[0]?.clientCode || 'pc'
   }
@@ -1658,14 +1552,12 @@ async function loadResourceTree() {
     })
     if (res.code === 200) {
       resourceTreeData.value = res.data || []
-
-      // 如果默认展开，收集所有节点的 key
-      if (treeExpandAll.value) {
-        treeExpandedKeys.value = getAllKeys(resourceTreeData.value)
-      }
+      return
     }
+    throw new Error(res.message || '资源树响应异常')
   }
   catch (error) {
+    authLoadFailed.value = true
     console.error('加载资源树失败:', error)
     window.$message.error('加载资源树失败')
   }
@@ -1675,13 +1567,16 @@ async function loadResourceTree() {
 async function loadRoleResources(roleId) {
   try {
     const res = await request.get(`/system/role/${roleId}/resources`, {
-      params: { clientCode: currentAuthClientCode.value },
+      params: { clientCode: currentAuthClientCode.value, includeParents: true },
     })
     if (res.code === 200) {
       checkedResourceKeys.value = res.data || []
+      return
     }
+    throw new Error(res.message || '角色资源响应异常')
   }
   catch (error) {
+    authLoadFailed.value = true
     console.error('加载角色资源失败:', error)
     window.$message.error('加载角色资源失败')
   }
@@ -1701,9 +1596,9 @@ async function loadClientList() {
 
 async function loadAuthClientResources() {
   authLoading.value = true
+  authLoadFailed.value = false
   checkedResourceKeys.value = []
   resourceTreeData.value = []
-  treeExpandedKeys.value = []
   try {
     await Promise.all([
       loadResourceTree(),
@@ -1715,54 +1610,66 @@ async function loadAuthClientResources() {
   }
 }
 
+async function loadRoleDataScopes() {
+  dataScopeLoading.value = true
+  dataScopeLoadFailed.value = false
+  try {
+    const res = await request.get(`/system/role/${currentRole.value.id}/dataScopes`)
+    if (res.code === 200) {
+      applyRoleDataScopeSettings(res.data)
+      return
+    }
+    dataScopeLoadFailed.value = true
+    dataScopeSettings.value = createFallbackDataScopeSettings()
+  }
+  catch (error) {
+    dataScopeLoadFailed.value = true
+    dataScopeSettings.value = createFallbackDataScopeSettings()
+    console.warn('当前后端未提供角色数据权限明细接口，已按角色数据范围降级展示:', error)
+  }
+  finally {
+    dataScopeLoading.value = false
+  }
+}
+
 async function handleAuthClientChange(clientCode) {
   currentAuthClientCode.value = clientCode
-  activeResourceTab.value = 'all'
   await loadAuthClientResources()
 }
 
-// 展开的节点变化
-function handleExpandedKeysChange(keys) {
-  treeExpandedKeys.value = keys
-}
-
-// 选中的资源变化
-function handleCheckedKeysChange(keys) {
-  checkedResourceKeys.value = keys
-}
-
-// 展开/折叠所有
-function toggleExpandAll() {
-  treeExpandAll.value = !treeExpandAll.value
-
-  if (treeExpandAll.value) {
-    // 展开所有：获取所有节点的 key
-    treeExpandedKeys.value = getAllKeys(resourceTreeData.value)
-  }
-  else {
-    // 收起所有：清空展开的 key
-    treeExpandedKeys.value = []
+function createFallbackDataScopeSettings() {
+  return {
+    defaultDataScope: Number(currentRole.value?.dataScope) || 5,
+    modules: [],
   }
 }
 
-// 全选
-function handleCheckAll() {
-  const allKeys = getAllKeys(resourceTreeData.value)
-  checkedResourceKeys.value = allKeys
+function normalizeRoleDataScopeSettings(settings = {}) {
+  const defaultDataScope = Number(settings.defaultDataScope) || Number(currentRole.value?.dataScope) || 5
+  return {
+    defaultDataScope,
+    modules: (settings.modules || []).map(module => ({
+      ...module,
+      dataScope: module.dataScope == null ? null : Number(module.dataScope),
+      effectiveDataScope: Number(module.effectiveDataScope ?? defaultDataScope) || defaultDataScope,
+    })),
+  }
 }
 
-// 全不选
-function handleUncheckAll() {
-  checkedResourceKeys.value = []
-}
-
-// 父子联动开关变化
-function handleTreeCascadeChange() {
-  // 切换时保留当前选中状态
+function applyRoleDataScopeSettings(settings = {}) {
+  const normalized = normalizeRoleDataScopeSettings(settings)
+  dataScopeSettings.value = normalized
+  if (currentRole.value)
+    currentRole.value.dataScope = normalized.defaultDataScope
 }
 
 // 提交授权
 async function handleSubmitAuth() {
+  if (authLoading.value || dataScopeLoading.value || authLoadFailed.value || dataScopeLoadFailed.value) {
+    window.$message.error('权限配置尚未完整加载，请关闭弹窗后重试')
+    return
+  }
+
   try {
     authSubmitLoading.value = true
     const res = await request.post(
@@ -1771,17 +1678,35 @@ async function handleSubmitAuth() {
       { params: { clientCode: currentAuthClientCode.value } },
     )
     if (res.code === 200) {
-      window.$message.success('授权成功')
+      await saveRoleDataScopesIfSupported()
+      window.$message.success('角色权限配置已保存')
       authModalVisible.value = false
+      crudRef.value?.refresh()
+    }
+    else {
+      throw new Error(res.message || '功能权限保存失败')
     }
   }
   catch (error) {
-    console.error('授权失败:', error)
-    window.$message.error('授权失败')
+    console.error('角色权限配置保存失败:', error)
+    window.$message.error(error?.message || '保存失败')
   }
   finally {
     authSubmitLoading.value = false
   }
+}
+
+async function saveRoleDataScopesIfSupported() {
+  const dataScopeRes = await request.post(`/system/role/${currentRole.value.id}/dataScopes`, {
+    defaultDataScope: dataScopeSettings.value.defaultDataScope,
+    moduleScopes: dataScopeSettings.value.modules.map(module => ({
+      moduleCode: module.moduleCode,
+      dataScope: module.dataScope,
+    })),
+  })
+  if (dataScopeRes.code !== 200)
+    throw new Error(dataScopeRes.message || '数据权限保存失败')
+  applyRoleDataScopeSettings(dataScopeRes.data)
 }
 
 onMounted(() => {
@@ -1796,11 +1721,15 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .role-workspace {
+  flex: 1;
   height: 100%;
   min-height: 0;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
 }
 
 .role-list-panel {
@@ -1810,75 +1739,100 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #fbfcff;
 }
 
 .role-selector-header {
-  min-height: 42px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 12px;
+  border-bottom: 0;
 }
 
 .role-selector-title {
   min-width: 120px;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 9px;
 }
 
-.role-selector-title span {
+.role-selector-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #2563eb;
+  font-size: 17px;
+}
+
+.role-selector-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.role-selector-copy strong {
   color: #0f172a;
   font-size: 14px;
   font-weight: 650;
   line-height: 1.2;
 }
 
-.role-selector-title small {
+.role-selector-copy small {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
 .role-selector-tools {
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
 }
 
 .role-tabs {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
   min-width: 0;
   min-height: 30px;
   padding: 2px;
-  border: 1px solid #e5e7eb;
-  border-radius: 5px;
-  background: #f8fafc;
+  border: 0;
+  border-radius: 6px;
+  background: #f1f5f9;
 }
 
 .role-tabs button {
   min-width: 0;
-  flex: 1 1 72px;
-  height: 24px;
-  padding: 0 6px;
+  flex: 1 1 0;
+  height: 26px;
+  padding: 0 7px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
-  color: #334155;
+  color: #64748b;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .role-tabs button:hover,
@@ -1888,7 +1842,7 @@ onMounted(() => {
 
 .role-tabs button.is-active {
   background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
 }
 
 .role-search {
@@ -1911,28 +1865,28 @@ onMounted(() => {
 .role-list {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-content: start;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 8px 8px 10px;
+  padding: 8px;
 }
 
 .role-list-item {
   width: 100%;
   min-width: 0;
-  min-height: 58px;
+  min-height: 54px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 8px;
+  position: relative;
+  padding: 8px 8px 8px 10px;
   margin-bottom: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: linear-gradient(180deg, #fff, #f8fafc);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
   color: #0f172a;
   cursor: pointer;
   text-align: left;
@@ -1943,14 +1897,14 @@ onMounted(() => {
 }
 
 .role-list-item:hover {
-  border-color: #cbd5e1;
+  border-color: #e2e8f0;
   background: #fff;
 }
 
 .role-list-item.is-selected {
-  border-color: #2563eb;
-  background: linear-gradient(180deg, #fff, #f3f7ff);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+  border-color: transparent;
+  background: rgba(239, 246, 255, 0.6);
+  box-shadow: none;
 }
 
 .role-list-main {
@@ -1958,7 +1912,15 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
+}
+
+.role-list-title {
+  max-width: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .role-list-main strong {
@@ -1971,19 +1933,53 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.role-list-item.is-selected .role-list-main strong {
+  color: #1d4ed8;
+}
+
+.role-list-item.is-selected .role-card-meta {
+  color: rgba(59, 130, 246, 0.7);
+}
+
+.role-list-item.is-selected .role-card-meta > * + *::before {
+  color: rgba(191, 219, 254, 0.95);
+}
+
+.role-disabled-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 10px;
+  line-height: 14px;
+}
+
 .role-card-meta {
   max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.role-card-meta small {
   overflow: hidden;
   color: #64748b;
   font-size: 11px;
+}
+
+.role-card-meta small,
+.role-card-meta span {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.role-card-meta > * + *::before {
+  content: '·';
+  margin-right: 6px;
+  color: #cbd5e1;
 }
 
 .role-list-side {
@@ -1994,26 +1990,52 @@ onMounted(() => {
 }
 
 .role-card-menu {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: #64748b;
   cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.role-list-item:hover .role-card-menu,
+.role-list-item.is-selected .role-card-menu {
+  opacity: 1;
 }
 
 .role-card-menu:hover {
-  background: #eef2ff;
-  color: #2563eb;
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .role-card-menu i {
   font-size: 16px;
+}
+
+:global(.role-action-dropdown-menu) {
+  min-width: 136px;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.14);
+}
+
+:global(.role-action-dropdown-menu .n-dropdown-option) {
+  border-radius: 6px;
+}
+
+:global(.role-action-danger) {
+  color: #dc2626;
 }
 
 .role-user-panel {
@@ -2028,38 +2050,67 @@ onMounted(() => {
 .role-user-header {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  min-height: 38px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 12px;
+  min-height: 54px;
+  padding: 11px 16px;
+  border-bottom: 1px solid #e6ebf2;
+  background: #fff;
 }
 
 .role-user-header h2 {
   overflow: hidden;
   margin: 0;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .role-user-title {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.role-user-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.role-user-heading small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-user-badges {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .role-user-search {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(200px, 280px) minmax(180px, 240px) minmax(120px, 160px) auto;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 9px 16px;
+  border-bottom: 1px solid #edf1f7;
+  background: #fff;
 }
 
 .role-user-search-actions {
@@ -2073,137 +2124,84 @@ onMounted(() => {
   width: 72px;
 }
 
-.role-user-cards {
+.member-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 6px 8px 8px;
   overflow: hidden;
-}
-
-.role-member-spin {
-  flex: 1;
-  min-height: 0;
-}
-
-.role-member-spin :deep(.n-spin-container),
-.role-member-spin :deep(.n-spin-content) {
-  height: 100%;
-  min-height: 0;
-}
-
-.role-member-grid {
-  height: 100%;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
-  align-content: start;
-  gap: 8px;
-  overflow-y: auto;
-  padding: 2px;
-}
-
-.role-member-card {
-  min-width: 0;
-  min-height: 54px;
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  padding: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  padding: 8px 10px 10px;
   background: #fff;
 }
 
-.role-member-card:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+.member-body :deep(.ai-crud-page) {
+  height: 100%;
+  min-height: 0;
 }
 
-.role-member-avatar {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
+.member-body :deep(.ai-crud-layout),
+.member-body :deep(.ai-crud-content),
+.member-body :deep(.ai-crud-table),
+.member-body :deep(.ai-table-wrapper),
+.member-body :deep(.n-data-table) {
+  min-height: 0;
 }
 
-.role-member-main {
-  min-width: 0;
+.member-body :deep(.ai-crud-table) {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.member-body :deep(.ai-table-wrapper) {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
 }
 
-.role-member-name,
-.role-member-meta {
-  min-width: 0;
+.member-body :deep(.n-data-table-wrapper),
+.member-body :deep(.n-data-table-base-table),
+.member-body :deep(.n-data-table-base-table-body) {
+  min-height: 0;
+}
+
+:global(.role-member-plain) {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.role-member-phone) {
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+:global(.role-member-status) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.role-member-name strong {
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.role-member-meta span {
-  overflow: hidden;
-  color: #64748b;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.role-member-meta span + span::before {
-  content: '/';
-  margin-right: 6px;
-  color: #cbd5e1;
-}
-
-.role-member-remove {
-  height: 26px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: #dc2626;
-  cursor: pointer;
+  color: #059669;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
-.role-member-remove:hover {
-  background: rgba(239, 68, 68, 0.1);
+:global(.role-member-status.is-disabled) {
+  color: #64748b;
 }
 
-.role-member-empty {
-  height: 100%;
-  min-height: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:global(.role-member-status-dot) {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #10b981;
 }
 
-.role-member-pagination {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 2px 0;
-  border-top: 1px solid #eef2f7;
-  margin-top: 8px;
+:global(.role-member-status.is-disabled .role-member-status-dot) {
+  background: #94a3b8;
 }
 
 .crud-driver {
@@ -2223,85 +2221,149 @@ onMounted(() => {
 
 /* 授权弹窗样式 */
 .auth-modal-content {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-height: 640px;
   min-height: 0;
-  color: #1f2937;
+  overflow: hidden;
+  color: #0f172a;
+  background: #f8fafc;
 }
 
-.auth-summary {
+.auth-workspace-header {
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
   gap: 16px;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fafc;
-  margin-bottom: 12px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
 }
 
-.auth-role-meta {
-  min-width: 0;
+.auth-header-main {
   display: flex;
   align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.auth-breadcrumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   gap: 10px;
-}
-
-.auth-role-name {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #0f172a;
   font-size: 14px;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
 }
 
-.auth-role-key {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 8px;
+.auth-breadcrumb-divider {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.auth-role-badge,
+.auth-client-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 260px;
+  min-width: 0;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid #e0e7ff;
   border-radius: 6px;
   background: #eef2ff;
-  color: #3730a3;
-  font-size: 12px;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 20px;
 }
 
-.auth-counts {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.auth-role-badge {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-role-key {
+  max-width: 260px;
+  overflow: hidden;
   color: #64748b;
   font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
 }
 
 .auth-client-tabs {
-  margin-bottom: 12px;
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
 }
 
 .auth-client-tabs :deep(.n-tabs-nav) {
   max-width: 100%;
 }
 
-.auth-toolbar {
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
+.auth-load-alert {
+  flex: 0 0 auto;
+  margin: 12px 16px 0;
 }
 
-.auth-toolbar :deep(.n-checkbox .n-checkbox__label) {
-  color: #475569;
-  font-size: 13px;
+.auth-floating-actions {
+  position: fixed;
+  right: 24px;
+  bottom: 22px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+:global(.role-permission-modal.n-card) {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  border-radius: 0;
+}
+
+:global(.role-permission-modal .n-card-header) {
+  display: none;
+}
+
+:global(.role-permission-modal .n-card-content) {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+:global(.role-permission-modal .n-card__content) {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .role-org-toolbar {
@@ -2323,102 +2385,6 @@ onMounted(() => {
   gap: 8px;
 }
 
-/* 标签页样式 */
-.auth-tabs {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.auth-tabs :deep(.n-tabs-nav) {
-  padding: 0 4px;
-  background-color: transparent;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.auth-tabs :deep(.n-tabs-tab) {
-  font-weight: 500;
-  padding: 10px 14px;
-  color: #475569;
-}
-
-.auth-tabs :deep(.n-tabs-tab.n-tabs-tab--active) {
-  color: #2563eb;
-}
-
-.auth-tabs :deep(.n-tabs-pane-wrapper) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.auth-tabs :deep(.n-tab-pane) {
-  height: 100%;
-  min-height: 0;
-}
-
-.auth-tabs :deep(.n-spin-container),
-.auth-tabs :deep(.n-spin-content) {
-  height: 100%;
-  min-height: 0;
-}
-
-.auth-tree-container {
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 10px 12px;
-  min-height: 0;
-  max-height: 450px;
-  background-color: #fff;
-}
-
-.auth-tree-container :deep(.premium-tree) {
-  padding-top: 2px;
-}
-
-.auth-tree-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  padding: 4px 2px;
-}
-
-.auth-tree-skeleton-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 28px;
-}
-
-.auth-tree-skeleton-row :deep(.n-skeleton--circle) {
-  flex: 0 0 auto;
-}
-
-/* 滚动条样式 */
-.auth-tree-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.auth-tree-container::-webkit-scrollbar-track {
-  background: var(--n-scrollbar-color);
-  border-radius: 4px;
-}
-
-.auth-tree-container::-webkit-scrollbar-thumb {
-  background: var(--n-scrollbar-color-hover);
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.auth-tree-container::-webkit-scrollbar-thumb:hover {
-  background: var(--n-border-color);
-}
-
 /* 弹窗底部按钮样式 */
 :deep(.n-card__footer) {
   padding: 14px 24px;
@@ -2427,6 +2393,18 @@ onMounted(() => {
 }
 
 /* 深色模式 */
+.dark .system-role-page {
+  background: #020617;
+}
+
+.dark .role-list-panel,
+.dark .role-user-cards,
+.dark .member-body,
+.dark .role-user-header,
+.dark .role-user-search {
+  background: #0f172a;
+}
+
 .dark .role-tabs,
 .dark .role-selector-header,
 .dark .role-selector-tools,
@@ -2445,11 +2423,19 @@ onMounted(() => {
   box-shadow: none;
 }
 
-.dark .role-selector-title span {
+.dark .role-selector-icon {
+  color: #bfdbfe;
+}
+
+.dark .role-selector-copy strong {
   color: #f1f5f9;
 }
 
-.dark .role-selector-title small {
+.dark .role-selector-copy small,
+.dark .role-user-heading small,
+.dark .role-card-meta,
+.dark .role-member-main small,
+.dark .role-member-plain {
   color: #94a3b8;
 }
 
@@ -2463,8 +2449,8 @@ onMounted(() => {
 }
 
 .dark .role-list-item {
-  border-color: #334155;
-  background: #111827;
+  border-color: transparent;
+  background: transparent;
   color: #e2e8f0;
 }
 
@@ -2474,14 +2460,26 @@ onMounted(() => {
 }
 
 .dark .role-list-item.is-selected {
-  border-color: #60a5fa;
+  border-color: transparent;
   background: rgba(37, 99, 235, 0.18);
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+  box-shadow: none;
 }
 
-.dark .role-card-meta small,
-.dark .role-member-meta span {
-  color: #94a3b8;
+.dark .role-list-main strong,
+.dark .role-member-main strong,
+.dark .role-user-header h2 {
+  color: #f1f5f9;
+}
+
+.dark .role-list-item.is-selected .role-list-main strong,
+.dark .role-list-item.is-selected .role-card-meta {
+  color: #bfdbfe;
+}
+
+.dark .role-disabled-badge {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fca5a5;
 }
 
 .dark .role-card-menu {
@@ -2493,73 +2491,102 @@ onMounted(() => {
   color: #bfdbfe;
 }
 
-.dark .role-member-card {
-  background: #111827;
-}
-
-.dark .role-member-card {
+:global(.dark .role-action-dropdown-menu) {
   border-color: #334155;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
 }
 
-.dark .role-member-card:hover {
-  background: #162033;
+.dark :global(.role-member-plain) {
+  color: #94a3b8;
 }
 
-.dark .role-member-avatar {
-  background: #1e3a8a;
-  color: #bfdbfe;
+.dark :global(.role-member-status) {
+  color: #34d399;
 }
 
-.dark .role-user-header h2,
-.dark .role-member-name strong {
-  color: #f1f5f9;
+.dark :global(.role-member-status.is-disabled) {
+  color: #94a3b8;
 }
 
-.dark .role-member-pagination {
-  border-color: #334155;
+.dark :global(.role-member-status-dot) {
+  background: #34d399;
+}
+
+.dark :global(.role-member-status.is-disabled .role-member-status-dot) {
+  background: #64748b;
 }
 
 .dark .auth-modal-content {
   color: #e5e7eb;
+  background: #0f172a;
 }
 
-.dark .auth-summary,
-.dark .auth-toolbar,
+.dark .auth-workspace-header,
+.dark .auth-client-tabs {
+  background: #111827;
+  border-color: #334155;
+}
+
+.dark .auth-breadcrumb {
+  color: #f8fafc;
+}
+
+.dark .auth-role-badge,
+.dark .auth-client-badge {
+  background: #1e3a8a;
+  border-color: #1d4ed8;
+  color: #bfdbfe;
+}
+
+.dark .auth-role-key,
+.dark .auth-breadcrumb-divider {
+  color: #94a3b8;
+}
+
+.dark .auth-floating-actions {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+}
+
 .dark .role-org-toolbar {
   background: #111827;
   border-color: #334155;
 }
 
-.dark .auth-role-name {
-  color: #f8fafc;
-}
+@media (max-width: 760px) {
+  .auth-workspace-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
 
-.dark .auth-role-key {
-  background: #1e3a8a;
-  color: #bfdbfe;
-}
+  .auth-header-main,
+  .auth-header-actions {
+    width: 100%;
+  }
 
-.dark .auth-counts,
-.dark .auth-toolbar :deep(.n-checkbox .n-checkbox__label) {
-  color: #94a3b8;
-}
+  .auth-header-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
 
-.dark .auth-tabs :deep(.n-tabs-nav) {
-  border-color: #334155;
-}
+  .auth-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 
-.dark .auth-tree-container {
-  background: #0f172a;
-  border-color: #334155;
+  .auth-floating-actions {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 860px) {
   .role-list-panel {
     min-height: 0;
-  }
-
-  .role-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .role-user-search {

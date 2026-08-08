@@ -550,11 +550,17 @@
         </n-space>
       </template>
     </n-modal>
+
+    <RolePermissionModal
+      v-model:show="rolePermissionModalVisible"
+      :role="currentPermissionRole"
+      @saved="loadRoleList"
+    />
   </div>
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
+import { NTag, NTooltip } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
@@ -564,6 +570,7 @@ import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
+import RolePermissionModal from './components/RolePermissionModal.vue'
 import { orderRolesWithCurrentFirst } from './user-role-order'
 
 defineOptions({ name: 'SystemUser' })
@@ -609,6 +616,8 @@ const editingUserTenantId = ref(null)
 const checkedRoleKeys = ref([])
 const authOrgId = ref(null)
 const currentUserOrgBindings = ref([])
+const rolePermissionModalVisible = ref(false)
+const currentPermissionRole = ref({})
 const rolePagination = ref({
   page: 1,
   pageSize: 10,
@@ -746,6 +755,37 @@ const authRoleColumns = computed(() => [
       normalDisableOptions.value,
       resolveRoleDictValue(row, 'roleStatus'),
       'role-status-tag',
+    ),
+  },
+  {
+    title: '操作',
+    key: 'action',
+    width: 112,
+    fixed: 'right',
+    render: row => h(
+      NTooltip,
+      {
+        trigger: 'hover',
+        placement: 'top',
+      },
+      {
+        trigger: () => h(
+          'button',
+          {
+            'type': 'button',
+            'class': 'role-permission-action-icon',
+            'aria-label': '权限配置',
+            'onClick': (event) => {
+              event.stopPropagation()
+              handleRolePermission(row)
+            },
+          },
+          [
+            h('i', { class: 'i-material-symbols:admin-panel-settings-rounded' }),
+          ],
+        ),
+        default: () => '权限配置',
+      },
     ),
   },
 ])
@@ -2032,6 +2072,11 @@ function handleCheckedKeysChange(keys) {
   checkedRoleKeys.value = normalizeNumberList(keys || [])
 }
 
+function handleRolePermission(row) {
+  currentPermissionRole.value = row
+  rolePermissionModalVisible.value = true
+}
+
 function handleRoleSearch() {
   rolePagination.value.page = 1
   loadRoleList(
@@ -2762,6 +2807,47 @@ async function handleSubmitBatchTenant() {
   min-width: 0;
 }
 
+:deep(.role-permission-action-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 17px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+
+:deep(.role-permission-action-icon:hover) {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+:deep(.role-permission-action-icon:active) {
+  transform: translateY(1px);
+}
+
+:deep(.role-permission-action-icon:focus-visible) {
+  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+:deep(.role-permission-action-icon i) {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
 .auth-tree-container::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -2955,6 +3041,18 @@ async function handleSubmitBatchTenant() {
 
 .dark .auth-tree-container {
   background: #0f172a;
+}
+
+.dark :deep(.role-permission-action-icon) {
+  border-color: #1d4ed8;
+  background: rgba(30, 58, 138, 0.36);
+  color: #bfdbfe;
+}
+
+.dark :deep(.role-permission-action-icon:hover) {
+  border-color: #60a5fa;
+  background: rgba(30, 64, 175, 0.58);
+  color: #dbeafe;
 }
 
 .dark .org-tree-container {

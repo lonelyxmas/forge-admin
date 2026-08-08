@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.system.constant.SystemConstants;
+import com.mdframe.forge.plugin.system.dto.RoleDataScopeSettingsDTO;
+import com.mdframe.forge.plugin.system.dto.RoleModuleDataScopeDTO;
 import com.mdframe.forge.plugin.system.dto.RoleUserQuery;
 import com.mdframe.forge.plugin.system.dto.SysRoleDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
@@ -21,6 +23,7 @@ import com.mdframe.forge.plugin.system.entity.SysUserOrgRole;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysResourceMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleResourceMapper;
@@ -31,13 +34,23 @@ import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysResourceService;
 import com.mdframe.forge.plugin.system.service.ISysRoleService;
+import com.mdframe.forge.plugin.system.vo.RoleDataScopeSettingsVO;
+import com.mdframe.forge.plugin.system.vo.RoleModuleDataScopeVO;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
+import com.mdframe.forge.starter.datascope.entity.SysRoleModuleDataScope;
+import com.mdframe.forge.starter.datascope.enums.DataScopeType;
+import com.mdframe.forge.starter.datascope.mapper.SysDataScopeConfigMapper;
+import com.mdframe.forge.starter.datascope.mapper.SysRoleModuleDataScopeMapper;
+import com.mdframe.forge.starter.datascope.service.IDataScopeService;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -63,6 +76,10 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     private final SysOrgMapper orgMapper;
     private final SysUserMapper userMapper;
     private final SysUserTenantMapper userTenantMapper;
+    private final SysResourceMapper resourceMapper;
+    private final SysDataScopeConfigMapper dataScopeConfigMapper;
+    private final SysRoleModuleDataScopeMapper roleModuleDataScopeMapper;
+    private final IDataScopeService dataScopeService;
     @Lazy
     private final ISysResourceService resourceService;
 
@@ -173,7 +190,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         Set<Long> resourceIdSet = resourceIds != null ? new HashSet<>(Arrays.asList(resourceIds)) : Collections.emptySet();
         if (StringUtils.isNotBlank(clientCode)) {
             assignableResources = new ArrayList<>(resourceService.lambdaQuery()
-                    .eq(SysResource::getClientCode, clientCode)
+                    .and(wrapper -> wrapper
+                            .eq(SysResource::getClientCode, clientCode)
+                            .or()
+                            .isNull(SysResource::getClientCode)
+                            .or()
+                            .eq(SysResource::getClientCode, ""))
                     .list());
             if (!resourceIdSet.isEmpty()) {
                 Set<Long> existingIds = assignableResources.stream()
@@ -200,7 +222,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         Set<Long> clientAssignableResourceIdSet = Collections.emptySet();
         if (StringUtils.isNotBlank(clientCode)) {
             clientResourceIdSet = assignableResources.stream()
-                    .filter(resource -> clientCode.equals(resource.getClientCode()))
+                    .filter(resource -> isClientCompatibleResource(resource, clientCode))
                     .map(SysResource::getId)
                     .collect(Collectors.toSet());
             clientAssignableResourceIdSet = new HashSet<>(clientResourceIdSet);
@@ -305,6 +327,10 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     private boolean isClientCompatibleParent(SysResource resource, String clientCode) {
+        return isClientCompatibleResource(resource, clientCode);
+    }
+
+    private boolean isClientCompatibleResource(SysResource resource, String clientCode) {
         return resource != null
                 && (StringUtils.isBlank(resource.getClientCode()) || clientCode.equals(resource.getClientCode()));
     }
@@ -353,6 +379,11 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     @Override
     public List<Long> selectRoleResourceIds(Long roleId, String clientCode) {
+        return selectRoleResourceIds(roleId, clientCode, false);
+    }
+
+    @Override
+    public List<Long> selectRoleResourceIds(Long roleId, String clientCode, boolean includeParents) {
         if (roleId == null) {
             return new ArrayList<>();
         }
@@ -369,7 +400,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
         if (StringUtils.isNotBlank(clientCode) && CollUtil.isNotEmpty(resourceIds)) {
             Set<Long> clientResourceIdSet = resourceService.lambdaQuery()
-                    .eq(SysResource::getClientCode, clientCode)
+                    .and(clientScope -> clientScope
+                            .eq(SysResource::getClientCode, clientCode)
+                            .or()
+                            .isNull(SysResource::getClientCode)
+                            .or()
+                            .eq(SysResource::getClientCode, ""))
                     .select(SysResource::getId)
                     .list()
                     .stream()
@@ -386,6 +422,10 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             resourceIds = resourceIds.stream()
                     .filter(currentUserResourceIdSet::contains)
                     .collect(Collectors.toList());
+        }
+
+        if (includeParents) {
+            return resourceIds;
         }
 
         // 优化：过滤掉父级ID，只返回叶子节点（在当前选中集合中没有子节点的节点）
@@ -501,6 +541,100 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
                     .stream().map(SysRole::getId).collect(Collectors.toList());
         }
         return loginUser.getRoleIds();
+    }
+
+    @Override
+    public RoleDataScopeSettingsVO getRoleDataScopeSettings(Long roleId) {
+        SysRole role = loadRoleForAccess(roleId);
+        List<SysDataScopeConfig> configs = listEnabledDataScopeConfigs(role.getTenantId());
+        List<SysRoleModuleDataScope> overrides = listRoleModuleDataScopes(role);
+        Map<String, Integer> overrideMap = overrides.stream()
+                .collect(Collectors.toMap(SysRoleModuleDataScope::getModuleCode,
+                        SysRoleModuleDataScope::getDataScope, (left, right) -> right));
+
+        List<SysResource> resources = TenantContextHolder.executeIgnore(() ->
+                resourceMapper.selectModuleNamingResources(role.getTenantId()));
+        Map<Long, SysResource> resourceMap = resources.stream()
+                .collect(Collectors.toMap(SysResource::getId, resource -> resource, (left, right) -> left));
+
+        Map<String, List<SysDataScopeConfig>> groupedConfigs = configs.stream()
+                .filter(config -> StringUtils.isNotBlank(config.getResourceCode()))
+                .collect(Collectors.groupingBy(SysDataScopeConfig::getResourceCode,
+                        LinkedHashMap::new, Collectors.toList()));
+
+        List<RoleModuleDataScopeVO> modules = groupedConfigs.entrySet().stream()
+                .map(entry -> buildModuleDataScope(entry.getKey(), entry.getValue(), role.getDataScope(),
+                        overrideMap.get(entry.getKey()), resources, resourceMap))
+                .sorted(Comparator.comparing(RoleModuleDataScopeVO::getModuleName,
+                        Comparator.nullsLast(String::compareTo)))
+                .toList();
+
+        RoleDataScopeSettingsVO result = new RoleDataScopeSettingsVO();
+        result.setDefaultDataScope(role.getDataScope());
+        result.setModules(modules);
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean saveRoleDataScopeSettings(Long roleId, RoleDataScopeSettingsDTO settings) {
+        if (settings == null) {
+            throw new RuntimeException("数据权限设置不能为空");
+        }
+        SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
+        Integer defaultDataScope = settings.getDefaultDataScope();
+        validateSupportedDataScope(defaultDataScope);
+        validateDataScopeAllowedForCurrentUser(defaultDataScope);
+        validateDataScopeAllowedForBoundUsers(role, defaultDataScope);
+
+        Set<String> availableModuleCodes = listEnabledDataScopeConfigs(role.getTenantId()).stream()
+                .map(SysDataScopeConfig::getResourceCode)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toSet());
+        Map<String, Integer> requestedOverrides = normalizeModuleDataScopes(
+                settings.getModuleScopes(), availableModuleCodes, role);
+
+        boolean saved = TenantContextHolder.executeIgnore(() -> {
+            SysRole update = new SysRole();
+            update.setId(role.getId());
+            update.setTenantId(role.getTenantId());
+            update.setDataScope(defaultDataScope);
+            if (roleMapper.updateById(update) <= 0) {
+                return false;
+            }
+
+            roleModuleDataScopeMapper.delete(new LambdaQueryWrapper<SysRoleModuleDataScope>()
+                    .eq(SysRoleModuleDataScope::getTenantId, role.getTenantId())
+                    .eq(SysRoleModuleDataScope::getRoleId, role.getId()));
+
+            requestedOverrides.forEach((moduleCode, dataScope) -> {
+                SysRoleModuleDataScope override = new SysRoleModuleDataScope();
+                override.setTenantId(role.getTenantId());
+                override.setRoleId(role.getId());
+                override.setModuleCode(moduleCode);
+                override.setDataScope(dataScope);
+                roleModuleDataScopeMapper.insert(override);
+            });
+            return true;
+        });
+        if (saved) {
+            refreshDataScopeCacheAfterCommit();
+        }
+        return saved;
+    }
+
+    private void refreshDataScopeCacheAfterCommit() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dataScopeService.refreshDataScopeCache();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                dataScopeService.refreshDataScopeCache();
+            }
+        });
     }
 
     @Override
@@ -706,7 +840,122 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
                 throw new RuntimeException("租户管理员只能给普通用户分配角色");
             }
         }
-        validateDataScopeAllowedForUsers(role.getDataScope(), normalizedUserIds, tenantId);
+        validateDataScopeAllowedForUsers(resolveMostPermissiveRoleDataScope(role), normalizedUserIds, tenantId);
+    }
+
+    private List<SysDataScopeConfig> listEnabledDataScopeConfigs(Long tenantId) {
+        return TenantContextHolder.executeIgnore(() ->
+                dataScopeConfigMapper.selectEnabledModuleConfigs(tenantId));
+    }
+
+    private List<SysRoleModuleDataScope> listRoleModuleDataScopes(SysRole role) {
+        return TenantContextHolder.executeIgnore(() ->
+                roleModuleDataScopeMapper.selectByRole(role.getTenantId(), role.getId()));
+    }
+
+    private RoleModuleDataScopeVO buildModuleDataScope(String moduleCode,
+                                                       List<SysDataScopeConfig> configs,
+                                                       Integer defaultDataScope,
+                                                       Integer overrideDataScope,
+                                                       List<SysResource> resources,
+                                                       Map<Long, SysResource> resourceMap) {
+        RoleModuleDataScopeVO module = new RoleModuleDataScopeVO();
+        module.setModuleCode(moduleCode);
+        module.setModuleName(resolveModuleName(moduleCode, configs, resources, resourceMap));
+        module.setRuleCount(configs.size());
+        module.setDataScope(overrideDataScope);
+        module.setEffectiveDataScope(overrideDataScope != null ? overrideDataScope : defaultDataScope);
+        return module;
+    }
+
+    private String resolveModuleName(String moduleCode,
+                                     List<SysDataScopeConfig> configs,
+                                     List<SysResource> resources,
+                                     Map<Long, SysResource> resourceMap) {
+        Map<String, Long> menuNameCounts = resources.stream()
+                .filter(resource -> resourceMatchesModule(resource, moduleCode))
+                .map(resource -> findMenuAncestor(resource, resourceMap))
+                .filter(Objects::nonNull)
+                .map(SysResource::getResourceName)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.groupingBy(name -> name, Collectors.counting()));
+        if (!menuNameCounts.isEmpty()) {
+            return menuNameCounts.entrySet().stream()
+                    .max(Map.Entry.<String, Long>comparingByValue()
+                            .thenComparing(Map.Entry::getKey))
+                    .map(Map.Entry::getKey)
+                    .orElse(moduleCode);
+        }
+        return configs.stream()
+                .map(SysDataScopeConfig::getResourceName)
+                .filter(StringUtils::isNotBlank)
+                .findFirst()
+                .orElse(moduleCode);
+    }
+
+    private boolean resourceMatchesModule(SysResource resource, String moduleCode) {
+        String permission = resource.getPerms();
+        return StringUtils.isNotBlank(permission)
+                && (permission.equals(moduleCode) || permission.startsWith(moduleCode + ":"));
+    }
+
+    private SysResource findMenuAncestor(SysResource resource, Map<Long, SysResource> resourceMap) {
+        SysResource current = resource;
+        Set<Long> visited = new HashSet<>();
+        while (current != null && current.getId() != null && visited.add(current.getId())) {
+            if (Integer.valueOf(2).equals(current.getResourceType())) {
+                return current;
+            }
+            current = resourceMap.get(current.getParentId());
+        }
+        return null;
+    }
+
+    private Map<String, Integer> normalizeModuleDataScopes(List<RoleModuleDataScopeDTO> moduleScopes,
+                                                           Set<String> availableModuleCodes,
+                                                           SysRole role) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        if (moduleScopes == null) {
+            return result;
+        }
+        Set<String> seenModuleCodes = new HashSet<>();
+        for (RoleModuleDataScopeDTO moduleScope : moduleScopes) {
+            if (moduleScope == null || StringUtils.isBlank(moduleScope.getModuleCode())) {
+                throw new RuntimeException("业务模块编码不能为空");
+            }
+            String moduleCode = moduleScope.getModuleCode().trim();
+            if (!availableModuleCodes.contains(moduleCode)) {
+                throw new RuntimeException("业务模块不存在或未启用：" + moduleCode);
+            }
+            if (!seenModuleCodes.add(moduleCode)) {
+                throw new RuntimeException("业务模块重复配置：" + moduleCode);
+            }
+            Integer dataScope = moduleScope.getDataScope();
+            if (dataScope == null) {
+                continue;
+            }
+            validateSupportedDataScope(dataScope);
+            validateDataScopeAllowedForCurrentUser(dataScope);
+            validateDataScopeAllowedForBoundUsers(role, dataScope);
+            result.put(moduleCode, dataScope);
+        }
+        return result;
+    }
+
+    private Integer resolveMostPermissiveRoleDataScope(SysRole role) {
+        Integer defaultDataScope = role.getDataScope() != null
+                ? role.getDataScope()
+                : DataScopeType.SELF.getCode();
+        return listRoleModuleDataScopes(role).stream()
+                .map(SysRoleModuleDataScope::getDataScope)
+                .filter(Objects::nonNull)
+                .reduce(defaultDataScope, Math::min);
+    }
+
+    private void validateSupportedDataScope(Integer dataScope) {
+        if (DataScopeType.getByRoleDataScope(dataScope, false) == null) {
+            throw new RuntimeException("不支持的数据权限范围");
+        }
     }
 
     private void validateDataScopeAllowedForUsers(Integer dataScope, List<Long> userIds, Long tenantId) {
