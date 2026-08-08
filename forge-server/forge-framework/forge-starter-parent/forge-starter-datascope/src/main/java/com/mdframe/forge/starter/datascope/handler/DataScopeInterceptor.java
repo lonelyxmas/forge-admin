@@ -105,7 +105,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
         // 1. 获取当前用户数据权限上下文。先确认 mapper 配置存在，避免无权限配置的普通查询反复计算角色数据范围。
         DataScopeContext context = null;
         try {
-            context = dataScopeService.getCurrentUserDataScope();
+            context = dataScopeService.getCurrentUserDataScope(config.getResourceCode());
         } catch (Exception e) {
             handleConfiguredFailure("获取当前用户数据权限上下文失败: " + actualMapperId, e);
             return;
