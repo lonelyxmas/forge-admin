@@ -202,7 +202,13 @@
             :show-render-mode-switch="false"
             :page-size="10"
             :scroll-x="760"
-            :table-props="{ dragScroll: false }"
+            :table-props="{
+              dragScroll: false,
+              showToolbar: false,
+              showRefresh: false,
+              showDensity: false,
+              showColumnFilter: false,
+            }"
             @load-list-success="handleRoleUserLoadSuccess"
           />
         </div>
