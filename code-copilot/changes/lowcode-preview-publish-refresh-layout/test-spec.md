@@ -18,6 +18,28 @@
 
 - Real Admin/Flow service startup, MySQL/Redis access, Flyway execution, and browser E2E because this session must not mutate or depend on the user's runtime environment.
 
+## 2026-08-07 incremental verification
+
+### P0
+
+- `AiTable` gives centered columns matching `align`/`titleAlign` and wraps the body renderer in a full-width flex container with centered justification.
+- Explicit empty access-entry selection remains empty through `BusinessAppService`; explicit disabled/incomplete entries are skipped by asset selection; foreign entry IDs still throw a business exception.
+- `useBusinessProcessDesigner.insertNodeOnEdge` can insert a governed node into one concrete condition branch without breaking graph validation.
+- Every canvas edge renders an inline add control; clicking it inserts the selected business node type.
+- Palette items are draggable, publish only the governed node MIME/type, and dropping on an insertion control creates and selects the new node.
+
+### P1
+
+- Focused frontend Vitest for `AiTable` and the business-process designer.
+- Target frontend ESLint for changed Vue/JS/test files.
+- Generator tests for application asset selection and access-entry compatibility with JDK 17 and `enable-tests`.
+- Generator module compile/test and frontend production build according to the existing baseline.
+- Scoped `git diff --check`.
+
+### Still intentionally skipped
+
+- Real Admin/Flow/Vite service startup, database/Flyway mutation, and browser E2E remain user-side integration checks.
+
 ## 2026-08-06 incremental result
 
 - P0 frontend: 4 Vitest files, 21 tests passed.

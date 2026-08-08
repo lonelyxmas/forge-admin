@@ -186,4 +186,34 @@ describe('business process designer workbench', () => {
     expect(event.defaultPrevented).toBe(true)
     wrapper.unmount()
   })
+
+  it('drags a palette node onto a concrete canvas insertion edge', async () => {
+    const schema = createBusinessProcessSchema({ processCode: 'purchase_submit', objectRef })
+    const wrapper = mount(BusinessProcessDesigner, {
+      props: { schema, autoSaveDelay: 60000 },
+      global: { stubs: { BusinessProcessNodeConfigDrawer: true } },
+    })
+    const transferStore = new Map()
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: (key, value) => transferStore.set(key, value),
+      getData: key => transferStore.get(key) || '',
+    }
+
+    const paletteItem = wrapper.find('[data-node-type="ACTION"]')
+    expect(paletteItem.attributes('draggable')).toBe('true')
+    await paletteItem.trigger('dragstart', { dataTransfer })
+    expect(dataTransfer.effectAllowed).toBe('copy')
+    expect([...transferStore.values()]).toContain('ACTION')
+
+    const canvas = wrapper.find('.business-process-canvas')
+    await canvas.trigger('dragover', { clientX: 300, clientY: 220, dataTransfer })
+    expect(wrapper.find('[data-business-insert-edge]').classes()).toContain('is-active-target')
+    await canvas.trigger('drop', { clientX: 300, clientY: 220, dataTransfer })
+
+    const latestSchema = wrapper.emitted('update:schema').at(-1)[0]
+    expect(latestSchema.nodes.some(node => node.type === 'ACTION')).toBe(true)
+    expect(wrapper.findComponent(BusinessProcessNodeConfigDrawer).props('visible')).toBe(true)
+  })
 })

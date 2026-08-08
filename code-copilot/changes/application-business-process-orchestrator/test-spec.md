@@ -305,3 +305,35 @@ NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 - 必跑命令：Task 12 九个定向测试类、两份 Mapper XML `xmllint`、目标差异 `git diff --check`、`forge-admin-server -am compile -DskipTests`。
 - 全量基线：generator 全量测试若出现非本 Task 失败，必须记录具体类和计数，不得用定向通过掩盖；Task 12 修改类的定向回归必须全部通过。
 - 环境门禁：不启动 Admin/Flow，不执行 Flyway 或真实数据库写入；真实 Flowable 部署响应、发布/回滚 HTTP 和新旧实例并存留待 Task 19。
+
+## 15. 业务画布共享后继连线修复增量验证
+
+- 复现场景：默认 `START_MANUAL -> END` 草稿在原连线上插入 `APPROVAL`，审批节点产生 `APPROVED/REJECTED/CANCELED/FAILED` 四条结果边并共享原结束节点。
+- 布局合同：业务 DAG 的多入边节点在只读布局适配层中显式标记为汇合点；共享后继必须保持在开始/审批主轴，不得被放置到第一个结果分支的最左侧。
+- 连线合同：同源同目标的多条结果边必须保留独立 edge ID 和 sourcePort，并使用与端口顺序一致的独立锚点；四条 SVG 路径和四个插入目标不得重叠。
+- 协议边界：不得修改持久化 `businessProcessJson`、审批四结果出口或 BPMN `flowJson`；共享 `layoutFlow` 与 DingFlowDesigner 转换回归必须保持通过。
+- 自动化验证：业务画布新增截图场景回归；组合执行两份业务设计器测试、BPMN roundtrip、JSON→BPMN、共享布局算法、FlowCanvas 和 layout-engine 测试；执行目标 ESLint、`git diff --check` 和生产构建。
+- 浏览器验证：用受控 API 响应装配真实全屏设计路由，检查三节点中轴、5 条 SVG 边、四个结果插入目标和页面错误；开发态 UnoCSS 首次扫描若不稳定，必须记录环境告警，不能替代组件几何断言和生产构建结果。
+- 环境门禁：不启动 Admin/Flow，不访问或修改真实 MySQL、Flyway、Flowable 运行态和用户草稿数据。
+
+## 16. Flowable BPMN XML 解析兼容性增量验证
+
+- 解析门禁：保留 DOCTYPE 和外部实体禁用；JAXP 1.5 外部访问属性作为可选兼容能力，不因旧 XML parser 不识别属性而阻断合法 BPMN 部署。
+- 部署日志：BPMN `process id` 已经等于模型 Key 时只记录 debug，避免把正常的无需替换信息误认为部署异常。
+- 必跑命令：`mvn -Penable-tests -pl forge-framework/forge-plugin-parent/forge-plugin-flow -Dtest=BpmnXmlUtilsTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 覆盖结果：重复连线归一化、条件连线保留和 DOCTYPE 拒绝回归；真实 Flowable 部署、数据库和服务启动仍留待 Task 19。
+
+## 17. 业务流程设计器可用性修复增量验证
+
+- 审批模型目录：Flowable 审批模型是租户级复用资产；目录直接返回当前可信租户下 `status=1`、`version>0`、`processDefinitionId/deploymentId` 完整的审批模型，不要求主对象或应用内其它对象预先存在 `FLOW Binding`。缺少可信租户、未发布、未部署、零版本和已失效模型不返回，Schema 发布校验使用同一判定结果。
+- 租户隔离：Flow 服务即使处于 `@IgnoreTenant` 控制器边界，模型目录 SQL 也必须显式使用 `SessionHelper` 的可信租户 ID；缺少租户上下文时返回空目录且不访问 Mapper，不能回退默认租户或全租户查询。
+- 条件规则：复用审批设计器规则模型，覆盖 AND/OR、等于/不等于、大小比较、区间、包含、为空、表达式生成和既有表达式反解析；业务流程默认入口只保存结构化条件，不展示高级表达式。
+- 条件发布门禁：条件节点必须同时包含至少一个判断分支和一个唯一默认分支；只有默认分支、缺少默认分支、多个默认分支、默认分支带规则或判断分支无完整规则时均拒绝发布，并返回中文可操作提示。
+- 分支图操作：新增第三分支自动生成唯一 port 和唯一 edge；重命名 port 同步 edge.sourcePort；删除分支删除对应 edge；设置默认分支同步 `isDefault`；每次操作后节点 ports、branches 和出边保持一一对应。
+- 顺序语义：节点 ports 必须保留审批结果和条件 branches 的业务定义顺序，协议规范化不得按技术 port 字母排序；画布标签、锚点、连线和运行判断顺序保持一致。
+- 多出口节点删除：条件和审批节点的所有出边指向同一公共后继时允许直接删除，全部入边接回公共后继并去重；无唯一公共后继时拒绝删除并展示明确中文原因。
+- 画布布局：条件二至四分支和审批四结果共享后继时保持主轴居中；每条连线、锚点和插入按钮有独立几何位置；在任一分支插入节点后布局和图校验仍稳定。跨层直达边不得穿过中间卡片，绕行边不得与其它分支的汇合边共用同一线段。
+- 中文与交互：卡片、抽屉和结果配置不显示 `APPROVED/REJECTED/CANCELED/FAILED/MATCHED/OTHERWISE/BRANCH_*`；可删除节点卡片有中文 tooltip/aria-label 的删除按钮，点击删除不触发节点选择并经过确认。
+- 必跑命令：审批模型目录后端定向测试；业务流程设计器与 ConditionConfig 定向 Vitest；目标 ESLint；`git diff --check`；Node `v20.19.0` 生产构建。
+- 浏览器验证：先执行 `scripts/with_server.py --help`，再以受控 API 装配真实全屏路由，依次新增条件、添加分支、配置规则、插入下游节点和卡片删除；截图检查连线与按钮，console/page error 必须为 0。
+- 环境门禁：不启动真实 Admin/Flow、不写 MySQL/Flyway/Flowable；真实部署与应用发布结果继续作为 Task 19 联调项，未执行不得标记通过。

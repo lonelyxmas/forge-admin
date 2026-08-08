@@ -243,6 +243,9 @@ function clone(value) {
             {{ item.modelName || item.name || modelKey(item) }}
           </option>
         </select>
+        <small v-if="!publishedFlowModels.length" class="catalog-empty-tip">
+          当前租户暂无已发布并部署的审批流程。请先发布审批模型，再返回刷新。
+        </small>
       </label>
       <label class="config-field">
         <span>审批标题</span>

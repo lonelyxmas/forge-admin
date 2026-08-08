@@ -45,6 +45,7 @@ const DEFAULT_START_ID = Object.freeze({
   [BUSINESS_PROCESS_NODE_TYPE.START_EVENT]: 'start_event',
   [BUSINESS_PROCESS_NODE_TYPE.START_SCHEDULE]: 'start_schedule',
 })
+const APPROVAL_PORT_ORDER = Object.freeze(['APPROVED', 'REJECTED', 'CANCELED', 'FAILED'])
 
 export function createBusinessProcessSchema({
   processCode,
@@ -216,6 +217,8 @@ export function validateBusinessProcessGraph(input) {
 
     if (!getBusinessProcessNodeDefinition(node.type))
       issues.push(issue('NODE_TYPE_UNKNOWN', '节点类型不在业务流程注册表中', node.id, 'nodes'))
+    if (node.type === BUSINESS_PROCESS_NODE_TYPE.CONDITION)
+      validateConditionNode(node, issues)
     if (isBusinessProcessStartType(node.type))
       startNodes.push(node)
     if (node.type === BUSINESS_PROCESS_NODE_TYPE.END)
@@ -299,6 +302,19 @@ export function validateBusinessProcessGraph(input) {
       issues.push(issue('NODE_SUCCESSOR_REQUIRED', '非结束节点必须连接后继节点', node.id, `nodes.${node.id}`))
     if (!isBusinessProcessStartType(node.type) && incoming.length === 0)
       issues.push(issue('NODE_PREDECESSOR_REQUIRED', '非开始节点必须有入边', node.id, `nodes.${node.id}`))
+    if (node.type === BUSINESS_PROCESS_NODE_TYPE.CONDITION) {
+      const outgoingPorts = new Set(outgoing.map(edge => edge.sourcePort))
+      const declaredPorts = new Set(node.ports || [])
+      if (outgoingPorts.size !== declaredPorts.size
+        || [...declaredPorts].some(port => !outgoingPorts.has(port))) {
+        issues.push(issue(
+          'CONDITION_EDGE_MISMATCH',
+          '条件分支与画布连线不一致，请重新应用节点配置',
+          node.id,
+          `nodes.${node.id}.ports`,
+        ))
+      }
+    }
   }
 
   if (containsCycle(nodesById, validEdges))
@@ -345,13 +361,40 @@ function normalizeNode(input, index) {
   if (!isPlainObject(input))
     throw new Error(`nodes[${index}] 必须是 JSON 对象`)
   assertOnlyKeys(input, NODE_KEYS, `nodes[${index}]`)
+  const type = normalizeUpperString(input.type)
+  const config = normalizeJsonObject(input.config, `nodes[${index}].config`)
+  const ports = normalizeStringList(input.ports, `nodes[${index}].ports`, true, true)
   return {
     id: normalizeOptionalString(input.id),
-    type: normalizeUpperString(input.type),
+    type,
     name: normalizeOptionalString(input.name),
-    ports: normalizeStringList(input.ports, `nodes[${index}].ports`, true),
-    config: normalizeJsonObject(input.config, `nodes[${index}].config`),
+    // 旧草稿曾按字母排序端口；审批使用注册表顺序，条件使用用户配置的分支顺序迁移。
+    ports: normalizeNodePorts(type, ports, config),
+    config,
   }
+}
+
+function normalizeNodePorts(type, ports, config) {
+  if (type === BUSINESS_PROCESS_NODE_TYPE.APPROVAL
+    && sameStringSet(ports, APPROVAL_PORT_ORDER)) {
+    return [...APPROVAL_PORT_ORDER]
+  }
+  if (type !== BUSINESS_PROCESS_NODE_TYPE.CONDITION)
+    return ports
+
+  const branchPorts = []
+  for (const branch of Array.isArray(config?.branches) ? config.branches : []) {
+    if (typeof branch?.port !== 'string')
+      continue
+    const port = branch.port.trim().toUpperCase()
+    if (port && !branchPorts.includes(port))
+      branchPorts.push(port)
+  }
+  return branchPorts.length && sameStringSet(branchPorts, ports) ? branchPorts : ports
+}
+
+function sameStringSet(left, right) {
+  return left.length === right.length && left.every(value => right.includes(value))
 }
 
 function normalizeEdge(input, index) {
@@ -418,7 +461,7 @@ function normalizeArray(input, path) {
   return input
 }
 
-function normalizeStringList(input, path, uppercase = false) {
+function normalizeStringList(input, path, uppercase = false, preserveOrder = false) {
   const values = normalizeArray(input, path)
   const result = new Set()
   for (const value of values) {
@@ -428,7 +471,7 @@ function normalizeStringList(input, path, uppercase = false) {
     if (normalized)
       result.add(normalized)
   }
-  return [...result].sort(compareStrings)
+  return preserveOrder ? [...result] : [...result].sort(compareStrings)
 }
 
 function normalizeIntegerList(input, path) {
@@ -512,6 +555,47 @@ function allowedPorts(node) {
   if (node.type === BUSINESS_PROCESS_NODE_TYPE.CONDITION)
     return node.ports
   return item.ports
+}
+
+function validateConditionNode(node, issues) {
+  const branches = Array.isArray(node.config?.branches) ? node.config.branches : []
+  if (branches.length < 2) {
+    issues.push(issue(
+      'CONDITION_BRANCH_COUNT_INVALID',
+      '条件节点至少需要一个判断分支和一个默认分支',
+      node.id,
+      `nodes.${node.id}.config.branches`,
+    ))
+    return
+  }
+
+  const ports = branches.map(branch => branch?.port).filter(Boolean)
+  if (ports.length !== branches.length || new Set(ports).size !== ports.length) {
+    issues.push(issue(
+      'CONDITION_PORT_INVALID',
+      '条件分支存在重复或无效出口',
+      node.id,
+      `nodes.${node.id}.config.branches`,
+    ))
+  }
+  const defaults = branches.filter(branch => branch?.isDefault === true)
+  if (defaults.length !== 1) {
+    issues.push(issue(
+      'CONDITION_DEFAULT_INVALID',
+      '条件节点必须保留一个默认分支',
+      node.id,
+      `nodes.${node.id}.config.branches`,
+    ))
+  }
+  if (new Set(node.ports || []).size !== ports.length
+    || ports.some(port => !(node.ports || []).includes(port))) {
+    issues.push(issue(
+      'CONDITION_PORTS_MISMATCH',
+      '条件分支出口与节点配置不一致',
+      node.id,
+      `nodes.${node.id}.ports`,
+    ))
+  }
 }
 
 function containsCycle(nodesById, edges) {

@@ -1,6 +1,10 @@
 <script setup>
 import { computed } from 'vue'
-import { getBusinessProcessNodeDefinition } from './business-process-node-types.js'
+import {
+  getBusinessProcessNodeDefinition,
+  getBusinessProcessPortLabel,
+  isBusinessProcessStartType,
+} from './business-process-node-types.js'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -9,7 +13,7 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'delete'])
 
 const definition = computed(() => getBusinessProcessNodeDefinition(props.node.type) || ({
   label: props.node.type || '未知节点',
@@ -30,7 +34,7 @@ const style = computed(() => {
 
 const summary = computed(() => {
   if (props.node.type === 'APPROVAL')
-    return props.node.config?.flowModelKey || '选择已发布审批模型'
+    return props.node.config?.flowModelName || props.node.config?.flowModelKey || '选择已发布审批流程'
   if (props.node.type === 'ACTION')
     return actionLabel(props.node.config?.actionType)
   if (props.node.type === 'CONDITION')
@@ -45,6 +49,24 @@ const visiblePorts = computed(() => {
     return props.node.ports || []
   return []
 })
+
+const portLabels = computed(() => visiblePorts.value.map((port, index) => ({
+  port,
+  label: getBusinessProcessPortLabel(props.node, port, index),
+})))
+
+const deletable = computed(() => !props.readonly
+  && !isBusinessProcessStartType(props.node.type)
+  && props.node.type !== 'END')
+
+function selectNode() {
+  if (!props.readonly)
+    emit('select', props.node)
+}
+
+function deleteNode() {
+  emit('delete', props.node)
+}
 
 function actionLabel(actionType) {
   const labels = {
@@ -61,8 +83,7 @@ function actionLabel(actionType) {
 </script>
 
 <template>
-  <button
-    type="button"
+  <div
     class="business-process-node absolute z-2 flex items-stretch overflow-visible text-left"
     :class="[
       `is-${definition.tone}`,
@@ -71,10 +92,26 @@ function actionLabel(actionType) {
     :style="style"
     :data-node-id="node.id"
     data-business-process-node
+    role="button"
+    :tabindex="readonly ? -1 : 0"
     :aria-pressed="selected"
-    :disabled="readonly"
-    @click.stop="emit('select', node)"
+    :aria-disabled="readonly"
+    @click.stop="selectNode"
+    @keydown.enter.prevent="selectNode"
+    @keydown.space.prevent="selectNode"
   >
+    <button
+      v-if="deletable"
+      type="button"
+      class="node-delete-button"
+      :aria-label="`删除节点：${node.name || definition.label}`"
+      title="删除节点"
+      data-business-node-delete
+      @click.stop="deleteNode"
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+
     <span class="node-shell min-w-0 flex flex-1 items-stretch overflow-hidden">
       <span class="node-rail" aria-hidden="true" />
       <span class="min-w-0 flex flex-col flex-1 justify-center px-4 py-3">
@@ -87,17 +124,17 @@ function actionLabel(actionType) {
       </span>
     </span>
 
-    <span v-if="visiblePorts.length" class="node-ports" aria-label="节点结果出口">
+    <span v-if="portLabels.length" class="node-ports" aria-label="节点结果出口">
       <span
-        v-for="port in visiblePorts"
-        :key="port"
+        v-for="item in portLabels"
+        :key="item.port"
         class="node-port"
         data-business-port
       >
-        {{ port }}
+        {{ item.label }}
       </span>
     </span>
-  </button>
+  </div>
 </template>
 
 <style scoped>
@@ -111,9 +148,10 @@ function actionLabel(actionType) {
     border-color 150ms ease,
     box-shadow 150ms ease,
     transform 150ms ease;
+  cursor: pointer;
 }
 
-.business-process-node:hover:not(:disabled) {
+.business-process-node:hover:not([aria-disabled='true']) {
   border-color: rgba(37, 99, 235, 0.42);
   box-shadow: 0 9px 24px rgba(15, 23, 42, 0.1);
   transform: translateY(-1px);
@@ -126,8 +164,40 @@ function actionLabel(actionType) {
     0 9px 24px rgba(15, 23, 42, 0.1);
 }
 
-.business-process-node:disabled {
+.business-process-node[aria-disabled='true'] {
   cursor: default;
+}
+
+.node-delete-button {
+  position: absolute;
+  z-index: 4;
+  top: -10px;
+  right: -10px;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--card-color, #fff);
+  border-radius: 50%;
+  background: var(--error-color, #dc2626);
+  color: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.8;
+  box-shadow: 0 3px 9px rgba(153, 27, 27, 0.22);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.business-process-node:hover .node-delete-button,
+.business-process-node.is-selected .node-delete-button,
+.node-delete-button:focus-visible {
+  opacity: 1;
+  transform: scale(1.06);
 }
 
 .node-shell {
@@ -198,14 +268,18 @@ function actionLabel(actionType) {
 .node-ports {
   position: absolute;
   top: calc(100% + 7px);
-  left: 8px;
-  display: flex;
-  max-width: calc(100% - 16px);
+  left: 0;
+  display: grid;
+  width: 100%;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: 4px;
+  padding: 0 4px;
 }
 
 .node-port {
   overflow: hidden;
+  min-width: 0;
   padding: 2px 5px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 4px;
@@ -213,6 +287,7 @@ function actionLabel(actionType) {
   color: var(--text-color-3, #64748b);
   font-size: 9px;
   line-height: 1.2;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

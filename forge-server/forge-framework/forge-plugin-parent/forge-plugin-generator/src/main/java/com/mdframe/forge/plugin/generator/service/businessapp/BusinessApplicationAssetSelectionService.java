@@ -58,10 +58,23 @@ public class BusinessApplicationAssetSelectionService {
         BusinessApplicationAssetSelectionVO selection = new BusinessApplicationAssetSelectionVO();
         Set<Long> objectIds = initialSelection(dto == null ? null : dto.getSelectedObjectIds(), objectMap.keySet());
         List<Long> requestedEntryIds = dto == null ? null : dto.getSelectedEntryIds();
+        boolean explicitEmptyEntrySelection = requestedEntryIds != null && requestedEntryIds.isEmpty();
         Set<Long> entryIds = requestedEntryIds == null
                 ? defaultPublishableEntryIds(entries)
                 : requestedEntryIds.stream().filter(java.util.Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        validateOwned("访问入口", entryIds, entryMap.keySet());
+        if (requestedEntryIds != null) {
+            long skippedEntryCount = entryIds.stream()
+                    .map(entryMap::get)
+                    .filter(entry -> !isPublishableEntry(entry))
+                    .count();
+            entryIds.removeIf(entryId -> !isPublishableEntry(entryMap.get(entryId)));
+            if (skippedEntryCount > 0L) {
+                selection.getDependencyMessages().add(skippedEntryCount
+                        + " 个未启用或未完成配置的访问入口已自动跳过");
+            }
+        }
         List<Long> requestedExtensionIds = dto == null ? null : dto.getSelectedExtensionIds();
         Set<Long> extensionIds = requestedExtensionIds == null || requestedExtensionIds.isEmpty()
                 ? defaultPublishableExtensionIds(extensions)
@@ -76,7 +89,6 @@ public class BusinessApplicationAssetSelectionService {
                 : requestedProcessIds.stream().filter(java.util.Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         validateOwned("业务对象", objectIds, objectMap.keySet());
-        validateOwned("访问入口", entryIds, entryMap.keySet());
         validateOwned("业务扩展", extensionIds, extensionMap.keySet());
         validateOwned("业务流程", processIds, processMap.keySet());
         long skippedDraftCount = extensions.stream()
@@ -111,8 +123,17 @@ public class BusinessApplicationAssetSelectionService {
                         "扩展“" + extension.getExtensionName() + "”依赖对应业务对象");
             }
             if (extension != null && extension.getEntryId() != null && !entryIds.contains(extension.getEntryId())) {
-                entryIds.add(extension.getEntryId());
-                selection.getDependencyMessages().add("扩展“" + extension.getExtensionName() + "”自动补齐页面入口");
+                AiBusinessApp entry = entryMap.get(extension.getEntryId());
+                if (entry == null) {
+                    throw new BusinessException("业务扩展关联了不属于当前应用的访问入口");
+                }
+                if (!explicitEmptyEntrySelection && isPublishableEntry(entry)) {
+                    entryIds.add(extension.getEntryId());
+                    selection.getDependencyMessages().add("扩展“" + extension.getExtensionName() + "”自动补齐页面入口");
+                } else {
+                    selection.getDependencyMessages().add("扩展“" + extension.getExtensionName()
+                            + "”关联的访问入口未启用或未完成配置，已跳过入口发布");
+                }
             }
         }
 
@@ -149,12 +170,17 @@ public class BusinessApplicationAssetSelectionService {
             return new LinkedHashSet<>();
         }
         return entries.stream()
-                .filter(entry -> Integer.valueOf(1).equals(entry.getStatus()))
-                .filter(entry -> !"RUNTIME".equalsIgnoreCase(entry.getEntryMode())
-                        || org.apache.commons.lang3.StringUtils.isNotBlank(entry.getConfigKey()))
+                .filter(BusinessApplicationAssetSelectionService::isPublishableEntry)
                 .map(AiBusinessApp::getId)
                 .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    static boolean isPublishableEntry(AiBusinessApp entry) {
+        return entry != null
+                && Integer.valueOf(1).equals(entry.getStatus())
+                && (!"RUNTIME".equalsIgnoreCase(entry.getEntryMode())
+                || org.apache.commons.lang3.StringUtils.isNotBlank(entry.getConfigKey()));
     }
 
     static Set<Long> defaultPublishableProcessIds(List<AiBusinessProcess> processes) {
