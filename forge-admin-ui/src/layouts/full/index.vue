@@ -5,6 +5,7 @@
 
     <!-- 侧边栏 -->
     <aside
+      v-if="showSidebar"
       class="sidebar-full"
       :class="{ 'sidebar-full-collapsed': appStore.collapsed }"
     >
@@ -32,6 +33,7 @@ import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppCard } from '@/components/index.js'
 import { AppTab } from '@/layouts/components'
+import { useSidebarVisibility } from '@/layouts/composables/useSidebarVisibility'
 import { useAppStore } from '@/store'
 import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import AppHeader from './header/index.vue'
@@ -40,6 +42,7 @@ import SideBar from './sidebar/index.vue'
 const appStore = useAppStore()
 const route = useRoute()
 const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
+const { showSidebar } = useSidebarVisibility()
 </script>
 
 <style scoped>

@@ -20,7 +20,7 @@
       add-button-text="新增行政区划"
       :table-props="{
         'expandedRowKeys': expandedKeys,
-        'on-update:expandedRowKeys': handleExpandedKeysUpdate,
+        'onUpdate:expandedRowKeys': handleExpandedKeysUpdate,
         'onLoad': handleLoad,
       }"
     >
@@ -216,36 +216,38 @@ function getAllKeys(list, keys = []) {
 }
 
 function beforeRenderList(list) {
-  // 转换为Naive UI Tree需要的格式
-  return list.map(item => ({
-    key: item.code,
-    label: item.name,
-    ...item,
-    // isLeaf: false才会触发onLoad懒加载
-    isLeaf: !item.hasChildren,
-  }))
+  return (list || []).map(normalizeLazyTreeNode)
 }
 
-// 懒加载子节点（官方示例方式）
-function handleLoad(node) {
-  return new Promise((resolve) => {
-    request.get(`/system/region/childrenVO/${node.code}`)
-      .then((res) => {
-        if (res.code === 200) {
-          // 直接修改node.children
-          node.children = (res.data || []).map(item => ({
-            key: item.code,
-            label: item.name,
-            ...item,
-            isLeaf: !item.hasChildren,
-          }))
-        }
-        resolve()
-      })
-      .catch(() => {
-        resolve()
-      })
-  })
+function normalizeLazyTreeNode(item) {
+  const { children: _children, ...region } = item
+  return {
+    ...region,
+    key: item.code,
+    label: item.name,
+    // 懒加载节点必须没有 children 字段；空数组会被 Naive UI 视为已加载。
+    isLeaf: item.hasChildren !== true,
+  }
+}
+
+async function handleLoad(node) {
+  try {
+    const res = await request.get(`/system/region/childrenVO/${node.code}`)
+    if (res.code !== 200)
+      return
+
+    const children = (res.data || []).map(normalizeLazyTreeNode)
+    node.children = children
+    node.isLeaf = children.length === 0
+
+    // AiTable 会缓存 TreeMate；替换顶层数组以重建树节点索引并显示新子级。
+    const tableData = crudRef.value?.getTableData()
+    if (Array.isArray(tableData))
+      crudRef.value?.setTableData([...tableData])
+  }
+  catch (error) {
+    console.error('加载行政区划子级失败:', error)
+  }
 }
 
 function handleExpandedKeysUpdate(keys) {
@@ -258,7 +260,7 @@ function toggleExpandLoaded() {
   if (expandLoaded.value) {
     // 只展开当前已加载的节点
     const tableData = crudRef.value?.getTableData() || []
-    expandedKeys.value = tableData.map(item => item.code)
+    expandedKeys.value = getAllKeys(tableData)
   }
   else {
     expandedKeys.value = []
@@ -293,7 +295,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },

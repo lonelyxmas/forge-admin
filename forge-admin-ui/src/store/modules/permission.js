@@ -166,6 +166,7 @@ export const usePermissionStore = defineStore('permission', {
             allMenusFlat.push({
               id: item.id,
               key: String(item.id),
+              parentId: item.parentId,
               path: normalizedPath,
               label: item.resourceName,
               name: item.resourceName,

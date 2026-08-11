@@ -67,7 +67,6 @@ import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { TheTitle } from '@/components/index.js'
-import { findTopMenuByPath } from '@/composables'
 import {
   AppTab,
   Fullscreen,
@@ -79,43 +78,16 @@ import {
   TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
-import { useAppStore, usePermissionStore } from '@/store'
+import { useSidebarVisibility } from '@/layouts/composables/useSidebarVisibility'
+import { useAppStore } from '@/store'
 import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import SideMenu from './components/SideMenu.vue'
 import TopMenu from './components/TopMenu.vue'
 
 const appStore = useAppStore()
-const permissionStore = usePermissionStore()
 const route = useRoute()
 const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
-
-function isDirectoryMenu(menu) {
-  return menu?.type === 'module' && Array.isArray(menu.children) && menu.children.length > 0
-}
-
-// Determine whether sidebar should be shown
-const showSidebar = computed(() => {
-  const menus = permissionStore.menus || []
-
-  if (!menus.length || !permissionStore.menuDataLoaded) {
-    return false
-  }
-
-  const activeTopMenu = findTopMenuByPath(menus, route.path)
-
-  if (activeTopMenu) {
-    return isDirectoryMenu(activeTopMenu)
-  }
-
-  if (appStore.selectedTopMenuId) {
-    const selectedMenu = menus.find(item => item.id === appStore.selectedTopMenuId)
-    if (selectedMenu) {
-      return isDirectoryMenu(selectedMenu)
-    }
-  }
-
-  return false
-})
+const { showSidebar } = useSidebarVisibility()
 </script>
 
 <style scoped>

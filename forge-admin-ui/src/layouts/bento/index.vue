@@ -4,7 +4,7 @@
     <DemoBanner />
 
     <!-- 左侧窄栏：图标导航 -->
-    <BentoRail />
+    <BentoRail v-if="showSidebar" />
 
     <!-- 主内容区 -->
     <article class="bento-content">
@@ -27,11 +27,13 @@ import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppTab } from '@/layouts/components'
+import { useSidebarVisibility } from '@/layouts/composables/useSidebarVisibility'
 import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import BentoRail from './components/BentoRail.vue'
 
 const route = useRoute()
 const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
+const { showSidebar } = useSidebarVisibility()
 </script>
 
 <style scoped>
