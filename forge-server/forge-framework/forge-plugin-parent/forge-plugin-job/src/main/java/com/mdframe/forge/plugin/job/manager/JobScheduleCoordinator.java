@@ -42,7 +42,7 @@ public class JobScheduleCoordinator {
         }
         try (JobScheduleSynchronizationLockManager.LockHandle ignored =
                      synchronizationLockManager.acquire(initial.getJobName(), initial.getJobGroup())) {
-            synchronizeUnderLock(jobConfigId, initial.getJobName(), initial.getJobGroup());
+            synchronizeUnderLock(jobConfigId, initial.getJobName(), initial.getJobGroup(), false);
         }
     }
 
@@ -53,6 +53,14 @@ public class JobScheduleCoordinator {
                     SYNC_PENDING, null, null);
         }
         synchronize(jobConfigId);
+    }
+
+    public void rebuild(Long jobConfigId) {
+        SysJobConfig initial = requireConfig(jobConfigId);
+        try (JobScheduleSynchronizationLockManager.LockHandle ignored =
+                     synchronizationLockManager.acquire(initial.getJobName(), initial.getJobGroup())) {
+            synchronizeUnderLock(jobConfigId, initial.getJobName(), initial.getJobGroup(), true);
+        }
     }
 
     public void reconcileOnStartup() {
@@ -71,7 +79,7 @@ public class JobScheduleCoordinator {
         }
     }
 
-    private void synchronizeUnderLock(Long jobConfigId, String jobName, String jobGroup) {
+    private void synchronizeUnderLock(Long jobConfigId, String jobName, String jobGroup, boolean rebuild) {
         for (int attempt = 1; attempt <= MAX_CONVERGENCE_ATTEMPTS; attempt++) {
             SysJobConfig jobConfig = findConfig(jobConfigId);
             if (jobConfig == null) {
@@ -88,7 +96,9 @@ public class JobScheduleCoordinator {
                     continue;
                 }
 
-                JobScheduler.SynchronizeResult result = jobScheduler.synchronize(toJobConfig(jobConfig));
+                JobScheduler.SynchronizeResult result = rebuild
+                        ? jobScheduler.rebuild(toJobConfig(jobConfig))
+                        : jobScheduler.synchronize(toJobConfig(jobConfig));
                 LocalDateTime syncTime = LocalDateTime.now();
                 int updated = result == JobScheduler.SynchronizeResult.ONCE_MISSED
                         ? jobConfigMapper.markOnceMissedCompleted(

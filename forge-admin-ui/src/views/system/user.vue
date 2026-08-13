@@ -180,224 +180,325 @@
       </template>
     </n-modal>
 
-    <!-- 关联管理弹窗（整合授权/组织/岗位/租户） -->
+    <!-- 用户关联配置弹窗（整合授权/组织/岗位/租户） -->
     <n-modal
       v-model:show="relationModalVisible"
-      :title="`关联管理 - ${currentUser.username || ''}`"
+      title=""
       preset="card"
-      style="width: 880px"
+      class="user-relation-modal"
+      :style="{ width: 'min(1120px, calc(100vw - 32px))' }"
+      :content-style="{ padding: '0' }"
       :mask-closable="false"
+      :closable="false"
     >
-      <n-tabs v-model:value="relationActiveTab" type="line" @update:value="handleRelationTabChange">
-        <!-- 角色授权 -->
-        <n-tab-pane name="auth" tab="角色授权">
-          <div class="auth-modal-content">
-            <n-alert type="info" :bordered="false" class="batch-action-alert">
-              角色授权按组织生效，切换授权组织后会分别加载该组织可用角色和用户已拥有角色。
-            </n-alert>
-            <n-form label-placement="left" label-width="90" class="batch-action-form">
-              <n-form-item label="授权组织">
-                <n-select
-                  v-model:value="authOrgId"
-                  :options="authOrgOptions"
-                  placeholder="请选择授权组织"
-                  filterable
-                  :disabled="authOrgOptions.length === 0"
-                />
-              </n-form-item>
-            </n-form>
+      <div class="relation-workbench">
+        <aside class="relation-sidebar">
+          <div class="relation-sidebar-header">
+            <div class="relation-user-avatar">
+              {{ (currentUser.username || currentUser.realName || '用').slice(0, 1).toUpperCase() }}
+            </div>
+            <div class="relation-sidebar-copy">
+              <span>用户关联配置</span>
+              <small>正在配置：@{{ currentUser.username || '-' }}</small>
+            </div>
+          </div>
 
-            <div class="auth-toolbar">
-              <n-input
-                v-model:value="roleSearchKeyword"
-                class="auth-role-search"
-                clearable
-                size="small"
-                placeholder="按角色名称搜索"
-                @clear="handleRoleSearch"
-                @keyup.enter="handleRoleSearch"
-              >
-                <template #prefix>
-                  <i class="i-material-symbols:search-rounded" />
-                </template>
-              </n-input>
-              <n-space size="small" class="auth-toolbar-actions">
-                <n-button size="small" @click="handleRoleSearch">
-                  <template #icon>
+          <div class="relation-nav-list">
+            <button
+              v-for="tab in relationTabItems"
+              :key="tab.key"
+              type="button"
+              class="relation-nav-item"
+              :class="{ 'is-active': relationActiveTab === tab.key }"
+              @click="handleRelationTabChange(tab.key)"
+            >
+              <i v-if="tab.key === 'auth'" class="i-material-symbols:verified-user-outline-rounded" aria-hidden="true" />
+              <i v-else-if="tab.key === 'org'" class="i-material-symbols:account-tree-rounded" aria-hidden="true" />
+              <i v-else-if="tab.key === 'post'" class="ai-icon:briefcase" aria-hidden="true" />
+              <i v-else class="i-material-symbols:business-center" aria-hidden="true" />
+              <div class="relation-nav-copy">
+                <strong>{{ tab.label }}</strong>
+                <small>{{ tab.desc }}</small>
+              </div>
+            </button>
+          </div>
+        </aside>
+
+        <section class="relation-content">
+          <button
+            type="button"
+            class="relation-close-button"
+            title="关闭"
+            @click="relationModalVisible = false"
+          >
+            <i class="i-material-symbols:close-rounded" />
+          </button>
+
+          <div class="relation-content-header">
+            <div class="relation-content-title">
+              <strong>{{ currentRelationTabMeta?.label || '用户关联配置' }}</strong>
+              <span>{{ currentRelationTabMeta?.desc || '配置用户的角色、组织、岗位和租户关系' }}</span>
+            </div>
+          </div>
+
+          <div class="relation-content-body">
+            <!-- 角色授权 -->
+            <div v-show="relationActiveTab === 'auth'" class="relation-section auth-modal-content">
+              <n-alert type="info" :bordered="false" class="batch-action-alert">
+                角色授权按组织生效，切换授权组织后会分别加载该组织可用角色和用户已拥有角色。
+              </n-alert>
+              <n-form label-placement="left" label-width="90" class="batch-action-form">
+                <n-form-item label="授权组织">
+                  <n-select
+                    v-model:value="authOrgId"
+                    :options="authOrgOptions"
+                    placeholder="请选择授权组织"
+                    filterable
+                    :disabled="authOrgOptions.length === 0"
+                  />
+                </n-form-item>
+              </n-form>
+
+              <div class="auth-toolbar">
+                <n-input
+                  v-model:value="roleSearchKeyword"
+                  class="auth-role-search"
+                  clearable
+                  size="small"
+                  placeholder="按角色名称搜索"
+                  @clear="handleRoleSearch"
+                  @keyup.enter="handleRoleSearch"
+                >
+                  <template #prefix>
                     <i class="i-material-symbols:search-rounded" />
                   </template>
-                  查询
-                </n-button>
-                <n-button size="small" @click="handleCheckAll">
-                  <template #icon>
-                    <i class="i-material-symbols:check-box-outline" />
-                  </template>
-                  全选本页
-                </n-button>
-                <n-button size="small" @click="handleUncheckAll">
-                  <template #icon>
-                    <i class="i-material-symbols:check-box-outline-blank" />
-                  </template>
-                  清空选择
-                </n-button>
-              </n-space>
-            </div>
+                </n-input>
+                <n-space size="small" class="auth-toolbar-actions">
+                  <n-button size="small" @click="handleRoleSearch">
+                    <template #icon>
+                      <i class="i-material-symbols:search-rounded" />
+                    </template>
+                    查询
+                  </n-button>
+                  <n-button size="small" @click="handleCheckAll">
+                    <template #icon>
+                      <i class="i-material-symbols:check-box-outline" />
+                    </template>
+                    全选本页
+                  </n-button>
+                  <n-button size="small" @click="handleUncheckAll">
+                    <template #icon>
+                      <i class="i-material-symbols:check-box-outline-blank" />
+                    </template>
+                    清空选择
+                  </n-button>
+                </n-space>
+              </div>
 
-            <div class="auth-tree-container">
-              <n-spin :show="authLoading">
-                <n-data-table
-                  :columns="authRoleColumns"
-                  :data="roleTableData"
-                  :checked-row-keys="checkedRoleKeys"
-                  :pagination="rolePaginationConfig"
-                  :row-key="row => row.id"
-                  remote
-                  striped
-                  size="small"
-                  @update:checked-row-keys="handleCheckedKeysChange"
-                  @update:page="handleRolePageChange"
-                  @update:page-size="handleRolePageSizeChange"
-                />
-              </n-spin>
-            </div>
-          </div>
-        </n-tab-pane>
-
-        <!-- 组织绑定 -->
-        <n-tab-pane name="org" tab="组织绑定">
-          <div class="org-modal-content">
-            <div class="org-toolbar">
-              <n-space size="small">
-                <n-button size="small" @click="toggleUserOrgExpandAll">
-                  <template #icon>
-                    <i :class="orgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-                  </template>
-                  {{ orgTreeExpandAll ? '折叠全部' : '展开全部' }}
-                </n-button>
-              </n-space>
-              <div class="org-main-hint">
-                <span>已选 {{ checkedOrgKeys.length }} 个组织</span>
-                <strong>主组织：{{ mainOrgName || '请选择主组织' }}</strong>
+              <div class="auth-tree-container">
+                <n-spin :show="authLoading">
+                  <n-data-table
+                    :columns="authRoleColumns"
+                    :data="orderedRoleTableData"
+                    :checked-row-keys="checkedRoleKeys"
+                    :pagination="rolePaginationConfig"
+                    :row-key="row => row.id"
+                    remote
+                    striped
+                    size="small"
+                    @update:checked-row-keys="handleCheckedKeysChange"
+                    @update:page="handleRolePageChange"
+                    @update:page-size="handleRolePageSizeChange"
+                  />
+                </n-spin>
               </div>
             </div>
-            <n-form label-placement="left" label-width="90" class="org-main-form">
-              <n-form-item label="主组织">
-                <n-select
-                  v-model:value="mainOrgId"
-                  :options="selectedOrgOptions"
-                  placeholder="请选择主组织"
-                  filterable
-                  :disabled="checkedOrgKeys.length === 0"
-                />
-              </n-form-item>
-            </n-form>
 
-            <div class="org-tree-container">
-              <n-spin :show="orgLoading">
-                <PremiumTree
-                  v-if="orgTreeData.length > 0"
-                  :data="orgTreeData"
-                  checkable
-                  :cascade="false"
-                  :selected-keys="mainOrgId ? [mainOrgId] : []"
-                  :checked-keys="checkedOrgKeys"
-                  :expanded-keys="orgTreeExpandedKeys"
-                  key-field="id"
-                  label-field="orgName"
-                  children-field="children"
-                  :get-node-icon="getLeftOrgNodeIcon"
-                  :get-node-meta="getUserOrgNodeMeta"
-                  :get-node-tone="getLeftOrgNodeTone"
-                  show-meta
-                  @update:expanded-keys="handleOrgExpandedKeysChange"
-                  @update:checked-keys="handleOrgCheckedKeysChange"
-                />
-                <n-empty v-else description="暂无组织数据" />
+            <!-- 组织绑定 -->
+            <div v-show="relationActiveTab === 'org'" class="relation-section org-modal-content">
+              <div class="relation-org-layout">
+                <section class="relation-org-tree-panel">
+                  <div class="org-toolbar">
+                    <n-button size="small" @click="toggleUserOrgExpandAll">
+                      <template #icon>
+                        <i :class="orgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+                      </template>
+                      {{ orgTreeExpandAll ? '折叠全部' : '展开全部' }}
+                    </n-button>
+                  </div>
+
+                  <div class="org-tree-container">
+                    <n-spin :show="orgLoading">
+                      <PremiumTree
+                        v-if="orgTreeData.length > 0"
+                        :data="orgTreeData"
+                        checkable
+                        :cascade="false"
+                        :selected-keys="mainOrgId ? [mainOrgId] : []"
+                        :checked-keys="checkedOrgKeys"
+                        :expanded-keys="orgTreeExpandedKeys"
+                        key-field="id"
+                        label-field="orgName"
+                        children-field="children"
+                        :get-node-icon="getLeftOrgNodeIcon"
+                        :get-node-meta="getUserOrgNodeMeta"
+                        :get-node-tone="getLeftOrgNodeTone"
+                        show-meta
+                        @update:expanded-keys="handleOrgExpandedKeysChange"
+                        @update:checked-keys="handleOrgCheckedKeysChange"
+                      />
+                      <n-empty v-else description="暂无组织数据" />
+                    </n-spin>
+                  </div>
+                </section>
+
+                <aside class="relation-org-side">
+                  <div class="relation-primary-setting is-stack">
+                    <div class="relation-primary-copy">
+                      <strong>设为主组织</strong>
+                      <span>决定默认数据汇报与组织归属。</span>
+                    </div>
+                    <n-select
+                      v-model:value="mainOrgId"
+                      :options="selectedOrgOptions"
+                      placeholder="请选择主组织"
+                      filterable
+                      :disabled="checkedOrgKeys.length === 0"
+                    />
+                  </div>
+
+                  <div class="relation-org-stat">
+                    <span>已选组织数</span>
+                    <strong>{{ checkedOrgKeys.length }}</strong>
+                  </div>
+
+                  <div class="relation-org-current">
+                    <span>当前主组织</span>
+                    <strong>{{ mainOrgName || '未设置' }}</strong>
+                  </div>
+                </aside>
+              </div>
+            </div>
+
+            <!-- 岗位绑定 -->
+            <div v-show="relationActiveTab === 'post'" class="relation-section post-modal-content">
+              <n-spin :show="postLoading">
+                <div class="relation-primary-setting">
+                  <div class="relation-primary-copy">
+                    <strong>主汇报岗位</strong>
+                    <span>展示在通讯录和用户名片中的主头衔。</span>
+                  </div>
+                  <div class="relation-primary-control">
+                    <n-select
+                      v-model:value="mainPostId"
+                      :options="selectedPostOptions"
+                      placeholder="请选择主岗位"
+                      clearable
+                    />
+                  </div>
+                </div>
+
+                <div class="relation-option-section">
+                  <div class="relation-option-heading">
+                    <div>
+                      <strong>绑定更多岗位</strong>
+                      <span>可为用户同时分配多个岗位。</span>
+                    </div>
+                    <span class="relation-option-count">
+                      已选 {{ checkedPostKeys.length }} 个
+                    </span>
+                  </div>
+
+                  <div class="relation-option-list">
+                    <n-checkbox-group v-model:value="checkedPostKeys">
+                      <div class="relation-card-grid">
+                        <label
+                          v-for="post in postList"
+                          :key="post.id"
+                          class="relation-option-card"
+                          :class="{ 'is-selected': checkedPostKeys.includes(post.id) }"
+                        >
+                          <n-checkbox :value="post.id" />
+                          <span class="relation-option-main">
+                            <strong>{{ post.postName }}</strong>
+                            <small>{{ post.postCode || '未设置岗位编码' }}</small>
+                          </span>
+                        </label>
+                      </div>
+                    </n-checkbox-group>
+                    <n-empty v-if="!postLoading && postList.length === 0" description="暂无岗位数据" size="small" />
+                  </div>
+                </div>
+              </n-spin>
+            </div>
+
+            <!-- 租户绑定（仅管理员可见） -->
+            <div v-show="relationActiveTab === 'tenant' && userStore.isAdmin" class="relation-section tenant-modal-content">
+              <n-spin :show="tenantLoading">
+                <div class="relation-primary-setting">
+                  <div class="relation-primary-copy">
+                    <strong>默认工作区</strong>
+                    <span>用户登录后默认进入的租户空间。</span>
+                  </div>
+                  <div class="relation-primary-control">
+                    <n-select
+                      v-model:value="defaultTenantId"
+                      :options="selectedTenantOptions"
+                      placeholder="请选择默认租户"
+                    />
+                  </div>
+                </div>
+
+                <div class="relation-option-section">
+                  <div class="relation-option-heading">
+                    <div>
+                      <strong>可访问租户</strong>
+                      <span>控制用户可切换和访问的工作区。</span>
+                    </div>
+                    <span class="relation-option-count">
+                      已选 {{ checkedTenantKeys.length }} 个
+                    </span>
+                  </div>
+
+                  <div class="relation-option-list">
+                    <n-checkbox-group v-model:value="checkedTenantKeys">
+                      <div class="relation-tenant-list">
+                        <label
+                          v-for="tenant in tenantOptions"
+                          :key="tenant.id"
+                          class="relation-option-card is-wide"
+                          :class="{ 'is-selected': checkedTenantKeys.includes(tenant.id) }"
+                        >
+                          <n-checkbox :value="tenant.id" />
+                          <span class="relation-option-main">
+                            <strong>{{ tenant.tenantName }}</strong>
+                            <small>{{ tenant.tenantCode || tenant.contactName || '租户工作区' }}</small>
+                          </span>
+                          <i v-if="checkedTenantKeys.includes(tenant.id)" class="i-material-symbols:check-circle-rounded relation-option-check" />
+                        </label>
+                      </div>
+                    </n-checkbox-group>
+                    <n-empty v-if="!tenantLoading && tenantOptions.length === 0" description="暂无租户数据" size="small" />
+                  </div>
+                </div>
               </n-spin>
             </div>
           </div>
-        </n-tab-pane>
 
-        <!-- 岗位绑定 -->
-        <n-tab-pane name="post" tab="岗位绑定">
-          <div class="post-modal-content">
-            <n-spin :show="postLoading">
-              <n-form label-placement="left" label-width="90">
-                <n-form-item label="主岗位">
-                  <n-select
-                    v-model:value="mainPostId"
-                    :options="selectedPostOptions"
-                    placeholder="请选择主岗位"
-                    clearable
-                  />
-                </n-form-item>
-                <n-form-item label="绑定岗位">
-                  <n-checkbox-group v-model:value="checkedPostKeys">
-                    <n-space vertical>
-                      <n-checkbox
-                        v-for="post in postList"
-                        :key="post.id"
-                        :value="post.id"
-                      >
-                        {{ post.postName }}
-                        <NTag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
-                          {{ post.postCode }}
-                        </NTag>
-                      </n-checkbox>
-                    </n-space>
-                  </n-checkbox-group>
-                  <n-empty v-if="!postLoading && postList.length === 0" description="暂无岗位数据" size="small" />
-                </n-form-item>
-              </n-form>
-            </n-spin>
+          <div class="relation-footer">
+            <n-button @click="relationModalVisible = false">
+              取消
+            </n-button>
+            <n-button
+              type="primary"
+              :loading="relationSubmitLoading"
+              @click="handleRelationSubmit"
+            >
+              保存更改
+            </n-button>
           </div>
-        </n-tab-pane>
-
-        <!-- 租户绑定（仅管理员可见） -->
-        <n-tab-pane v-if="userStore.isAdmin" name="tenant" tab="租户绑定">
-          <div class="tenant-modal-content">
-            <n-spin :show="tenantLoading">
-              <n-form label-placement="left" label-width="90">
-                <n-form-item label="绑定租户">
-                  <n-checkbox-group v-model:value="checkedTenantKeys">
-                    <n-space vertical>
-                      <n-checkbox
-                        v-for="tenant in tenantOptions"
-                        :key="tenant.id"
-                        :value="tenant.id"
-                      >
-                        {{ tenant.tenantName }}
-                      </n-checkbox>
-                    </n-space>
-                  </n-checkbox-group>
-                </n-form-item>
-                <n-form-item label="默认租户">
-                  <n-select
-                    v-model:value="defaultTenantId"
-                    :options="selectedTenantOptions"
-                    placeholder="请选择默认租户"
-                  />
-                </n-form-item>
-              </n-form>
-            </n-spin>
-          </div>
-        </n-tab-pane>
-      </n-tabs>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="relationModalVisible = false">
-            取消
-          </n-button>
-          <n-button
-            type="primary"
-            :loading="relationSubmitLoading"
-            @click="handleRelationSubmit"
-          >
-            确定
-          </n-button>
-        </n-space>
-      </template>
+        </section>
+      </div>
     </n-modal>
 
     <!-- 批量授权弹窗 -->
@@ -475,7 +576,7 @@
           <n-spin :show="authLoading">
             <n-data-table
               :columns="authRoleColumns"
-              :data="roleTableData"
+              :data="orderedRoleTableData"
               :checked-row-keys="checkedRoleKeys"
               :pagination="rolePaginationConfig"
               :row-key="row => row.id"
@@ -550,11 +651,17 @@
         </n-space>
       </template>
     </n-modal>
+
+    <RolePermissionModal
+      v-model:show="rolePermissionModalVisible"
+      :role="currentPermissionRole"
+      @saved="loadRoleList"
+    />
   </div>
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
+import { NTag, NTooltip } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
@@ -564,6 +671,8 @@ import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
+import RolePermissionModal from './components/RolePermissionModal.vue'
+import { orderRolesWithCurrentFirst } from './user-role-order'
 
 defineOptions({ name: 'SystemUser' })
 
@@ -588,10 +697,36 @@ const selectedOrgKeys = ref([])
 const selectedOrgNode = ref(null)
 const isShowAllUsers = ref(true)
 
-// 关联管理弹窗（整合授权/组织/岗位/租户）
+// 用户关联配置弹窗（整合授权/组织/岗位/租户）
 const relationModalVisible = ref(false)
 const relationActiveTab = ref('auth')
 const relationSubmitLoading = ref(false)
+const relationTabItems = computed(() => [
+  {
+    key: 'auth',
+    label: '角色授权',
+    desc: '配置系统操作权限',
+  },
+  {
+    key: 'org',
+    label: '组织架构',
+    desc: '管理所属部门及团队',
+  },
+  {
+    key: 'post',
+    label: '岗位职级',
+    desc: '设定具体职务名称',
+  },
+  ...(userStore.isAdmin
+    ? [{
+        key: 'tenant',
+        label: '租户空间',
+        desc: '分配系统工作区',
+      }]
+    : []),
+])
+const currentRelationTabMeta = computed(() =>
+  relationTabItems.value.find(item => item.key === relationActiveTab.value) || relationTabItems.value[0])
 
 // 授权相关
 const authLoading = ref(false)
@@ -608,11 +743,14 @@ const editingUserTenantId = ref(null)
 const checkedRoleKeys = ref([])
 const authOrgId = ref(null)
 const currentUserOrgBindings = ref([])
+const rolePermissionModalVisible = ref(false)
+const currentPermissionRole = ref({})
 const rolePagination = ref({
   page: 1,
   pageSize: 10,
   itemCount: 0,
 })
+const orderedRoleTableData = computed(() => orderRolesWithCurrentFirst(roleTableData.value, checkedRoleKeys.value))
 
 // 重置密码相关
 const resetPwdModalVisible = ref(false)
@@ -744,6 +882,37 @@ const authRoleColumns = computed(() => [
       normalDisableOptions.value,
       resolveRoleDictValue(row, 'roleStatus'),
       'role-status-tag',
+    ),
+  },
+  {
+    title: '操作',
+    key: 'action',
+    width: 112,
+    fixed: 'right',
+    render: row => h(
+      NTooltip,
+      {
+        trigger: 'hover',
+        placement: 'top',
+      },
+      {
+        trigger: () => h(
+          'button',
+          {
+            'type': 'button',
+            'class': 'role-permission-action-icon',
+            'aria-label': '权限配置',
+            'onClick': (event) => {
+              event.stopPropagation()
+              handleRolePermission(row)
+            },
+          },
+          [
+            h('i', { class: 'i-material-symbols:admin-panel-settings-rounded' }),
+          ],
+        ),
+        default: () => '权限配置',
+      },
     ),
   },
 ])
@@ -942,7 +1111,7 @@ const tableColumns = computed(() => [
       { label: '编辑', key: 'edit', onClick: handleEdit },
       { label: '禁用', key: 'disable', type: 'warning', onClick: row => handleUpdateStatus(row, 0), visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus === 1 },
       { label: '启用', key: 'enable', type: 'success', onClick: handleUntieDisable, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus !== 1 },
-      { label: '关联管理', key: 'relation', onClick: handleRelation, visible: row => !isCurrentLoginUser(row.id) },
+      { label: '用户关联配置', key: 'relation', onClick: handleRelation, visible: row => !isCurrentLoginUser(row.id) },
       {
         label: '重置密码',
         key: 'resetPwd',
@@ -1906,6 +2075,8 @@ async function loadRelationTab(tab, row) {
 }
 
 async function handleRelationTabChange(tab) {
+  if (relationActiveTab.value !== tab)
+    relationActiveTab.value = tab
   await loadRelationTab(tab, currentUser.value)
 }
 
@@ -1979,6 +2150,7 @@ async function loadRoleList(tenantId = resolveOperationTenantId(), orgId = authO
         pageSize: rolePagination.value.pageSize,
         roleName: roleSearchKeyword.value || undefined,
         orgId: normalizeSingleNumber(orgId) || undefined,
+        prioritizedUserId: batchAuthModalVisible.value ? undefined : currentUser.value?.id,
         ...buildTenantParams(tenantId),
       },
     })
@@ -2027,6 +2199,11 @@ async function loadUserRoles(userId, orgId = authOrgId.value) {
 // 选中的角色变化
 function handleCheckedKeysChange(keys) {
   checkedRoleKeys.value = normalizeNumberList(keys || [])
+}
+
+function handleRolePermission(row) {
+  currentPermissionRole.value = row
+  rolePermissionModalVisible.value = true
 }
 
 function handleRoleSearch() {
@@ -2536,8 +2713,11 @@ async function handleSubmitBatchTenant() {
 
 .org-tree-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 6px;
 }
 
@@ -2706,6 +2886,456 @@ async function handleSubmitBatchTenant() {
   font-weight: 500;
 }
 
+/* 用户关联配置弹窗 */
+.user-relation-modal :deep(.n-card) {
+  display: flex;
+  flex-direction: column;
+  height: min(78vh, 760px);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.user-relation-modal :deep(.n-card-header) {
+  display: none;
+}
+
+.user-relation-modal :deep(.n-card__content) {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.relation-workbench {
+  display: flex;
+  height: min(78vh, 760px);
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.relation-sidebar {
+  display: flex;
+  flex: 0 0 212px;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.relation-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.relation-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.relation-sidebar-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.relation-sidebar-copy span {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-sidebar-copy small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-nav-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.relation-nav-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.relation-nav-item:hover {
+  background: rgba(226, 232, 240, 0.72);
+  color: #0f172a;
+}
+
+.relation-nav-item.is-active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 0 0 1px rgba(226, 232, 240, 0.9);
+}
+
+.relation-nav-item > i {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 18px;
+}
+
+.relation-nav-item.is-active > i {
+  color: #2563eb;
+}
+
+.relation-nav-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.relation-nav-copy strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.relation-nav-copy small {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-nav-item.is-active .relation-nav-copy small {
+  color: #64748b;
+}
+
+.relation-content {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.relation-close-button {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.relation-close-button:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.relation-close-button i {
+  font-size: 18px;
+}
+
+.relation-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 16px;
+  min-height: 48px;
+  padding: 9px 42px 9px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.relation-content-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.relation-content-title strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.relation-content-title span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.relation-content-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 12px;
+}
+
+.relation-section {
+  height: 100%;
+  min-height: 0;
+}
+
+.relation-content-body .post-modal-content,
+.relation-content-body .tenant-modal-content {
+  overflow: hidden;
+}
+
+.relation-content-body .auth-modal-content,
+.relation-content-body .org-modal-content,
+.relation-content-body .post-modal-content,
+.relation-content-body .tenant-modal-content {
+  max-height: none;
+}
+
+.relation-section :deep(.n-spin-container),
+.relation-section :deep(.n-spin-content) {
+  height: 100%;
+  min-height: 0;
+}
+
+.post-modal-content :deep(.n-spin-content),
+.tenant-modal-content :deep(.n-spin-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.relation-primary-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.relation-primary-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.relation-primary-copy strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.relation-primary-copy span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.relation-primary-control {
+  flex: 0 0 230px;
+}
+
+.relation-option-section {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.relation-option-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.relation-option-heading > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.relation-option-heading strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.relation-option-heading span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.relation-option-count {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.relation-option-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.relation-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.relation-tenant-list {
+  display: grid;
+  gap: 10px;
+}
+
+.relation-option-card {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.relation-option-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.relation-option-card.is-selected {
+  border-color: #2563eb;
+  background: rgba(239, 246, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.relation-option-card.is-wide {
+  justify-content: space-between;
+}
+
+.relation-option-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.relation-option-main strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-option-main small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-option-check {
+  flex: 0 0 auto;
+  color: #2563eb;
+  font-size: 18px;
+}
+
+.relation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding: 9px 14px;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+}
+
 /* 授权弹窗样式 */
 .auth-modal-content {
   display: flex;
@@ -2715,23 +3345,23 @@ async function handleSubmitBatchTenant() {
 }
 
 .batch-action-alert {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .batch-action-form {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .auth-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 8px 10px;
   background-color: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   flex-shrink: 0;
 }
 
@@ -2749,14 +3379,62 @@ async function handleSubmitBatchTenant() {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   padding: 0;
-  min-height: 300px;
+  min-height: 240px;
   max-height: 500px;
+}
+
+.relation-content-body .auth-tree-container,
+.relation-content-body .org-tree-container {
+  min-height: 0;
+  max-height: none;
 }
 
 .auth-tree-container :deep(.n-data-table) {
   min-width: 0;
+}
+
+:deep(.role-permission-action-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 17px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+
+:deep(.role-permission-action-icon:hover) {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+:deep(.role-permission-action-icon:active) {
+  transform: translateY(1px);
+}
+
+:deep(.role-permission-action-icon:focus-visible) {
+  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+:deep(.role-permission-action-icon i) {
+  display: block;
+  width: 1em;
+  height: 1em;
 }
 
 .auth-tree-container::-webkit-scrollbar {
@@ -2790,12 +3468,12 @@ async function handleSubmitBatchTenant() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 8px 10px;
   background-color: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   flex-shrink: 0;
 }
 
@@ -2817,13 +3495,86 @@ async function handleSubmitBatchTenant() {
   white-space: nowrap;
 }
 
+.relation-org-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  height: 100%;
+  min-height: 0;
+  gap: 14px;
+}
+
+.relation-org-tree-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.relation-org-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.relation-primary-setting.is-stack {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relation-org-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.relation-org-stat span,
+.relation-org-current span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relation-org-stat strong {
+  color: #1d4ed8;
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.relation-org-current {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.relation-org-current strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .org-tree-container {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  border-radius: 4px;
-  padding: 12px;
-  min-height: 300px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 240px;
   max-height: 400px;
 }
 
@@ -2853,6 +3604,110 @@ async function handleSubmitBatchTenant() {
 /* ═══════════════════════════════════════
  * 深色模式
  * ═══════════════════════════════════════ */
+.dark .relation-workbench,
+.dark .relation-content,
+.dark .relation-footer {
+  background: #0f172a;
+}
+
+.dark .relation-sidebar {
+  border-right-color: #334155;
+  background: #111827;
+}
+
+.dark .relation-sidebar-header,
+.dark .relation-content-header,
+.dark .relation-footer {
+  border-color: #334155;
+}
+
+.dark .relation-user-avatar {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.dark .relation-sidebar-copy span,
+.dark .relation-nav-item.is-active,
+.dark .relation-content-title strong {
+  color: #f8fafc;
+}
+
+.dark .relation-sidebar-copy small,
+.dark .relation-content-title span {
+  color: #94a3b8;
+}
+
+.dark .relation-nav-item {
+  color: #cbd5e1;
+}
+
+.dark .relation-nav-item:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.dark .relation-nav-item.is-active {
+  background: #1e293b;
+  box-shadow: 0 0 0 1px #334155;
+}
+
+.dark .relation-close-button {
+  color: #94a3b8;
+}
+
+.dark .relation-close-button:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.dark .auth-tree-container,
+.dark .org-tree-container,
+.dark .relation-primary-setting,
+.dark .relation-option-card,
+.dark .relation-org-current,
+.dark .relation-option-count {
+  border-color: #334155;
+}
+
+.dark .relation-primary-setting,
+.dark .relation-option-card,
+.dark .relation-org-current,
+.dark .relation-option-count {
+  background: #111827;
+}
+
+.dark .relation-org-stat {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(30, 64, 175, 0.22);
+}
+
+.dark .relation-option-card:hover {
+  border-color: #475569;
+  background: #1e293b;
+}
+
+.dark .relation-option-card.is-selected {
+  border-color: #60a5fa;
+  background: rgba(30, 64, 175, 0.22);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.16);
+}
+
+.dark .relation-primary-copy strong,
+.dark .relation-option-heading strong,
+.dark .relation-option-main strong,
+.dark .relation-org-current strong {
+  color: #f8fafc;
+}
+
+.dark .relation-primary-copy span,
+.dark .relation-option-heading span,
+.dark .relation-option-main small,
+.dark .relation-org-stat span,
+.dark .relation-org-current span,
+.dark .relation-option-count {
+  color: #94a3b8;
+}
+
 .dark .org-tree-header {
   background: #0f172a;
   border-bottom-color: #334155;
@@ -2944,14 +3799,28 @@ async function handleSubmitBatchTenant() {
 
 .dark .auth-toolbar {
   background-color: #1e293b;
+  border-color: #334155;
 }
 
 .dark .org-toolbar {
   background-color: #1e293b;
+  border-color: #334155;
 }
 
 .dark .auth-tree-container {
   background: #0f172a;
+}
+
+.dark :deep(.role-permission-action-icon) {
+  border-color: #1d4ed8;
+  background: rgba(30, 58, 138, 0.36);
+  color: #bfdbfe;
+}
+
+.dark :deep(.role-permission-action-icon:hover) {
+  border-color: #60a5fa;
+  background: rgba(30, 64, 175, 0.58);
+  color: #dbeafe;
 }
 
 .dark .org-tree-container {
@@ -2963,6 +3832,75 @@ async function handleSubmitBatchTenant() {
 }
 
 @media (max-width: 960px) {
+  .relation-workbench {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .relation-sidebar {
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .relation-sidebar-header {
+    padding: 12px;
+  }
+
+  .relation-nav-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px 10px;
+  }
+
+  .relation-nav-item {
+    flex: 0 0 150px;
+  }
+
+  .relation-content {
+    min-height: 0;
+  }
+
+  .relation-content-body {
+    padding: 12px;
+  }
+
+  .relation-primary-setting {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .relation-primary-control {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .relation-org-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relation-org-side {
+    order: -1;
+  }
+
+  .relation-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-toolbar,
+  .org-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .auth-role-search,
+  .auth-toolbar-actions {
+    width: 100%;
+    max-width: none;
+  }
+
   .org-tree-collapsed-hint {
     flex-direction: row;
     padding: 12px;

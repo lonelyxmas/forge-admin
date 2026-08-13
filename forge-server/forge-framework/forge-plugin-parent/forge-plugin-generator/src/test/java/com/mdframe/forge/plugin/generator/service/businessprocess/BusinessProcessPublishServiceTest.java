@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -138,6 +139,23 @@ class BusinessProcessPublishServiceTest {
         assertThrows(BusinessException.class, () -> service.publishForApplication(
                 10L, 3, List.of(20L), Map.of(20L, draftHash), 300L));
 
+        verify(versionMapper, never()).insertImmutable(any());
+    }
+
+    @Test
+    @DisplayName("Flow service failures return an actionable business error without exposing transport details")
+    void flowServiceFailureReturnsSafeBusinessError() {
+        stubNewVersionDependencies(7);
+        when(flowClient.getModelByKey("order_approval"))
+                .thenThrow(new IllegalStateException("connect refused at 10.0.0.8:8581"));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> service.publishForApplication(
+                        10L, 3, List.of(20L), Map.of(20L, draftHash), 300L));
+
+        assertTrue(exception.getMessage().contains("请确认 Flow 服务可用后重试"));
+        assertTrue(exception.getMessage().contains("order_approval"));
+        assertFalse(exception.getMessage().contains("10.0.0.8"));
         verify(versionMapper, never()).insertImmutable(any());
     }
 

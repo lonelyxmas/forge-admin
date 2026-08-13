@@ -9,11 +9,23 @@ export const BUSINESS_PROCESS_NODE_TYPE = Object.freeze({
   END: 'END',
 })
 
+export const BUSINESS_PROCESS_NODE_DRAG_MIME = 'application/x-forge-business-process-node'
+
 export const BUSINESS_PROCESS_START_TYPES = Object.freeze([
   BUSINESS_PROCESS_NODE_TYPE.START_MANUAL,
   BUSINESS_PROCESS_NODE_TYPE.START_EVENT,
   BUSINESS_PROCESS_NODE_TYPE.START_SCHEDULE,
 ])
+
+const PORT_LABELS = Object.freeze({
+  NEXT: '继续',
+  APPROVED: '审批通过',
+  REJECTED: '审批驳回',
+  CANCELED: '审批取消',
+  FAILED: '执行失败',
+  MATCHED: '条件满足',
+  OTHERWISE: '其他情况',
+})
 
 const NODE_DEFINITIONS = Object.freeze({
   [BUSINESS_PROCESS_NODE_TYPE.START_MANUAL]: definition({
@@ -55,9 +67,10 @@ const NODE_DEFINITIONS = Object.freeze({
       branches: [
         {
           port: 'MATCHED',
-          condition: { operator: 'AND', rules: [] },
+          label: '条件 1',
+          condition: { operator: 'AND', rules: [], expression: '' },
         },
-        { port: 'OTHERWISE', isDefault: true },
+        { port: 'OTHERWISE', label: '其他情况', isDefault: true },
       ],
     }),
   }),
@@ -121,6 +134,22 @@ export function createBusinessProcessNodeTemplate(type) {
 
 export function isBusinessProcessStartType(type) {
   return BUSINESS_PROCESS_START_TYPES.includes(type)
+}
+
+export function getBusinessProcessPortLabel(node, port, index = 0) {
+  if (node?.type === BUSINESS_PROCESS_NODE_TYPE.CONDITION) {
+    const branches = Array.isArray(node.config?.branches) ? node.config.branches : []
+    const branch = branches.find(item => item?.port === port) || branches[index]
+    if (branch?.label?.trim())
+      return branch.label.trim()
+    if (branch?.isDefault === true || port === 'OTHERWISE')
+      return '其他情况'
+    const conditionIndex = branches
+      .filter(item => item?.isDefault !== true)
+      .findIndex(item => item?.port === port)
+    return `条件 ${conditionIndex >= 0 ? conditionIndex + 1 : index + 1}`
+  }
+  return PORT_LABELS[port] || `结果 ${index + 1}`
 }
 
 function definition(input) {

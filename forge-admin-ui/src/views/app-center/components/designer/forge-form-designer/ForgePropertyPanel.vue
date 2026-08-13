@@ -1269,6 +1269,73 @@
                 </section>
               </n-collapse-item>
 
+              <n-collapse-item v-if="isTabsLayout" title="标签页" name="tabs">
+                <section class="panel-item">
+                  <n-form-item label="样式">
+                    <n-select
+                      :value="selectedComponent.props?.type || 'line'"
+                      :options="tabsTypeOptions"
+                      @update:value="updateComponent({ props: { type: $event || 'line' } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="位置">
+                    <n-select
+                      :value="selectedComponent.props?.placement || 'top'"
+                      :options="tabsPlacementOptions"
+                      @update:value="updateComponent({ props: { placement: $event || 'top' } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="切换方式">
+                    <n-select
+                      :value="selectedComponent.props?.trigger || 'click'"
+                      :options="tabsTriggerOptions"
+                      @update:value="updateComponent({ props: { trigger: $event || 'click' } })"
+                    />
+                  </n-form-item>
+                  <div class="switch-list">
+                    <label>
+                      <span>切换动画</span>
+                      <n-switch size="small" :value="selectedComponent.props?.animated !== false" @update:value="updateComponent({ props: { animated: $event } })" />
+                    </label>
+                    <label>
+                      <span>可关闭</span>
+                      <n-switch size="small" :value="!!selectedComponent.props?.closable" @update:value="updateComponent({ props: { closable: $event } })" />
+                    </label>
+                  </div>
+                  <div class="layout-child-manager">
+                    <div class="panel-title-row">
+                      <div class="panel-item-title">
+                        页签管理
+                      </div>
+                      <n-button size="tiny" type="primary" secondary @click="addLayoutChild('tabPane')">
+                        新增页签
+                      </n-button>
+                    </div>
+                    <div v-for="(child, childIndex) in layoutChildren" :key="child.id" class="layout-child-card">
+                      <div class="layout-child-card-main">
+                        <n-input
+                          :value="child.props?.label || child.label"
+                          size="small"
+                          placeholder="页签名称"
+                          @update:value="updateLayoutChild(childIndex, { label: $event || `标签 ${childIndex + 1}`, props: { label: $event || `标签 ${childIndex + 1}` } })"
+                        />
+                      </div>
+                      <div class="layout-child-actions">
+                        <n-button size="tiny" tertiary :disabled="childIndex === 0" @click="moveLayoutChild(childIndex, -1)">
+                          上移
+                        </n-button>
+                        <n-button size="tiny" tertiary :disabled="childIndex === layoutChildren.length - 1" @click="moveLayoutChild(childIndex, 1)">
+                          下移
+                        </n-button>
+                        <n-button size="tiny" quaternary type="error" :disabled="layoutChildren.length <= 1" @click="removeLayoutChild(childIndex)">
+                          删除
+                        </n-button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </n-collapse-item>
+
               <n-collapse-item v-if="isField" title="校验规则" name="validation">
                 <section class="panel-item validation-panel">
                   <div class="switch-line compact">
@@ -2080,6 +2147,14 @@
                     size="small"
                     :value="!!selectedComponent.props?.closable"
                     @update:value="updateComponent({ props: { closable: $event } })"
+                  />
+                </label>
+                <label>
+                  <span>addable</span>
+                  <n-switch
+                    size="small"
+                    :value="!!selectedComponent.props?.addable"
+                    @update:value="updateComponent({ props: { addable: $event } })"
                   />
                 </label>
               </div>
@@ -4074,8 +4149,9 @@ import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRules
 import { getDictData } from '@/composables/useDict'
 import { COMMON_VALIDATION_PRESETS, getValidationPreset } from '@/utils/validation-presets'
 import BusinessFieldPropertyPanel from '../BusinessFieldPropertyPanel.vue'
-import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
+import { appendDesignerLayoutChild, cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
+import { buildDefaultPlaceholder, buildFieldAssetPlaceholderPatch, shouldSyncPlaceholder } from './placeholder-utils'
 
 const props = defineProps({
   schema: {
@@ -4368,8 +4444,10 @@ const datePickerType = computed(() => {
 
 watch(() => props.selectedId, () => {
   propertySearchHit.value = ''
-  selectedBasicExpandedNames.value = [...basicExpandedNames]
-})
+  selectedBasicExpandedNames.value = isTabsLayout.value
+    ? [...basicExpandedNames, 'tabs']
+    : [...basicExpandedNames]
+}, { immediate: true })
 
 watch(() => props.objectCode, () => {
   codeRuleRequestVersion += 1
@@ -5067,9 +5145,8 @@ function handleFieldAssetSave(payload = {}) {
 function buildFieldAssetComponentPatch(payload = {}, formulaConfig = null, fieldCode = '') {
   const propsPatch = {
     formulaConfig,
+    ...buildFieldAssetPlaceholderPatch(selectedComponent.value || {}, payload),
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'placeholder'))
-    propsPatch.placeholder = payload.placeholder || ''
   if (Object.prototype.hasOwnProperty.call(payload, 'defaultValue'))
     propsPatch.defaultValue = payload.defaultValue
   if (Object.prototype.hasOwnProperty.call(payload, 'dictType'))
@@ -5840,114 +5917,6 @@ function updateLabel(value) {
   updateComponent(patch)
 }
 
-function shouldSyncPlaceholder(component) {
-  if (!component)
-    return false
-  const currentPlaceholder = component.props?.placeholder
-  if (currentPlaceholder === undefined || currentPlaceholder === null)
-    return true
-  const currentText = String(currentPlaceholder).trim()
-  if (!currentText)
-    return true
-  return isAutoGeneratedPlaceholder(component, currentText)
-}
-
-function buildDefaultPlaceholder(componentKey = '', label = '') {
-  const cleanLabel = String(label || '').trim()
-  const prefix = isChoicePlaceholderComponent(componentKey) ? '请选择' : '请填写'
-  return cleanLabel ? `${prefix}${cleanLabel}` : prefix
-}
-
-function buildAutoPlaceholderCandidates(componentKey = '', label = '') {
-  const cleanLabel = String(label || '').trim()
-  const prefixes = isChoicePlaceholderComponent(componentKey)
-    ? ['请选择']
-    : ['请填写', '请输入', '请填入']
-  return prefixes.map(prefix => cleanLabel ? `${prefix}${cleanLabel}` : prefix)
-}
-
-function isAutoGeneratedPlaceholder(component = {}, placeholder = '') {
-  const text = String(placeholder || '').trim()
-  if (!text)
-    return true
-  const labels = resolveAutoPlaceholderLabels(component)
-  return labels.some(label => buildAutoPlaceholderCandidates(component.componentKey, label).includes(text))
-}
-
-function resolveAutoPlaceholderLabels(component = {}) {
-  const labels = [
-    component.label,
-    component.props?.label,
-    component.props?.title,
-    component.props?.header,
-    component.fieldBinding?.fieldName,
-    component.fieldBinding?.fieldCode,
-    component.field,
-    component.name,
-    resolveComponentDefaultLabel(component.componentKey),
-    '字段',
-  ]
-  return Array.from(new Set(labels.map(label => String(label || '').trim()).filter(Boolean)))
-}
-
-function resolveComponentDefaultLabel(componentKey = '') {
-  const labelMap = {
-    input: '输入框',
-    textarea: '多行文本',
-    number: '数字',
-    money: '金额',
-    slider: '滑块',
-    rate: '评分',
-    color: '颜色选择',
-    select: '静态下拉',
-    dictSelect: '字典下拉',
-    radio: '单选',
-    radioButton: '按钮单选',
-    checkbox: '多选',
-    transfer: '穿梭框',
-    cascader: '级联选择',
-    treeSelect: '树形选择',
-    customSelect: '远程选择',
-    date: '日期',
-    datetime: '日期时间',
-    time: '时间',
-    daterange: '日期范围',
-    datetimerange: '日期时间范围',
-    timerange: '时间范围',
-    fileUpload: '文件上传',
-    imageUpload: '图片上传',
-    userSelect: '人员选择',
-    orgTreeSelect: '组织选择',
-    regionTreeSelect: '区域选择',
-  }
-  return labelMap[componentKey] || ''
-}
-
-function isChoicePlaceholderComponent(componentKey = '') {
-  const key = String(componentKey || '').toLowerCase()
-  return [
-    'select',
-    'dictselect',
-    'radio',
-    'radiobutton',
-    'checkbox',
-    'cascader',
-    'treeselect',
-    'dateselect',
-    'datepicker',
-    'timepicker',
-    'time',
-    'date',
-    'datetime',
-    'upload',
-    'fileupload',
-    'imageupload',
-    'userselect',
-    'deptselect',
-    'transfer',
-  ].includes(key)
-}
-
 async function loadDefaultValueDictOptions(dictType = '') {
   const normalizedType = String(dictType || '').trim()
   if (!normalizedType || dictDefaultOptions.value[normalizedType] || dictDefaultOptionsLoading.value[normalizedType])
@@ -6016,24 +5985,7 @@ function updateDefaultValue(value) {
 function addLayoutChild(componentKey = '') {
   if (!selectedComponent.value)
     return
-  const nextChildren = cloneValue(layoutChildren.value || [])
-  const index = nextChildren.length + 1
-  const isTabsChild = componentKey === 'tabPane'
-  const label = isTabsChild ? `标签 ${index}` : `分组 ${index}`
-  const id = `${selectedComponent.value.id}_${isTabsChild ? 'pane' : 'item'}_${Date.now()}`
-  nextChildren.push({
-    id,
-    componentKey: isTabsChild ? 'tabPane' : 'collapseItem',
-    label,
-    props: isTabsChild ? { label, name: id } : { title: label, name: id },
-    layout: {
-      span: selectedComponent.value.layout?.span || normalizedFormGridColumns.value,
-      align: 'left',
-    },
-    children: [],
-  })
-  updateComponent({ children: nextChildren })
-  emit('update:selectedId', id)
+  emit('update:schema', appendDesignerLayoutChild(props.schema, selectedComponent.value.id, componentKey))
 }
 
 function updateLayoutChild(index, patch = {}) {

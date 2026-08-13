@@ -38,6 +38,21 @@ class BusinessApplicationDraftPreviewContractTest {
     }
 
     @Test
+    @DisplayName("应用发布内部异常返回步骤、错误码和诊断编号而不返回原始异常")
+    void applicationPublishReturnsSafeActionableDiagnostics() throws Exception {
+        String serviceSource = readSource("service/businessapp/BusinessApplicationPublishService.java");
+        String resultSource = readSource("vo/businessapp/BusinessApplicationPublishResultVO.java");
+
+        assertTrue(serviceSource.contains("safeInternalMessage(step, diagnosticRef)"));
+        assertTrue(serviceSource.contains("诊断编号：%s"));
+        assertTrue(serviceSource.contains("result.setErrorCode(run.getErrorCode())"));
+        assertTrue(serviceSource.contains("log.error(\"[业务应用发布] unexpected step failure"));
+        assertFalse(serviceSource.contains(
+                "return fail(run, step, \"PUBLISH_INTERNAL_ERROR\", \"发布步骤发生内部异常，详细信息已脱敏\")"));
+        assertTrue(resultSource.contains("private String errorCode;"));
+    }
+
+    @Test
     @DisplayName("页面设计不再无条件反写字段资产")
     void pageDesignDoesNotOverwriteFieldAssets() throws Exception {
         String source = readSource("service/businessapp/BusinessObjectDesignerService.java");
@@ -47,6 +62,24 @@ class BusinessApplicationDraftPreviewContractTest {
         assertFalse(source.contains("normalizeDesignerFieldPayloads(dto.getFields()"));
         assertFalse(source.contains("applyFormDesignerSchemaToModel(modelSchema, formSchema);"));
         assertTrue(source.contains("applyFormDesignerSchemaToEditZone(pageSchema, modelSchema, formSchema)"));
+    }
+
+    @Test
+    @DisplayName("application coordinated publishing disables legacy lowcode menu generation")
+    void applicationPublishingDoesNotCreateLegacyLowcodeMenus() throws Exception {
+        String applicationPublishSource = readSource(
+                "service/businessapp/BusinessApplicationPublishService.java");
+        String objectPublishSource = readSource(
+                "service/businessapp/BusinessObjectPublishService.java");
+        String lowcodePublishSource = readSource("service/lowcode/LowcodePublishService.java");
+
+        assertTrue(applicationPublishSource.contains("objectDto.setSyncMenu(false);"));
+        assertTrue(objectPublishSource.contains("publishDTO.setSyncMenu(dto == null ? null : dto.getSyncMenu());"));
+        assertTrue(objectPublishSource.contains("return rollbackInternal(objectId, versionId, false);"));
+        assertTrue(objectPublishSource.contains(
+                "lowcodePublishService.rollback(version.getConfigId(), version.getCrudConfigVersionId(), syncMenu)"));
+        assertTrue(lowcodePublishSource.contains("if (shouldSyncMenu(dto))"));
+        assertTrue(lowcodePublishSource.contains("disablePublishedMenu(config);"));
     }
 
     private String readSource(String relativePath) throws Exception {

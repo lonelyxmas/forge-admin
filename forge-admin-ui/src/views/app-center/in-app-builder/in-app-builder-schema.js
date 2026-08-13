@@ -128,6 +128,7 @@ export function createNavigationNode(schema, input = {}) {
     icon: String(input.icon || '').trim(),
     parentId,
     sort: resolveNextSort(siblingNodes),
+    systemMenuVisible: input.systemMenuVisible === true,
   }
   if (type === 'page') {
     node.pageType = normalizePageType(input.pageType)
@@ -272,6 +273,7 @@ function normalizeNodes(nodes) {
       icon: String(node.icon || '').trim(),
       parentId: node.parentId ? String(node.parentId) : null,
       sort: Number.isFinite(Number(node.sort)) ? Number(node.sort) : index * 10,
+      systemMenuVisible: node.systemMenuVisible === true,
       ...(node.type === 'group'
         ? {}
         : {

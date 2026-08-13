@@ -2,7 +2,12 @@
 import { NButton, NDrawer, NDrawerContent } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
 import ActionAndApprovalNodeConfig from './ActionAndApprovalNodeConfig.vue'
-import { createBusinessProcessNodeTemplate, isBusinessProcessStartType } from './business-process-node-types.js'
+import {
+  createBusinessProcessNodeTemplate,
+  getBusinessProcessNodeDefinition,
+  isBusinessProcessStartType,
+} from './business-process-node-types.js'
+import BusinessProcessConditionConfig from './BusinessProcessConditionConfig.vue'
 import StartNodeConfig from './StartNodeConfig.vue'
 
 const props = defineProps({
@@ -33,6 +38,7 @@ const draftNode = ref(null)
 const draftRecordIdSource = ref(null)
 
 const title = computed(() => draftNode.value?.name || '节点配置')
+const typeLabel = computed(() => getBusinessProcessNodeDefinition(draftNode.value?.type)?.label || '业务节点')
 const isExecutionNode = computed(() => ['ACTION', 'APPROVAL', 'SUB_PROCESS'].includes(draftNode.value?.type))
 
 watch([
@@ -59,44 +65,6 @@ function handleStartType(type) {
   }
 }
 
-function handleConditionPort(index, value) {
-  const branches = clone(draftNode.value.config?.branches || [])
-  branches[index] = { ...branches[index], port: normalizePort(value, index) }
-  patchBranches(branches)
-}
-
-function setDefaultBranch(index) {
-  const branches = clone(draftNode.value.config?.branches || [])
-    .map((branch, branchIndex) => ({
-      ...branch,
-      isDefault: branchIndex === index ? true : undefined,
-      condition: branchIndex === index
-        ? undefined
-        : branch.condition || { operator: 'AND', rules: [] },
-    }))
-  patchBranches(branches)
-}
-
-function addConditionBranch() {
-  const branches = clone(draftNode.value.config?.branches || [])
-  const nextIndex = branches.length + 1
-  branches.splice(Math.max(branches.length - 1, 0), 0, {
-    port: `BRANCH_${nextIndex}`,
-    condition: { operator: 'AND', rules: [] },
-  })
-  patchBranches(branches)
-}
-
-function removeConditionBranch(index) {
-  const branches = clone(draftNode.value.config?.branches || [])
-  if (branches.length <= 2)
-    return
-  branches.splice(index, 1)
-  if (!branches.some(branch => branch.isDefault))
-    branches[branches.length - 1].isDefault = true
-  patchBranches(branches)
-}
-
 function patchBranches(branches) {
   draftNode.value.config = {
     ...(draftNode.value.config || {}),
@@ -108,18 +76,13 @@ function patchBranches(branches) {
 function handleSave() {
   if (!draftNode.value || props.readonly)
     return
+  let accepted = true
   emit('save', clone(draftNode.value), {
     recordIdSource: draftRecordIdSource.value,
+    reject: () => { accepted = false },
   })
-  emit('update:visible', false)
-}
-
-function normalizePort(value, index) {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9_]/g, '_')
-  return normalized || `BRANCH_${index + 1}`
+  if (accepted)
+    emit('update:visible', false)
 }
 
 function clone(value) {
@@ -139,7 +102,7 @@ function clone(value) {
       <template #header>
         <div class="drawer-heading">
           <strong>{{ title }}</strong>
-          <span>{{ draftNode?.type }}</span>
+          <span>{{ typeLabel }}</span>
         </div>
       </template>
 
@@ -178,32 +141,13 @@ function clone(value) {
           @refresh-flow-model="emit('refreshFlowModel', $event)"
         />
 
-        <section v-else-if="draftNode.type === 'CONDITION'" class="condition-editor">
-          <div class="condition-editor-head">
-            <div>
-              <strong>结果分支</strong>
-              <span>按顺序判断，默认分支不配置条件。</span>
-            </div>
-            <button type="button" @click="addConditionBranch">
-              添加分支
-            </button>
-          </div>
-          <div
-            v-for="(branch, index) in draftNode.config?.branches || []"
-            :key="`${branch.port}-${index}`"
-            class="branch-row"
-          >
-            <input :value="branch.port" @change="handleConditionPort(index, $event.target.value)">
-            <label>
-              <input type="radio" name="default-branch" :checked="branch.isDefault" @change="setDefaultBranch(index)">
-              默认
-            </label>
-            <button type="button" :disabled="draftNode.config.branches.length <= 2" @click="removeConditionBranch(index)">
-              删除
-            </button>
-          </div>
-          <p>具体字段规则将在该分支的结构化条件面板中维护，不接受脚本表达式。</p>
-        </section>
+        <BusinessProcessConditionConfig
+          v-else-if="draftNode.type === 'CONDITION'"
+          :branches="draftNode.config?.branches || []"
+          :fields="fields"
+          :readonly="readonly"
+          @update:branches="patchBranches"
+        />
 
         <label v-else-if="draftNode.type === 'END'" class="name-field">
           <span>结束结果</span>

@@ -22,6 +22,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPermissionSumma
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -37,6 +39,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BusinessApplicationPublishService {
 
     private final BusinessApplicationReadinessService readinessService;
@@ -207,7 +210,11 @@ public class BusinessApplicationPublishService {
         } catch (BusinessException e) {
             return fail(run, step, "PUBLISH_STEP_FAILED", safeMessage(e));
         } catch (Exception e) {
-            return fail(run, step, "PUBLISH_INTERNAL_ERROR", "发布步骤发生内部异常，详细信息已脱敏");
+            String diagnosticRef = diagnosticRef();
+            log.error("[业务应用发布] unexpected step failure: applicationId={}, runId={}, step={}, "
+                            + "errorType={}, diagnosticRef={}",
+                    run.getApplicationId(), run.getId(), step, e.getClass().getSimpleName(), diagnosticRef, e);
+            return fail(run, step, "PUBLISH_INTERNAL_ERROR", safeInternalMessage(step, diagnosticRef));
         }
     }
 
@@ -237,6 +244,7 @@ public class BusinessApplicationPublishService {
             }
             BusinessObjectPublishDTO objectDto = new BusinessObjectPublishDTO();
             objectDto.setSyncTable(false);
+            objectDto.setSyncMenu(false);
             objectDto.setForce(false);
             objectDto.setRemark("由应用协调发布: " + StringUtils.defaultString(dto.getRemark()));
             // 复用预检阶段加载的设计上下文；恢复链路等缺失时回退到重新加载。
@@ -352,6 +360,7 @@ public class BusinessApplicationPublishService {
         result.setRecoverable(Set.of(BusinessApplicationPublishStatus.PARTIAL,
                 BusinessApplicationPublishStatus.FAILED).contains(run.getRunStatus()));
         result.setCurrentStep(run.getCurrentStep());
+        result.setErrorCode(run.getErrorCode());
         result.setMessage(message);
         result.setSteps(detail.getSteps());
         return result;
@@ -375,6 +384,27 @@ public class BusinessApplicationPublishService {
 
     private String safeMessage(BusinessException exception) {
         return StringUtils.abbreviate(StringUtils.defaultIfBlank(exception.getMessage(), "发布步骤失败"), 500);
+    }
+
+    private String safeInternalMessage(String step, String diagnosticRef) {
+        String stepName = switch (StringUtils.defaultString(step)) {
+            case BusinessApplicationPublishStep.PROCESSES -> "发布业务流程";
+            case BusinessApplicationPublishStep.OBJECTS -> "发布业务对象";
+            case BusinessApplicationPublishStep.ENTRIES -> "切换页面入口";
+            case BusinessApplicationPublishStep.PAGE_MENUS -> "同步应用页面菜单";
+            case BusinessApplicationPublishStep.EXTENSIONS -> "启用业务扩展";
+            case BusinessApplicationPublishStep.COMMIT -> "提交应用版本";
+            case BusinessApplicationPublishStep.SNAPSHOT -> "准备快照";
+            default -> "发布预检查";
+        };
+        String hint = BusinessApplicationPublishStep.PROCESSES.equals(step)
+                ? "请确认流程模型已发布、Flow 服务可用且流程依赖对象已有发布版本"
+                : "请打开发布运行记录检查该步骤的依赖配置后再恢复";
+        return String.format("发布步骤「%s」执行失败。%s；诊断编号：%s", stepName, hint, diagnosticRef);
+    }
+
+    private String diagnosticRef() {
+        return "PUB-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
     }
 
     private String shortHash(String value) {

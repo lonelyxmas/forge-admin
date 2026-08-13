@@ -2753,11 +2753,14 @@ public class LowcodeRuntimeConfigBuilder {
                 || (!"orgTreeSelect".equals(componentType) && !"userSelect".equals(componentType))) {
             return;
         }
-        if (StringUtils.isBlank(text(props.get("labelValueField")))) {
-            props.put("labelValueField", fieldName + "Name");
+        String labelField = fieldName + "Name";
+        if (StringUtils.isBlank(text(props.get("labelValueField")))
+                || fieldName.equals(text(props.get("labelValueField")))) {
+            props.put("labelValueField", labelField);
         }
-        if (StringUtils.isBlank(text(props.get("targetField")))) {
-            props.put("targetField", fieldName + "Name");
+        if (StringUtils.isBlank(text(props.get("targetField")))
+                || fieldName.equals(text(props.get("targetField")))) {
+            props.put("targetField", labelField);
         }
     }
 

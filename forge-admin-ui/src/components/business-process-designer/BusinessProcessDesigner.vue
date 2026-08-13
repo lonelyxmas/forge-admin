@@ -2,6 +2,7 @@
 import { NAlert, NButton } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  BUSINESS_PROCESS_NODE_DRAG_MIME,
   getBusinessProcessNodeDefinition,
   isBusinessProcessStartType,
 } from './business-process-node-types.js'
@@ -48,6 +49,7 @@ const designer = useBusinessProcessDesigner(props.schema)
 const drawerVisible = ref(false)
 const operationError = ref('')
 const issuesExpanded = ref(true)
+const draggingNodeType = ref('')
 let autoSaveTimer = null
 
 const palette = ['CONDITION', 'ACTION', 'APPROVAL', 'SUB_PROCESS']
@@ -76,7 +78,9 @@ const canCopySelected = computed(() => canEditSelected.value
   && !isBusinessProcessStartType(selectedNode.value.type)
   && selectedNode.value.type !== 'END'
   && designer.getOutgoingEdges(selectedNode.value.id).length === 1)
-const canDeleteSelected = computed(() => canCopySelected.value)
+const canDeleteSelected = computed(() => canEditSelected.value
+  && !isBusinessProcessStartType(selectedNode.value.type)
+  && selectedNode.value.type !== 'END')
 
 const initialStart = designer.schema.value.nodes.find(node => isBusinessProcessStartType(node.type))
 designer.selectNode(initialStart?.id)
@@ -109,15 +113,48 @@ function handleAddNode(type) {
   operationError.value = ''
   const insertionNode = selectedNode.value || initialStart
   try {
-    const overrides = type === 'ACTION'
-      ? { config: { objectCode: designer.schema.value.subject?.objectCode } }
-      : {}
-    const nodeId = designer.addNode(insertionNode.id, type, overrides)
-    designer.selectNode(nodeId)
+    const outgoing = designer.getOutgoingEdges(insertionNode.id)
+    if (outgoing.length !== 1)
+      throw new Error('当前节点有多个结果出口，请使用对应分支线上的 + 添加节点')
+    handleInsertNode({ edgeId: outgoing[0].id, type })
   }
   catch (error) {
     operationError.value = error.message
   }
+}
+
+function handleInsertNode({ edgeId, type }) {
+  operationError.value = ''
+  try {
+    const overrides = type === 'ACTION'
+      ? { config: { objectCode: designer.schema.value.subject?.objectCode } }
+      : {}
+    const nodeId = designer.insertNodeOnEdge(edgeId, type, overrides)
+    designer.selectNode(nodeId)
+    drawerVisible.value = true
+    draggingNodeType.value = ''
+  }
+  catch (error) {
+    operationError.value = error.message
+    draggingNodeType.value = ''
+  }
+}
+
+function handlePaletteDragStart(event, type) {
+  if (props.readonly) {
+    event.preventDefault()
+    return
+  }
+  draggingNodeType.value = type
+  if (!event.dataTransfer)
+    return
+  event.dataTransfer.effectAllowed = 'copy'
+  event.dataTransfer.setData(BUSINESS_PROCESS_NODE_DRAG_MIME, type)
+  event.dataTransfer.setData('text/plain', type)
+}
+
+function handlePaletteDragEnd() {
+  draggingNodeType.value = ''
 }
 
 function handleNodeSelect(node) {
@@ -138,12 +175,29 @@ function handleCopyNode() {
   }
 }
 
-function handleDeleteNode() {
-  if (!canDeleteSelected.value)
+function handleDeleteNode(node = selectedNode.value) {
+  if (!node || props.readonly || isBusinessProcessStartType(node.type) || node.type === 'END')
     return
+  designer.selectNode(node.id)
+  const dialog = window.$dialog
+  if (!dialog) {
+    performDeleteNode(node)
+    return
+  }
+  dialog.warning({
+    title: '删除节点',
+    content: `确认删除“${node.name || '当前节点'}”吗？删除后会自动恢复前后节点连线。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => performDeleteNode(node),
+  })
+}
+
+function performDeleteNode(node) {
   operationError.value = ''
   try {
-    designer.deleteNode(selectedNode.value.id)
+    designer.deleteNode(node.id)
+    drawerVisible.value = false
   }
   catch (error) {
     operationError.value = error.message
@@ -154,19 +208,27 @@ function handleDrawerSave(node, metadata = {}) {
   const current = designer.getNode(node.id)
   if (!current)
     return
-  if (isBusinessProcessStartType(current.type) && node.type !== current.type) {
-    designer.changeStartType(node.id, node.type, {
+  operationError.value = ''
+  try {
+    if (isBusinessProcessStartType(current.type) && node.type !== current.type) {
+      designer.changeStartType(node.id, node.type, {
+        name: node.name,
+        config: node.config,
+        recordIdSource: metadata.recordIdSource,
+      })
+      return
+    }
+    designer.updateNode(node.id, {
       name: node.name,
+      ports: node.ports,
       config: node.config,
-      recordIdSource: metadata.recordIdSource,
     })
-    return
   }
-  designer.updateNode(node.id, {
-    name: node.name,
-    ports: node.ports,
-    config: node.config,
-  })
+  catch (error) {
+    metadata.reject?.()
+    operationError.value = error.message
+    drawerVisible.value = true
+  }
 }
 
 function handleValidate() {
@@ -203,6 +265,11 @@ function locateIssue(item) {
   if (item.nodeId)
     designer.selectNode(item.nodeId)
   emit('locateIssue', item)
+}
+
+function issueLocation(item) {
+  const node = item?.nodeId ? designer.getNode(item.nodeId) : null
+  return node ? `节点：${node.name || '未命名节点'}` : '流程结构'
 }
 
 function handleBeforeUnload(event) {
@@ -258,7 +325,7 @@ defineExpose({
         <NButton size="small" :disabled="!canCopySelected" @click="handleCopyNode">
           复制节点
         </NButton>
-        <NButton size="small" type="error" secondary :disabled="!canDeleteSelected" @click="handleDeleteNode">
+        <NButton size="small" type="error" secondary :disabled="!canDeleteSelected" @click="handleDeleteNode()">
           删除节点
         </NButton>
         <NButton data-designer-action="validate" size="small" @click="handleValidate">
@@ -296,7 +363,7 @@ defineExpose({
       <aside class="node-palette">
         <div class="pane-heading">
           <strong>添加节点</strong>
-          <span>插入到当前选中节点之后</span>
+          <span>拖到画布连线，或单击插入到选中节点后</span>
         </div>
         <button
           v-for="item in palette"
@@ -305,6 +372,9 @@ defineExpose({
           class="palette-item"
           :data-node-type="item.type"
           :disabled="readonly"
+          :draggable="!readonly"
+          @dragstart="handlePaletteDragStart($event, item.type)"
+          @dragend="handlePaletteDragEnd"
           @click="handleAddNode(item.type)"
         >
           <span :class="`tone-${item.tone}`" />
@@ -321,7 +391,11 @@ defineExpose({
           :schema="designer.schema.value"
           :selected-node-id="designer.selectedNodeId.value"
           :readonly="readonly"
+          :palette="palette"
+          :dragging-node-type="draggingNodeType"
           @node-select="handleNodeSelect"
+          @node-delete="handleDeleteNode"
+          @insert-node="handleInsertNode"
         />
       </main>
 
@@ -342,7 +416,7 @@ defineExpose({
             @click="locateIssue(item)"
           >
             <strong>{{ item.message }}</strong>
-            <span>{{ item.code }}<template v-if="item.nodeId"> · {{ item.nodeId }}</template></span>
+            <span>{{ issueLocation(item) }}</span>
           </button>
           <div v-if="!issues.length" class="issue-empty">
             当前图结构完整；发布前仍需执行服务端依赖与权限校验。
@@ -500,6 +574,22 @@ defineExpose({
   padding: 9px 10px;
   text-align: left;
   grid-template-columns: 4px 1fr;
+  cursor: grab;
+}
+
+.palette-item:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.palette-item[draggable='true']::after {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  color: var(--text-color-3, #94a3b8);
+  content: '⋮⋮';
+  font-size: 11px;
+  letter-spacing: -3px;
+  transform: translateY(-50%);
 }
 
 .palette-item:hover:not(:disabled) {

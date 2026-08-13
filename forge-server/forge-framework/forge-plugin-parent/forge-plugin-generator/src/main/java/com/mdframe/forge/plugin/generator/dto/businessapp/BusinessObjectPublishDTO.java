@@ -20,6 +20,9 @@ public class BusinessObjectPublishDTO {
 
     private Boolean force;
 
+    /** 应用协调发布时关闭旧低代码菜单，由应用页面菜单协议统一管理。 */
+    private Boolean syncMenu;
+
     private String remark;
 
     private LowcodeModelSchema modelSchema;

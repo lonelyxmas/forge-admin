@@ -10,6 +10,15 @@
  * BPMN 导出仍只消费 edge.condition，因此规则配置器必须同步生成标准表达式字符串。
  */
 import { computed } from 'vue'
+import {
+  buildConditionExpression,
+  conditionIsBetween,
+  conditionNeedsValue,
+  createConditionRule,
+  normalizeConditionDataType,
+  normalizeConditionRule,
+  parseConditionExpression as parseSharedConditionExpression,
+} from './condition-expression.js'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -254,21 +263,11 @@ function getRulesCondition(edge) {
 }
 
 function createDefaultRule() {
-  return {
-    field: formFields.value[0]?.field || '',
-    operator: 'eq',
-    value: '',
-    endValue: '',
-  }
+  return createConditionRule(formFields.value[0]?.field || '')
 }
 
 function normalizeRule(rule = {}) {
-  return {
-    field: rule.field || '',
-    operator: rule.operator || 'eq',
-    value: rule.value ?? '',
-    endValue: rule.endValue ?? '',
-  }
+  return normalizeConditionRule(rule)
 }
 
 function addRule(edge) {
@@ -316,286 +315,23 @@ function emitRulesPatch(edgeId, rules, logic, edge = null) {
 }
 
 function buildExpression(rules, logic) {
-  const expressions = rules
-    .map(buildRuleExpression)
-    .filter(Boolean)
-  if (!expressions.length)
-    return ''
-  const joiner = logic === 'any' ? ' || ' : ' && '
-  return `\${${expressions.join(joiner)}}`
-}
-
-function buildRuleExpression(rule) {
-  const field = String(rule.field || '').trim()
-  const operator = rule.operator || 'eq'
-  if (!field)
-    return ''
-
-  if (operator === 'empty')
-    return `(${field} == null || ${field} == '')`
-  if (operator === 'notEmpty')
-    return `(${field} != null && ${field} != '')`
-
-  const meta = fieldMetaMap.value.get(field) || {}
-  const value = formatValue(rule.value, meta.dataType)
-  if (!value)
-    return ''
-
-  if (operator === 'between') {
-    const endValue = formatValue(rule.endValue, meta.dataType)
-    if (!endValue)
-      return ''
-    return `(${field} >= ${value} && ${field} <= ${endValue})`
-  }
-  if (operator === 'contains')
-    return `(${field} != null && ${field}.contains(${value}))`
-  if (operator === 'notContains')
-    return `(${field} == null || !${field}.contains(${value}))`
-
-  const symbolMap = {
-    eq: '==',
-    ne: '!=',
-    gt: '>',
-    ge: '>=',
-    lt: '<',
-    le: '<=',
-  }
-  return `${field} ${symbolMap[operator] || '=='} ${value}`
-}
-
-function formatValue(value, dataType) {
-  const raw = String(value ?? '').trim()
-  if (!raw)
-    return ''
-  if (dataType === 'number' && Number.isFinite(Number(raw)))
-    return raw
-  if (dataType === 'boolean' && ['true', 'false'].includes(raw.toLowerCase()))
-    return raw.toLowerCase()
-  return `'${raw.replaceAll('\\', '\\\\').replaceAll('\'', '\\\'')}'`
+  return buildConditionExpression(rules, logic, fieldMetaMap.value)
 }
 
 function normalizeDataType(type) {
-  const raw = String(type || '').toLowerCase()
-  if (['number', 'integer', 'decimal', 'inputnumber', 'slider', 'rate'].some(key => raw.includes(key)))
-    return 'number'
-  if (['boolean', 'switch', 'checkbox'].some(key => raw.includes(key)))
-    return 'boolean'
-  if (['date', 'time'].some(key => raw.includes(key)))
-    return 'datetime'
-  if (['select', 'radio', 'enum', 'cascader', 'tree'].some(key => raw.includes(key)))
-    return 'enum'
-  return 'string'
+  return normalizeConditionDataType(type)
 }
 
 function needValue(operator) {
-  return !['empty', 'notEmpty'].includes(operator)
+  return conditionNeedsValue(operator)
 }
 
 function isBetween(operator) {
-  return operator === 'between'
+  return conditionIsBetween(operator)
 }
 
 function parseConditionExpression(condition) {
-  const expression = unwrapExpression(condition)
-  if (!expression || !formFields.value.length)
-    return { logic: 'all', rules: [] }
-
-  const orParts = splitTopLevel(expression, '||')
-  const logic = orParts.length > 1 ? 'any' : 'all'
-  const parts = logic === 'any' ? orParts : splitTopLevel(expression, '&&')
-  const rules = parts
-    .map(parseRuleExpression)
-    .filter(Boolean)
-
-  if (rules.length !== parts.length)
-    return { logic: 'all', rules: [] }
-  return { logic, rules }
-}
-
-function unwrapExpression(condition) {
-  const raw = String(condition || '').trim()
-  if (!raw)
-    return ''
-  if (raw.startsWith('${') && raw.endsWith('}'))
-    return raw.slice(2, -1).trim()
-  return raw
-}
-
-function splitTopLevel(expression, operator) {
-  const parts = []
-  let start = 0
-  let depth = 0
-  let quote = ''
-  for (let i = 0; i < expression.length; i += 1) {
-    const char = expression[i]
-    const prev = expression[i - 1]
-    if (quote) {
-      if (char === quote && prev !== '\\')
-        quote = ''
-      continue
-    }
-    if (char === '\'' || char === '"') {
-      quote = char
-      continue
-    }
-    if (char === '(') {
-      depth += 1
-      continue
-    }
-    if (char === ')') {
-      depth = Math.max(0, depth - 1)
-      continue
-    }
-    if (depth === 0 && expression.slice(i, i + operator.length) === operator) {
-      parts.push(expression.slice(start, i).trim())
-      start = i + operator.length
-      i += operator.length - 1
-    }
-  }
-  parts.push(expression.slice(start).trim())
-  return parts.filter(Boolean)
-}
-
-function parseRuleExpression(expression) {
-  const raw = trimPairParentheses(expression)
-  const emptyRule = parseEmptyRule(raw)
-  if (emptyRule)
-    return emptyRule
-
-  const containsRule = parseContainsRule(raw)
-  if (containsRule)
-    return containsRule
-
-  const betweenRule = parseBetweenRule(raw)
-  if (betweenRule)
-    return betweenRule
-
-  const binaryRule = parseBinaryRule(raw)
-  if (binaryRule)
-    return binaryRule
-
-  return null
-}
-
-function trimPairParentheses(expression) {
-  let raw = String(expression || '').trim()
-  while (raw.startsWith('(') && raw.endsWith(')') && hasWrappingParentheses(raw))
-    raw = raw.slice(1, -1).trim()
-  return raw
-}
-
-function hasWrappingParentheses(expression) {
-  let depth = 0
-  let quote = ''
-  for (let i = 0; i < expression.length; i += 1) {
-    const char = expression[i]
-    const prev = expression[i - 1]
-    if (quote) {
-      if (char === quote && prev !== '\\')
-        quote = ''
-      continue
-    }
-    if (char === '\'' || char === '"') {
-      quote = char
-      continue
-    }
-    if (char === '(')
-      depth += 1
-    if (char === ')')
-      depth -= 1
-    if (depth === 0 && i < expression.length - 1)
-      return false
-  }
-  return depth === 0
-}
-
-function parseEmptyRule(expression) {
-  const emptyMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*==\s*null\s*\|\|\s*\1\s*==\s*''$/)
-  if (emptyMatch && hasField(emptyMatch[1]))
-    return { field: emptyMatch[1], operator: 'empty', value: '', endValue: '' }
-
-  const notEmptyMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*!=\s*null\s*&&\s*\1\s*!=\s*''$/)
-  if (notEmptyMatch && hasField(notEmptyMatch[1]))
-    return { field: notEmptyMatch[1], operator: 'notEmpty', value: '', endValue: '' }
-
-  return null
-}
-
-function parseBetweenRule(expression) {
-  const match = expression.match(/^([A-Z_$][\w$]*)\s*>=\s*/i)
-  if (!match || !hasField(match[1]))
-    return null
-  const field = match[1]
-  const parts = splitTopLevel(expression.slice(match[0].length), '&&')
-  if (parts.length !== 2)
-    return null
-  const endPrefix = `${field} <=`
-  if (!parts[1].startsWith(endPrefix))
-    return null
-  return {
-    field,
-    operator: 'between',
-    value: parseLiteralValue(parts[0]),
-    endValue: parseLiteralValue(parts[1].slice(endPrefix.length)),
-  }
-}
-
-function parseContainsRule(expression) {
-  const containsMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*!=\s*null\s*&&\s*\1\.contains\(/)
-  if (containsMatch && hasField(containsMatch[1]) && expression.endsWith(')')) {
-    return {
-      field: containsMatch[1],
-      operator: 'contains',
-      value: parseLiteralValue(expression.slice(containsMatch[0].length, -1)),
-      endValue: '',
-    }
-  }
-
-  const notContainsMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*==\s*null\s*\|\|\s*!\1\.contains\(/)
-  if (notContainsMatch && hasField(notContainsMatch[1]) && expression.endsWith(')')) {
-    return {
-      field: notContainsMatch[1],
-      operator: 'notContains',
-      value: parseLiteralValue(expression.slice(notContainsMatch[0].length, -1)),
-      endValue: '',
-    }
-  }
-
-  return null
-}
-
-function parseBinaryRule(expression) {
-  const match = expression.match(/^([A-Z_$][\w$]*)\s*(==|!=|>=|<=|>|<)\s*/i)
-  if (!match || !hasField(match[1]))
-    return null
-  const value = expression.slice(match[0].length).trim()
-  if (!value)
-    return null
-  const operatorMap = {
-    '==': 'eq',
-    '!=': 'ne',
-    '>': 'gt',
-    '>=': 'ge',
-    '<': 'lt',
-    '<=': 'le',
-  }
-  return {
-    field: match[1],
-    operator: operatorMap[match[2]] || 'eq',
-    value: parseLiteralValue(value),
-    endValue: '',
-  }
-}
-
-function parseLiteralValue(value) {
-  const raw = String(value || '').trim()
-  if ((raw.startsWith('\'') && raw.endsWith('\'')) || (raw.startsWith('"') && raw.endsWith('"')))
-    return raw.slice(1, -1).replaceAll('\\\'', '\'').replaceAll('\\\\', '\\')
-  return raw
-}
-
-function hasField(field) {
-  return fieldMetaMap.value.has(field)
+  return parseSharedConditionExpression(condition, fieldMetaMap.value)
 }
 </script>
 

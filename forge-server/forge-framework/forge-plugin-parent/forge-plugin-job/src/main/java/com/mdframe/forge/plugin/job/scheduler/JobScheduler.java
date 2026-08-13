@@ -73,15 +73,14 @@ public class JobScheduler {
         JobKey jobKey = jobKey(jobConfig);
         try {
             if (isMissedOnceWithoutCompensation(jobConfig)) {
-                if (scheduler.checkExists(jobKey) && !scheduler.deleteJob(jobKey)) {
-                    throw new JobScheduleException("Quartz错过的一次性任务删除未生效: " + jobKey);
-                }
+                deleteQuartzState(jobConfig, "Quartz错过的一次性任务");
                 log.info("一次性任务已错过且不补偿: {}", jobKey);
                 return SynchronizeResult.ONCE_MISSED;
             }
             if (scheduler.checkExists(jobKey)) {
                 replaceJob(jobConfig);
             } else {
+                removeOrphanTrigger(jobConfig);
                 scheduler.scheduleJob(buildJobDetail(jobConfig), buildTrigger(jobConfig));
             }
             applyStatus(jobConfig);
@@ -89,6 +88,28 @@ public class JobScheduler {
             return SynchronizeResult.SCHEDULED;
         } catch (Exception e) {
             throw scheduleFailure("同步", jobKey, e);
+        }
+    }
+
+    /**
+     * 删除同名 Quartz Job/Trigger 后按数据库配置完整重建。
+     * 用于数据库配置已存在但 Quartz 运行态缺失或残缺的恢复场景。
+     */
+    public SynchronizeResult rebuild(JobConfig jobConfig) {
+        JobKey jobKey = jobKey(jobConfig);
+        try {
+            if (isMissedOnceWithoutCompensation(jobConfig)) {
+                deleteQuartzState(jobConfig, "Quartz重建时错过的一次性任务");
+                log.info("重建时一次性任务已错过且不补偿: {}", jobKey);
+                return SynchronizeResult.ONCE_MISSED;
+            }
+            deleteQuartzState(jobConfig, "Quartz重建");
+            scheduler.scheduleJob(buildJobDetail(jobConfig), buildTrigger(jobConfig));
+            applyStatus(jobConfig);
+            log.info("重建任务成功: {}", jobKey);
+            return SynchronizeResult.SCHEDULED;
+        } catch (Exception e) {
+            throw scheduleFailure("重建", jobKey, e);
         }
     }
 
@@ -254,6 +275,21 @@ public class JobScheduler {
             scheduler.rescheduleJob(triggerKey, buildTrigger(jobConfig));
         } else {
             scheduler.scheduleJob(buildTrigger(jobConfig));
+        }
+    }
+
+    private void deleteQuartzState(JobConfig jobConfig, String operation) throws SchedulerException {
+        JobKey jobKey = jobKey(jobConfig);
+        if (scheduler.checkExists(jobKey) && !scheduler.deleteJob(jobKey)) {
+            throw new JobScheduleException(operation + "删除Job未生效: " + jobKey);
+        }
+        removeOrphanTrigger(jobConfig);
+    }
+
+    private void removeOrphanTrigger(JobConfig jobConfig) throws SchedulerException {
+        TriggerKey triggerKey = triggerKey(jobConfig);
+        if (scheduler.checkExists(triggerKey) && !scheduler.unscheduleJob(triggerKey)) {
+            throw new JobScheduleException("删除Quartz触发器未生效: " + triggerKey);
         }
     }
 

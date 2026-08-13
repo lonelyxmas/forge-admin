@@ -108,7 +108,18 @@
         <where>
             <include refid="RoleQueryCondition" />
         </where>
-        ORDER BY r.sort ASC, r.create_time DESC
+        ORDER BY
+        <if test="query.prioritizedUserId != null and query.orgId != null">
+            CASE WHEN EXISTS (
+                SELECT 1
+                FROM sys_user_org_role prioritized_uor
+                WHERE prioritized_uor.tenant_id = r.tenant_id
+                  AND prioritized_uor.user_id = #{query.prioritizedUserId}
+                  AND prioritized_uor.org_id = #{query.orgId}
+                  AND prioritized_uor.role_id = r.id
+            ) THEN 0 ELSE 1 END,
+        </if>
+        r.sort ASC, r.create_time DESC
     </select>
 
     <select id="selectRoleById" resultMap="RoleResultMap">

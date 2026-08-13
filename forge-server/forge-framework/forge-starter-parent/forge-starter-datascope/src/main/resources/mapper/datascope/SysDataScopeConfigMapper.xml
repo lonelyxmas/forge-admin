@@ -53,4 +53,37 @@
           AND del_flag = 0
     </select>
 
+    <select id="selectEnabledModuleConfigs" resultMap="SysDataScopeConfigResultMap">
+        SELECT
+            id,
+            tenant_id,
+            resource_code,
+            resource_name,
+            mapper_method,
+            table_alias,
+            user_id_column,
+            org_id_column,
+            tenant_id_column,
+            region_code_column,
+            user_region_column,
+            user_table_alias,
+            enabled,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time,
+            del_flag
+        FROM sys_data_scope_config
+        WHERE enabled = 1
+          AND del_flag = 0
+          AND resource_code IS NOT NULL
+          AND resource_code != ''
+          AND tenant_id IN (#{tenantId}, 1)
+        ORDER BY resource_code ASC,
+                 CASE WHEN tenant_id = #{tenantId} THEN 0 ELSE 1 END,
+                 id ASC
+    </select>
+
 </mapper>

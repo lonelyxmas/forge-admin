@@ -37,8 +37,25 @@ describe('in-app builder schema', () => {
     })
 
     expect(withPage.nodes.find(node => node.title === '销售概览')).toMatchObject({ parentId: group.id })
+    expect(withPage.nodes.find(node => node.title === '销售概览')).toMatchObject({ systemMenuVisible: false })
     expect(withPage.homePageId).toBe(withPage.nodes.find(node => node.title === '销售概览').id)
     expect(moveNavigationNode(withPage, withPage.homePageId, null).nodes.find(node => node.id === withPage.homePageId)).toMatchObject({ parentId: null })
+  })
+
+  it('preserves only an explicitly enabled system menu flag', () => {
+    const schema = normalizeInAppBuilder({
+      inAppBuilder: {
+        nodes: [
+          { id: 'page_default', type: 'page', title: '默认页面' },
+          { id: 'page_menu', type: 'page', title: '菜单页面', systemMenuVisible: true },
+        ],
+      },
+    }, APPLICATION, [])
+
+    expect(schema.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'page_default', systemMenuVisible: false }),
+      expect.objectContaining({ id: 'page_menu', systemMenuVisible: true }),
+    ]))
   })
 
   it('requires an explicit strategy when deleting a group with child pages', () => {

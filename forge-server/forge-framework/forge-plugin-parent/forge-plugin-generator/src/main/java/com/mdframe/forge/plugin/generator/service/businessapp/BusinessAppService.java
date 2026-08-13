@@ -15,6 +15,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessAppVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.util.regex.Pattern;
  * 业务应用平台访问入口服务。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusinessApp> {
 
@@ -153,27 +155,43 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     public List<Long> publishEntries(Long applicationId, List<Long> selectedEntryIds) {
         applicationService.requireEntity(applicationId);
         List<AiBusinessApp> entries = baseMapper.selectByApplicationId(resolveTenantId(), applicationId);
-        Set<Long> selected = selectedEntryIds == null || selectedEntryIds.isEmpty()
-                ? entries.stream().map(AiBusinessApp::getId).collect(java.util.stream.Collectors.toSet())
-                : new HashSet<>(selectedEntryIds);
+        Set<Long> entryIds = entries.stream().map(AiBusinessApp::getId).collect(java.util.stream.Collectors.toSet());
+        Set<Long> selected = resolveSelectedEntryIds(entryIds, selectedEntryIds);
+        if (!entryIds.containsAll(selected)) {
+            throw new BusinessException("发布选择中包含不属于当前应用的访问入口");
+        }
         List<Long> published = new ArrayList<>();
         for (AiBusinessApp entry : entries) {
             if (!selected.contains(entry.getId())) {
                 continue;
             }
             if (!Integer.valueOf(1).equals(entry.getStatus())) {
-                throw new BusinessException("访问入口未启用: " + entry.getAppName());
+                log.warn("访问入口未启用，跳过发布: applicationId={}, entryId={}, appName={}",
+                        applicationId, entry.getId(), entry.getAppName());
+                continue;
             }
             if ("RUNTIME".equalsIgnoreCase(entry.getEntryMode()) && StringUtils.isBlank(entry.getConfigKey())) {
-                throw new BusinessException("运行入口缺少已发布页面配置: " + entry.getAppName());
+                log.warn("运行入口缺少已发布页面配置，跳过发布: applicationId={}, entryId={}, appName={}",
+                        applicationId, entry.getId(), entry.getAppName());
+                continue;
             }
             syncManagementMenu(entry);
             published.add(entry.getId());
         }
-        if (published.size() != selected.size()) {
-            throw new BusinessException("发布选择中包含不属于当前应用的访问入口");
-        }
         return published;
+    }
+
+    static Set<Long> resolveSelectedEntryIds(Set<Long> availableEntryIds, List<Long> requestedEntryIds) {
+        if (requestedEntryIds == null) {
+            return new HashSet<>(availableEntryIds);
+        }
+        Set<Long> selected = new HashSet<>();
+        for (Long entryId : requestedEntryIds) {
+            if (entryId != null) {
+                selected.add(entryId);
+            }
+        }
+        return selected;
     }
 
     @Transactional(rollbackFor = Exception.class)

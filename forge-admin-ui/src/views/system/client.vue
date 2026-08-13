@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { NButton, NTag } from 'naive-ui'
+import { NButton } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
@@ -54,7 +54,7 @@ const message = window.$message
 const crudRef = ref()
 const onlineModalVisible = ref(false)
 const onlineUsers = ref([])
-const { dict, getLabel } = useDict(
+const { dict } = useDict(
   'sys_client_auth_method',
   'sys_enable_disable',
   'sys_yes_no',
@@ -143,12 +143,9 @@ const tableColumns = computed(() => [
     prop: 'authTypes',
     label: '支持的认证方式',
     width: 200,
-    render: (row) => {
-      const types = row.authTypes?.split(',') || []
-      return types.map(type =>
-        h(NTag, { type: 'info', size: 'small', style: 'margin: 2px' }, { default: () => getLabel('sys_client_login_auth_type', type) }),
-      )
-    },
+    render: row => h(SystemTableCell, {
+      values: splitTableCellValues(row.authTypes).map(resolveAuthTypeLabel),
+    }),
   },
   {
     prop: 'captchaType',
@@ -356,6 +353,18 @@ const onlineTableColumns = [
     },
   },
 ]
+
+function splitTableCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return rawValues
+    .flatMap(item => String(item || '').split(/[、,，]/))
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function resolveAuthTypeLabel(value) {
+  return authTypeOptions.value.find(option => String(option.value) === String(value))?.label || value
+}
 
 // 详情数据渲染前处理：将字符串转为数组
 function beforeRenderDetail(data) {

@@ -375,3 +375,20 @@
 - 前端目标组件 ESLint 最终 0 error、0 warning；Admin 聚合 `package -DskipTests` 47 个模块全部 `BUILD SUCCESS`。
 - Node `v20.19.0` 前端生产构建退出码 0，Vite 转换 8818 个模块，`built in 5m 39s`；仅保留仓库既有组件重名、动态/静态导入和 CSS 注释警告。
 - 未启动或重启 MySQL、Flyway、Admin、Flow、Vite 或浏览器，未执行真实 DDL/发布；真实列可空性和最终发布结果由用户重启 Admin 后验收。
+
+## 22. Task 29 应用创建实测回归增量计划
+
+1. 前端 Vitest 覆盖输入、人员、组织、区划字段名称变化后的默认占位，字段资产面板同步入口以及手工占位保护；覆盖人员和组织错误展示字段与主字段同名时不回写主值。
+2. CRUD 预览协议测试覆盖区块 `api` 与完整 `apiConfig` 均追加且不重复追加 `designPreview=1`；后端权限测试覆盖仅具备 `ai:businessApplication:edit` 的用户可访问设计草稿，正式运行规则不变。
+3. 后端 JUnit 覆盖设计版本变化后最近一次真实 `IN_SYNC` 摘要仍保留；发布实时检查相关既有用例继续通过。
+4. 运行配置测试分别覆盖人员、组织字段的 `bigint + userSelect/orgTreeSelect`，错误的同字段 `labelValueField/targetField` 回退到 `${field}Name`；动态 CRUD 测试覆盖姓名等非数字主值被明确拒绝、数字 ID 可通过。
+5. 菜单发布测试覆盖无显式 `systemMenuVisible=true` 时只同步空列表、不创建应用根菜单；显式开启页面仍生成菜单。应用协调对象发布显式关闭旧低代码菜单同步，且不会解析/创建通用业务域目录；旧低代码直接发布默认行为保持兼容。
+6. 使用 Node `v20.19.0` 执行目标 ESLint、Vitest 和生产构建；使用 JDK 17 执行生成器 reactor `test-compile`、非零定向 Surefire 和 Admin 聚合 `package -DskipTests`，最后执行 `git diff --check`。
+7. 不启动 MySQL、Flyway、Admin、Flow、Vite 或浏览器，不执行真实 DDL、发布或菜单写入；真实页面交互与数据库保存结果由用户重启环境后验收。
+
+### 执行结果（2026-08-06）
+
+- Node `v20.19.0`：目标 ESLint 0 error/0 warning；Vitest 5 个文件 33 tests 全通过；生产构建转换 8864 modules，`built in 2m 44s`，退出码 0。仅保留仓库既有组件重名、动态/静态导入和 CSS `//` 注释警告。
+- JDK 17：生成器模块主代码和 105 个测试源 `test-compile` 通过；第一组定向 Surefire 16 tests、第二组应用发布链路 10 tests 全部通过，均为 0 failure、0 error、0 skipped；Admin 聚合 `mvn -pl forge-admin-server -am package -DskipTests` 共 47 个模块 `BUILD SUCCESS`。
+- 基线说明：首次带 `-am` 的 reactor `test-compile` 在无关的 `forge-plugin-message` 既有测试中断，原因是 `MessageServiceImplTest` 构造器缺少 `ApplicationEventPublisher` 参数；随后直接在生成器模块完成测试编译。首次整类执行 `LowcodeRuntimeConfigBuilderTest` 时，本轮新增用例通过，但既有 `doesNotPublishOneToManyChildRelationAsRelationNameTranslation` 因当前“低代码业务表必须使用 id 自增主键”规则失败；随后方法级执行本轮新增 `selectionLabelsNeverTargetPrimaryIdentifierFields` 通过。上述基线问题未计入本轮通过项。
+- `git diff --check` 无输出。未启动或重启 MySQL、Flyway、Admin、Flow、Vite 或浏览器，未执行 DDL、真实发布或菜单写入，无服务 PID 需要清理；真实页面点击、数据库保存和菜单结果留待用户重启环境后验收。

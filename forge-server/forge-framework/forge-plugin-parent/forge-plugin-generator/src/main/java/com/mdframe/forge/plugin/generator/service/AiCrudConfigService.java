@@ -237,14 +237,24 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
     }
 
     public void assertDesignPreviewPermission() {
+        if (hasDesignPreviewPermission()) {
+            return;
+        }
+        throw new BusinessException("无业务对象设计或业务应用编辑权限，不能预览设计草稿");
+    }
+
+    public boolean hasDesignPreviewPermission() {
+        return hasPermission("ai:businessObject:design")
+                || hasPermission("ai:businessApplication:edit");
+    }
+
+    private boolean hasPermission(String permission) {
         try {
-            if (SessionHelper.hasPermission("ai:businessObject:design")) {
-                return;
-            }
+            return SessionHelper.hasPermission(permission);
         } catch (Exception ignored) {
             // 统一返回业务权限提示，避免预览链路泄露认证实现细节。
+            return false;
         }
-        throw new BusinessException("无业务对象设计权限，不能预览设计草稿");
     }
 
     public AiCrudConfig resolvePublishedRuntimeConfig(AiCrudConfig config) {

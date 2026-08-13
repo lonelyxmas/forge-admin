@@ -1,12 +1,14 @@
 package com.mdframe.forge.plugin.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.mdframe.forge.plugin.system.dto.RoleDataScopeSettingsDTO;
 import com.mdframe.forge.plugin.system.dto.RoleUserQuery;
 import com.mdframe.forge.plugin.system.dto.SysRoleDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysRole;
 import com.mdframe.forge.plugin.system.service.ISysRoleService;
+import com.mdframe.forge.plugin.system.vo.RoleDataScopeSettingsVO;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
@@ -108,9 +110,28 @@ public class SysRoleController {
      */
     @GetMapping("/{roleId}/resources")
     public RespInfo<List<Long>> getRoleResourceIds(@PathVariable Long roleId,
-                                                   @RequestParam(required = false) String clientCode) {
-        List<Long> resourceIds = roleService.selectRoleResourceIds(roleId, clientCode);
+                                                   @RequestParam(required = false) String clientCode,
+                                                   @RequestParam(defaultValue = "false") Boolean includeParents) {
+        List<Long> resourceIds = roleService.selectRoleResourceIds(roleId, clientCode, Boolean.TRUE.equals(includeParents));
         return RespInfo.success(resourceIds);
+    }
+
+    /**
+     * 查询角色默认及业务模块数据范围。
+     */
+    @GetMapping("/{roleId}/dataScopes")
+    public RespInfo<RoleDataScopeSettingsVO> getRoleDataScopes(@PathVariable Long roleId) {
+        return RespInfo.success(roleService.getRoleDataScopeSettings(roleId));
+    }
+
+    /**
+     * 保存角色默认及业务模块数据范围。
+     */
+    @PostMapping("/{roleId}/dataScopes")
+    public RespInfo<RoleDataScopeSettingsVO> saveRoleDataScopes(@PathVariable Long roleId,
+                                                                @RequestBody RoleDataScopeSettingsDTO settings) {
+        boolean result = roleService.saveRoleDataScopeSettings(roleId, settings);
+        return result ? RespInfo.success(roleService.getRoleDataScopeSettings(roleId)) : RespInfo.error("保存数据权限失败");
     }
 
     /**

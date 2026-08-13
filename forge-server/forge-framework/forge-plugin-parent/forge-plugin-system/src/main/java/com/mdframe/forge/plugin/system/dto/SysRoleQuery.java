@@ -46,6 +46,11 @@ public class SysRoleQuery extends PageQuery {
     private Long orgId;
 
     /**
+     * 需要优先展示其已授权角色的用户ID，仅影响排序，不扩大可见角色范围。
+     */
+    private Long prioritizedUserId;
+
+    /**
      * 当前用户可见的角色ID列表，非超级管理员只能查询自己已拥有的角色。
      */
     private List<Long> accessibleRoleIds;

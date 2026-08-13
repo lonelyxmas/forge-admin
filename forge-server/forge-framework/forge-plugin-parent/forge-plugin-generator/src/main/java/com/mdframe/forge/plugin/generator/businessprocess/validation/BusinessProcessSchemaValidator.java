@@ -60,8 +60,14 @@ public class BusinessProcessSchemaValidator {
     private static final Set<String> ACTION_TYPES = Set.of(
             "UPDATE_RECORD", "CREATE_RECORD", "BUSINESS_ACTION", "EXECUTE_BUSINESS_ACTION",
             "DOMAIN_ACTION", "SEND_MESSAGE", "INVOKE_CAPABILITY");
+    private static final List<String> APPROVAL_PORT_ORDER = List.of(
+            "APPROVED", "REJECTED", "CANCELED", "FAILED");
     private static final Set<String> APPROVAL_PORTS = Set.of(
             "APPROVED", "REJECTED", "CANCELED", "FAILED");
+    private static final Set<String> CONDITION_OPERATORS = Set.of(
+            "eq", "ne", "neq", "gt", "ge", "gte", "lt", "le", "lte", "between",
+            "contains", "notcontains", "not_contains", "empty", "is_null",
+            "notempty", "not_empty", "not_null");
     private static final Set<String> END_RESULTS = Set.of(
             "SUCCESS", "REJECTED", "CANCELED", "FAILED");
 
@@ -156,8 +162,8 @@ public class BusinessProcessSchemaValidator {
             node.setId(trim(node.getId()));
             node.setType(upper(node.getType()));
             node.setName(trim(node.getName()));
-            node.setPorts(normalizeUpperList(node.getPorts()));
             node.setConfig(node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig());
+            node.setPorts(normalizeNodePorts(node));
         }
         nodes.sort(Comparator.comparing(BusinessProcessNode::getId,
                 Comparator.nullsLast(String::compareTo)));
@@ -308,7 +314,8 @@ public class BusinessProcessSchemaValidator {
                 safeMap(context.getPublishedObjectVersionIdsByCode()).keySet(),
                 "OBJECT_VERSION_UNAVAILABLE", "dependencies.objects", result);
         validateAvailable(dependencies.getFlowModels(), safeSet(context.getAvailableFlowModelKeys()),
-                "FLOW_MODEL_UNAVAILABLE", "dependencies.flowModels", result);
+                "FLOW_MODEL_UNAVAILABLE", "dependencies.flowModels",
+                "审批模型未发布、未部署或已失效", "重新选择当前租户可用的已发布审批模型", result);
         validateAvailable(dependencies.getFormAssets(), safeSet(context.getAvailableFormAssetKeys()),
                 "FORM_ASSET_UNAVAILABLE", "dependencies.formAssets", result);
         validateAvailable(dependencies.getBusinessActions(), safeSet(context.getAvailableBusinessActionCodes()),
@@ -328,10 +335,16 @@ public class BusinessProcessSchemaValidator {
     private void validateAvailable(Collection<String> declared, Set<String> available,
                                    String code, String path,
                                    BusinessProcessValidationVO result) {
+        validateAvailable(declared, available, code, path,
+                "依赖未发布、不属于当前应用或已失效", "重新选择当前应用中的已发布依赖", result);
+    }
+
+    private void validateAvailable(Collection<String> declared, Set<String> available,
+                                   String code, String path, String message, String action,
+                                   BusinessProcessValidationVO result) {
         for (String reference : declared) {
             if (!available.contains(reference)) {
-                error(result, code, "依赖未发布、不属于当前应用或已失效", null,
-                        path, "重新选择当前应用中的已发布依赖");
+                error(result, code, message, null, path, action);
             }
         }
     }
@@ -505,9 +518,9 @@ public class BusinessProcessSchemaValidator {
                                    Map<String, Object> config,
                                    BusinessProcessValidationVO result) {
         List<?> branches = list(config.get("branches"));
-        if (branches.isEmpty() || branches.size() > MAX_CONDITION_BRANCHES) {
-            error(result, "CONDITION_BRANCH_COUNT_INVALID", "条件节点必须配置 1 到 20 个分支", node.getId(),
-                    path + ".config.branches", "配置有限分支并保留最多一个默认分支");
+        if (branches.size() < 2 || branches.size() > MAX_CONDITION_BRANCHES) {
+            error(result, "CONDITION_BRANCH_COUNT_INVALID", "条件节点至少需要一个判断分支和一个默认分支", node.getId(),
+                    path + ".config.branches", "配置 2 到 20 个分支，并保留一个默认分支");
             return;
         }
         Set<String> branchPorts = new LinkedHashSet<>();
@@ -521,18 +534,68 @@ public class BusinessProcessSchemaValidator {
             }
             if (Boolean.TRUE.equals(booleanValue(branch.get("isDefault")))) {
                 defaults++;
-            } else if (map(branch.get("condition")).isEmpty()) {
-                error(result, "CONDITION_RULE_REQUIRED", "非默认分支必须配置结构化条件", node.getId(),
-                        path + ".config.branches[" + index + "].condition", "配置 AND/OR 条件或设为唯一默认分支");
+                if (!map(branch.get("condition")).isEmpty()) {
+                    error(result, "CONDITION_DEFAULT_HAS_RULE", "默认分支不能配置判断规则", node.getId(),
+                            path + ".config.branches[" + index + "].condition", "清空默认分支条件");
+                }
+            } else {
+                validateStructuredCondition(node, path, branch, index, result);
             }
         }
-        if (defaults > 1) {
-            error(result, "CONDITION_DEFAULT_DUPLICATE", "条件节点最多允许一个默认分支", node.getId(),
-                    path + ".config.branches", "只保留一个默认分支");
+        if (defaults != 1) {
+            error(result, "CONDITION_DEFAULT_INVALID", "条件节点必须且只能保留一个默认分支", node.getId(),
+                    path + ".config.branches", "设置一个默认分支处理其他情况");
         }
         if (!new LinkedHashSet<>(node.getPorts()).equals(branchPorts)) {
             error(result, "CONDITION_PORTS_MISMATCH", "条件节点出口与分支配置不一致", node.getId(),
                     path + ".ports", "同步分支 port 与节点 ports");
+        }
+    }
+
+    private void validateStructuredCondition(BusinessProcessNode node,
+                                               String path,
+                                               Map<String, Object> branch,
+                                               int branchIndex,
+                                               BusinessProcessValidationVO result) {
+        String conditionPath = path + ".config.branches[" + branchIndex + "].condition";
+        Map<String, Object> condition = map(branch.get("condition"));
+        List<?> rules = list(condition.get("rules"));
+        String operator = upper(string(condition.get("operator")));
+        if (condition.isEmpty() || rules.isEmpty()) {
+            error(result, "CONDITION_RULE_REQUIRED", "非默认分支必须至少配置一条判断规则", node.getId(),
+                    conditionPath, "选择业务字段、判断关系和比较值");
+            return;
+        }
+        if (!Set.of("AND", "OR").contains(operator)) {
+            error(result, "CONDITION_LOGIC_INVALID", "条件分支的满足方式无效", node.getId(),
+                    conditionPath + ".operator", "选择满足全部规则或满足任意规则");
+        }
+        for (int ruleIndex = 0; ruleIndex < rules.size(); ruleIndex++) {
+            Map<String, Object> rule = map(rules.get(ruleIndex));
+            String rulePath = conditionPath + ".rules[" + ruleIndex + "]";
+            String field = string(rule.get("field"));
+            String ruleOperator = string(rule.get("operator"));
+            String normalizedRuleOperator = ruleOperator == null
+                    ? null : ruleOperator.toLowerCase(Locale.ROOT);
+            if (field == null) {
+                error(result, "CONDITION_FIELD_REQUIRED", "判断规则必须选择业务字段", node.getId(),
+                        rulePath + ".field", "选择当前主业务对象字段");
+            }
+            if (!CONDITION_OPERATORS.contains(normalizedRuleOperator)) {
+                error(result, "CONDITION_OPERATOR_INVALID", "判断关系无效", node.getId(),
+                        rulePath + ".operator", "重新选择受支持的判断关系");
+                continue;
+            }
+            if (!Set.of("empty", "is_null", "notempty", "not_empty", "not_null")
+                    .contains(normalizedRuleOperator)
+                    && string(rule.get("value")) == null) {
+                error(result, "CONDITION_VALUE_REQUIRED", "判断规则必须填写比较值", node.getId(),
+                        rulePath + ".value", "填写用于比较的业务值");
+            }
+            if ("between".equals(normalizedRuleOperator) && string(rule.get("endValue")) == null) {
+                error(result, "CONDITION_END_VALUE_REQUIRED", "区间判断必须填写结束值", node.getId(),
+                        rulePath + ".endValue", "填写完整的起始值和结束值");
+            }
         }
     }
 
@@ -598,13 +661,14 @@ public class BusinessProcessSchemaValidator {
                                   BusinessProcessValidationVO result) {
         if (!new LinkedHashSet<>(node.getPorts()).equals(APPROVAL_PORTS)) {
             error(result, "APPROVAL_PORTS_INVALID", "审批节点必须声明四个固定结果出口", node.getId(),
-                    path + ".ports", "使用 APPROVED/REJECTED/CANCELED/FAILED");
+                    path + ".ports", "恢复审批通过、审批驳回、审批取消和执行失败四个结果出口");
         }
         String flowModelKey = string(config.get("flowModelKey"));
         requireDeclared(flowModelKey, schema.getDependencies().getFlowModels(), "FLOW_MODEL_UNDECLARED",
                 node.getId(), path + ".config.flowModelKey", result);
         requireAvailable(flowModelKey, safeSet(context.getAvailableFlowModelKeys()),
-                "FLOW_MODEL_UNAVAILABLE", node.getId(), path + ".config.flowModelKey", result);
+                "FLOW_MODEL_UNAVAILABLE", node.getId(), path + ".config.flowModelKey",
+                "审批模型未发布、未部署或已失效", "重新选择当前租户可用的已发布审批模型", result);
         if (!"PINNED_AT_APPLICATION_PUBLISH".equals(string(config.get("versionPolicy")))) {
             error(result, "APPROVAL_VERSION_POLICY_INVALID", "审批模型必须在应用发布时固定版本", node.getId(),
                     path + ".config.versionPolicy", "使用 PINNED_AT_APPLICATION_PUBLISH");
@@ -970,9 +1034,16 @@ public class BusinessProcessSchemaValidator {
     private void requireAvailable(String reference, Set<String> available,
                                   String code, String nodeId, String path,
                                   BusinessProcessValidationVO result) {
+        requireAvailable(reference, available, code, nodeId, path,
+                "节点引用未发布、不属于当前应用或已失效", "选择当前应用中的已发布依赖", result);
+    }
+
+    private void requireAvailable(String reference, Set<String> available,
+                                  String code, String nodeId, String path,
+                                  String message, String action,
+                                  BusinessProcessValidationVO result) {
         if (reference == null || !available.contains(reference)) {
-            error(result, code, "节点引用未发布、不属于当前应用或已失效", nodeId, path,
-                    "选择当前应用中的已发布依赖");
+            error(result, code, message, nodeId, path, action);
         }
     }
 
@@ -1058,8 +1129,29 @@ public class BusinessProcessSchemaValidator {
                 result.add(normalized);
             }
         }
-        result.sort(String::compareTo);
         return result;
+    }
+
+    private List<String> normalizeNodePorts(BusinessProcessNode node) {
+        List<String> ports = normalizeUpperList(node.getPorts());
+        if ("APPROVAL".equals(node.getType())
+                && new LinkedHashSet<>(ports).equals(APPROVAL_PORTS)) {
+            return new ArrayList<>(APPROVAL_PORT_ORDER);
+        }
+        if (!"CONDITION".equals(node.getType())) {
+            return ports;
+        }
+
+        List<String> branchPorts = new ArrayList<>();
+        for (Object value : list(node.getConfig().get("branches"))) {
+            String port = upper(string(map(value).get("port")));
+            if (port != null && !branchPorts.contains(port)) {
+                branchPorts.add(port);
+            }
+        }
+        return !branchPorts.isEmpty()
+                && new LinkedHashSet<>(branchPorts).equals(new LinkedHashSet<>(ports))
+                ? branchPorts : ports;
     }
 
     private List<String> normalizeSortedList(List<String> source) {

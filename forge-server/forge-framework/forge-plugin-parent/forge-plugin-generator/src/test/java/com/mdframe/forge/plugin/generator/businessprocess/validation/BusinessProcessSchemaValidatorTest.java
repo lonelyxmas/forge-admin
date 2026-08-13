@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -44,6 +45,22 @@ class BusinessProcessSchemaValidatorTest {
     }
 
     @Test
+    @DisplayName("legacy alphabetic result ports migrate to business order")
+    void legacyResultPortsUseBusinessOrder() throws IOException {
+        BusinessProcessSchema schema = validator.normalize(
+                resource("businessprocess/manual-approval.json").replace(
+                        "[\"APPROVED\", \"REJECTED\", \"CANCELED\", \"FAILED\"]",
+                        "[\"APPROVED\", \"CANCELED\", \"FAILED\", \"REJECTED\"]"));
+
+        assertEquals(List.of("APPROVED", "REJECTED", "CANCELED", "FAILED"),
+                schema.getNodes().stream()
+                        .filter(node -> "approval_purchase".equals(node.getId()))
+                        .findFirst()
+                        .orElseThrow()
+                        .getPorts());
+    }
+
+    @Test
     @DisplayName("valid graph and governed dependencies pass")
     void validGraphPasses() {
         BusinessProcessValidationVO result = validator.validate(
@@ -65,6 +82,40 @@ class BusinessProcessSchemaValidatorTest {
 
             assertTrue(result.isValid(), fixture + " issues: " + result.getIssues());
         }
+    }
+
+    @Test
+    @DisplayName("condition branches require one default branch and complete structured rules")
+    void conditionBranchesRequireCompleteStructuredRules() throws IOException {
+        String invalid = resource("businessprocess/schedule-reminder.json")
+                .replace("\"rules\": [{\"source\": \"context\", \"field\": \"daysUntilDue\", \"operator\": \"LT\", \"value\": 0}]",
+                        "\"rules\": []")
+                .replace("{\"port\": \"DUE_SOON\", \"isDefault\": true}",
+                        "{\"port\": \"DUE_SOON\", \"condition\": {\"operator\": \"AND\", \"rules\": []}}");
+
+        BusinessProcessSchema schema = validator.normalize(invalid);
+        BusinessProcessValidationVO result = validator.validate(schema,
+                frozenExampleContext().setExpectedProcessCode(schema.getProcessCode()));
+
+        assertTrue(result.hasError("CONDITION_RULE_REQUIRED"));
+        assertTrue(result.hasError("CONDITION_DEFAULT_INVALID"));
+    }
+
+    @Test
+    @DisplayName("condition node requires a judgment branch in addition to the default branch")
+    void conditionRequiresJudgmentAndDefaultBranches() {
+        String invalid = validSchema()
+                .replace(
+                        "{\"id\":\"update\",\"type\":\"ACTION\",\"name\":\"更新状态\",\"config\":{\"actionType\":\"UPDATE_RECORD\",\"objectCode\":\"order\",\"fieldMappings\":[{\"field\":\"status\",\"valueSource\":\"CONSTANT\",\"value\":\"OPEN\"}]}}",
+                        "{\"id\":\"update\",\"type\":\"CONDITION\",\"name\":\"条件判断\",\"ports\":[\"OTHERWISE\"],\"config\":{\"branches\":[{\"port\":\"OTHERWISE\",\"label\":\"其他情况\",\"isDefault\":true}]}}")
+                .replace(
+                        "{\"id\":\"e2\",\"source\":\"update\",\"target\":\"end\",\"sourcePort\":\"NEXT\"}",
+                        "{\"id\":\"e2\",\"source\":\"update\",\"target\":\"end\",\"sourcePort\":\"OTHERWISE\",\"isDefault\":true}");
+
+        BusinessProcessValidationVO result = validator.validate(
+                validator.normalize(invalid), validContext());
+
+        assertTrue(result.hasError("CONDITION_BRANCH_COUNT_INVALID"));
     }
 
     @Test

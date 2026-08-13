@@ -126,6 +126,15 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 表格数据行附加高度，用于低代码列表的行间距实时预览。
+   * @type {number}
+   */
+  tableRowGap: {
+    type: Number,
+    default: 0,
+  },
+
+  /**
    * 数据渲染模式
    * @type {'table'|'card'}
    */

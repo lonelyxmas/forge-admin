@@ -45,4 +45,54 @@ public enum AiModelType {
         }
         return null;
     }
+
+    /**
+     * 根据模型标识（modelId）启发式推断模型类型。
+     * <p>
+     * 匹配规则（按优先级）：
+     * <ol>
+     *   <li>embedding / embed → EMBEDDING</li>
+     *   <li>rerank / re-rank / cross-encoder → RERANK</li>
+     *   <li>dall-e / imagen / flux / midjourney / stable-diffusion / sdxl / cogview → IMAGE_GENERATION</li>
+     *   <li>whisper / asr / speech-to-text / paraformer → ASR</li>
+     *   <li>tts / speech-to-speech / cosyvoice / sambert → TTS</li>
+     *   <li>其余 → CHAT（默认兜底）</li>
+     * </ol>
+     *
+     * @param modelId 模型标识（如 gpt-4o、text-embedding-3-small）
+     * @return 推断的模型类型，null 输入返回 CHAT
+     */
+    public static AiModelType inferFromModelId(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return CHAT;
+        }
+        String lower = modelId.toLowerCase();
+        // embedding
+        if (lower.contains("embedding") || lower.contains("embed")) {
+            return EMBEDDING;
+        }
+        // rerank
+        if (lower.contains("rerank") || lower.contains("re-rank") || lower.contains("cross-encoder")) {
+            return RERANK;
+        }
+        // image generation
+        if (lower.contains("dall-e") || lower.contains("dalle")
+                || lower.contains("imagen") || lower.contains("flux")
+                || lower.contains("midjourney") || lower.contains("stable-diffusion")
+                || lower.contains("sdxl") || lower.contains("cogview")) {
+            return IMAGE_GENERATION;
+        }
+        // asr
+        if (lower.contains("whisper") || lower.contains("asr")
+                || lower.contains("speech-to-text") || lower.contains("paraformer")) {
+            return ASR;
+        }
+        // tts
+        if (lower.contains("tts") || lower.contains("speech-to-speech")
+                || lower.contains("cosyvoice") || lower.contains("sambert")) {
+            return TTS;
+        }
+        // 默认为对话模型
+        return CHAT;
+    }
 }

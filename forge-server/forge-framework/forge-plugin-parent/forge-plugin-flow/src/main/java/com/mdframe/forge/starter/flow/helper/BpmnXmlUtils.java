@@ -364,22 +364,40 @@ public final class BpmnXmlUtils {
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
         factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        // Xerces/JAXP implementations bundled with older Flowable runtimes do not
+        // recognize the JAXP 1.5 external-access properties.  These properties are
+        // defense-in-depth (DOCTYPE and external entities are disabled above), so an
+        // implementation that does not expose them must not make an otherwise valid
+        // BPMN deployment fail with "property ... is not recognized".
+        setAttributeIfSupported(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        setAttributeIfSupported(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
         factory.setExpandEntityReferences(false);
         return factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
     }
 
     private static String serialize(Document document) throws Exception {
         TransformerFactory factory = TransformerFactory.newInstance();
-        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+        setAttributeIfSupported(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        setAttributeIfSupported(factory, XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
         var transformer = factory.newTransformer();
         transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
         transformer.setOutputProperty(OutputKeys.INDENT, "yes");
         StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(document), new StreamResult(writer));
         return writer.toString();
+    }
+
+    private static void setAttributeIfSupported(Object factory, String name, Object value) {
+        try {
+            if (factory instanceof DocumentBuilderFactory documentBuilderFactory) {
+                documentBuilderFactory.setAttribute(name, value);
+            } else if (factory instanceof TransformerFactory transformerFactory) {
+                transformerFactory.setAttribute(name, value);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Optional JAXP hardening property is unavailable in this parser/provider.
+            // Keep the mandatory entity/DOCTYPE protections and continue parsing.
+        }
     }
 
     private static String localName(Element element) {

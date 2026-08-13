@@ -19,6 +19,7 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessProcessRunMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessProcessVersionMapper;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessNamingService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessFlowModelVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -211,6 +212,13 @@ public class BusinessProcessService {
         result.setBusinessProcessJson(schema);
         result.setValidation(validation);
         return result;
+    }
+
+    public List<BusinessProcessFlowModelVO> availableFlowModels(Long processId) {
+        Long tenantId = requireTenantId();
+        AiBusinessProcess process = requireProcess(tenantId, processId);
+        return validationContextResolver.resolveAvailableFlowModels(
+                tenantId, process.getApplicationId());
     }
 
     @Transactional(rollbackFor = Exception.class)

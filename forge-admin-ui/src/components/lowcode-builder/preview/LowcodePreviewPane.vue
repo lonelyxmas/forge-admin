@@ -161,6 +161,8 @@
               :data="sampleRows"
               :bordered="false"
               size="small"
+              class="lowcode-preview-table"
+              :style="{ '--lowcode-preview-row-gap': `${tableRowGap}px` }"
             />
           </div>
         </div>
@@ -220,6 +222,8 @@ import { useRouter } from 'vue-router'
 import { crudConfigRender } from '@/api/ai'
 import { lowcodePreview } from '@/api/lowcode-crud'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
+import { isImageFileName, resolveFileRenderItems } from '@/components/ai-form/file-render-utils'
+import AuthImage from '@/components/common/AuthImage.vue'
 import DictTag from '@/components/DictTag.vue'
 import {
   buildPageDesignModelSchema,
@@ -266,6 +270,7 @@ const formPreviewGridCols = computed(() => resolveFormPreviewGridCols())
 const formPreviewGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${formPreviewGridCols.value}, minmax(0, 1fr))`,
 }))
+const tableRowGap = computed(() => normalizeTableRowGap(tableZone.value?.props?.rowGap))
 const primaryModelCode = computed(() => pageSchema.value.primaryModelCode
   || pageSchema.value.modelRefs?.find(ref => ref.primary)?.modelCode
   || props.draft.modelSchema?.object?.code
@@ -295,13 +300,26 @@ const tableColumns = computed(() => visibleColumns.value.map(field => ({
   key: field.field,
   title: field.label || field.field,
   minWidth: field.width || 140,
+  align: resolveTableFieldAlign(field.field),
 })).concat({
   key: 'actions',
   title: '操作',
   width: Math.max(196, (3 + customRowActions.value.length) * 62),
   fixed: 'right',
+  align: resolveTableFieldAlign('actions'),
   render: row => renderDraftActions(row),
 }))
+
+function resolveTableFieldAlign(fieldName) {
+  const setting = tableZone.value?.props?.fieldSettings?.[fieldName] || {}
+  const align = setting.align || tableZone.value?.props?.globalAlign || 'left'
+  return ['left', 'center', 'right'].includes(align) ? align : 'left'
+}
+
+function normalizeTableRowGap(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? Math.max(0, Math.min(32, number)) : 8
+}
 
 const sampleRows = computed(() => {
   return Array.from({ length: 3 }).map((_, index) => {
@@ -624,16 +642,38 @@ function transformColumns(columns, transConfig) {
       }
       if (renderType === 'imageUpload') {
         nextCol.render = (row) => {
-          const value = row[key]
-          if (!value)
+          const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+          if (items.length === 0)
             return '-'
-          return h('span', { style: 'color: #2563eb' }, value)
+          return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, items.map(item => h(AuthImage, {
+            src: item.value,
+            alt: item.name,
+            title: item.name,
+            imgClass: 'lowcode-preview-file-image',
+            preview: true,
+            style: 'width: 32px; height: 32px;',
+            imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+          })))
         }
         return nextCol
       }
       if (renderType === 'fileUpload') {
-        const targetField = col.render.targetField || `${key}Name`
-        nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+        nextCol.render = (row) => {
+          const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+          if (items.length === 0)
+            return '-'
+          return h('div', { style: 'display: flex; gap: 6px; align-items: center; flex-wrap: wrap;' }, items.map(item => isImageFileName(item.name)
+            ? h(AuthImage, {
+                src: item.value,
+                alt: item.name,
+                title: item.name,
+                imgClass: 'lowcode-preview-file-image',
+                preview: true,
+                style: 'width: 32px; height: 32px;',
+                imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+              })
+            : h('span', { title: item.name }, item.name)))
+        }
         return nextCol
       }
     }
@@ -1118,6 +1158,10 @@ function normalizeNumberOption(value, fallback) {
   color: #475569;
   font-size: 12px;
   padding: 5px 8px;
+}
+
+.lowcode-preview-table :deep(.n-data-table-td) {
+  height: calc(38px + var(--lowcode-preview-row-gap, 8px));
 }
 
 @media (max-width: 1180px) {

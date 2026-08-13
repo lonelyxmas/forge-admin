@@ -6,7 +6,11 @@
 -->
 
 <template>
-  <div class="ai-table-wrapper" :class="`ai-table-density-${currentSize}`">
+  <div
+    class="ai-table-wrapper"
+    :class="`ai-table-density-${currentSize}`"
+    :style="{ '--ai-table-row-gap': `${normalizedTableRowGap}px` }"
+  >
     <!-- 工具栏 -->
     <div v-if="showToolbar" class="ai-table-toolbar">
       <div class="ai-table-toolbar-left">
@@ -232,6 +236,11 @@ const props = defineProps({
   size: {
     type: String,
     default: 'medium', // 'small' | 'medium' | 'large'
+  },
+  // 低代码列表配置的附加行高，0-32px。
+  tableRowGap: {
+    type: Number,
+    default: 0,
   },
   // 渲染模式
   renderMode: {
@@ -508,6 +517,10 @@ const rowKeyFn = computed(() => {
   }
   return row => row[props.rowKey]
 })
+const normalizedTableRowGap = computed(() => {
+  const value = Number(props.tableRowGap)
+  return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 0
+})
 
 /**
  * 转换列配置
@@ -552,7 +565,7 @@ const tableColumns = computed(() => {
       titleAlign: columnTitleAlign,
       fixed: resolvedFixed,
       className: mergeColumnClassName(
-        col.className,
+        mergeColumnClassName(col.className, `forge-table-align-${columnAlign}`),
         actionColumn && resolvedFixed === 'right' ? 'forge-table-action-column' : undefined,
       ),
       type: col.type,
@@ -577,13 +590,13 @@ const tableColumns = computed(() => {
     // 自定义渲染
     if (col.render) {
       column.render = (row, index) => {
-        return col.render(row, index, props.context)
+        return wrapTableCellContent(col.render(row, index, props.context), columnAlign)
       }
     }
     // 格式化函数
     else if (col.formatter) {
       column.render = (row, index) => {
-        return col.formatter(row, col, row[col.prop], index)
+        return wrapTableCellContent(col.formatter(row, col, row[col.prop], index), columnAlign)
       }
     }
     // 插槽
@@ -594,27 +607,27 @@ const tableColumns = computed(() => {
         const slotFn = slots[slotName]
         if (slotFn) {
           // 如果插槽存在，渲染插槽内容
-          return slotFn({
+          return wrapTableCellContent(slotFn({
             row,
             index,
             column: col,
             context: props.context,
-          })
+          }), columnAlign)
         }
         // 如果插槽不存在，显示占位文本
-        return h('div', {
+        return wrapTableCellContent(h('div', {
           class: 'table-slot-wrapper',
           style: {
             color: '#999',
             fontSize: '12px',
           },
-        }, `[插槽: ${slotName}]`)
+        }, `[插槽: ${slotName}]`), columnAlign)
       }
     }
     // 默认显示
     else {
       column.render = (row) => {
-        return row[col.prop] ?? '-'
+        return wrapTableCellContent(row[col.prop] ?? '-', columnAlign)
       }
     }
 
@@ -623,6 +636,26 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+function wrapTableCellContent(content, align) {
+  const normalizedAlign = ['left', 'center', 'right'].includes(align) ? align : 'left'
+  const justifyContent = {
+    left: 'flex-start',
+    center: 'center',
+    right: 'flex-end',
+  }[normalizedAlign]
+  return h('div', {
+    class: 'ai-table-cell-content',
+    style: {
+      display: 'flex',
+      width: '100%',
+      minWidth: 0,
+      alignItems: 'center',
+      justifyContent,
+      textAlign: normalizedAlign,
+    },
+  }, content)
+}
 
 const displayedDataSource = computed(() => {
   const columns = tableColumns.value.filter(column => column.type !== 'selection' && column.type !== 'expand')
@@ -1404,11 +1437,42 @@ defineExpose({
 
 /* 头部单元格样式 */
 :deep(.n-data-table-th) {
+  position: relative;
   background: var(--bg-secondary) !important;
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+/* 排序/筛选图标脱离文字流，避免挤占标题空间导致居中列表头文字偏左、与内容错位 */
+:deep(.n-data-table-th.forge-table-align-center .n-data-table-th__title) {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 72px);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+:deep(.n-data-table-th.forge-table-align-center .n-data-table-sorter) {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+:deep(.n-data-table-th.forge-table-align-center .n-data-table-filter) {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+}
+
+:deep(.n-data-table-th.forge-table-align-center.n-data-table-th--filterable .n-data-table-sorter) {
+  right: 32px;
 }
 
 .ai-table-density-small :deep(.n-data-table-th) {
@@ -1417,7 +1481,7 @@ defineExpose({
 }
 
 .ai-table-density-small :deep(.n-data-table-td) {
-  height: 38px;
+  height: calc(38px + var(--ai-table-row-gap, 0px));
   padding: 6px 10px;
 }
 
@@ -1427,7 +1491,7 @@ defineExpose({
 }
 
 .ai-table-density-medium :deep(.n-data-table-td) {
-  height: 44px;
+  height: calc(44px + var(--ai-table-row-gap, 0px));
   padding: 8px 12px;
 }
 
@@ -1437,7 +1501,7 @@ defineExpose({
 }
 
 .ai-table-density-large :deep(.n-data-table-td) {
-  height: 54px;
+  height: calc(54px + var(--ai-table-row-gap, 0px));
   padding: 12px 16px;
 }
 

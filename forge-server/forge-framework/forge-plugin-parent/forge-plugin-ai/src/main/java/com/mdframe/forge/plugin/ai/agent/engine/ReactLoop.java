@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.ai.agent.engine;
 
 import com.mdframe.forge.plugin.ai.agent.engine.event.AgentEventPublisher;
+import com.mdframe.forge.plugin.ai.agent.engine.hitl.InterruptStore;
 import com.mdframe.forge.plugin.ai.agent.engine.permission.PermissionDecision;
 import com.mdframe.forge.plugin.ai.agent.engine.permission.PermissionEngine;
 import com.mdframe.forge.plugin.ai.agent.engine.tool.AgentTool;
@@ -44,6 +45,7 @@ public class ReactLoop {
     private final AgentToolRegistry toolRegistry;
     private final PermissionEngine permissionEngine;
     private final AgentEventPublisher eventPublisher;
+    private final InterruptStore interruptStore;
 
     /**
      * 执行 ReAct 循环
@@ -162,12 +164,20 @@ public class ReactLoop {
                 }
 
                 if (decision == PermissionDecision.ASK) {
+                    // 真正中断：保存上下文到 Redis，等待用户确认/拒绝后 resume 恢复
+                    String interruptId = interruptStore.save(ctx);
                     AgentEvent confirm = AgentEvent.of(ctx.getSessionId(), turn, AgentEventType.REQUIRE_USER_CONFIRM,
-                            "{\"tool\":\"" + toolName + "\",\"args\":" + toolArgs + "}");
+                            "{\"interruptId\":\"" + interruptId + "\",\"tool\":\"" + toolName + "\",\"args\":" + toolArgs + "}");
                     eventPublisher.publish(confirm);
                     sink.tryEmitNext(confirm);
-                    // 中断-恢复式：此处暂不实现中断，标记为需确认后继续
-                    // 实际中断由 AgentEngineService.resume 处理
+                    log.info("[ReactLoop] HITL 中断等待确认: interruptId={}, tool={}, sessionId={}",
+                            interruptId, toolName, ctx.getSessionId());
+                    // 中断后终止当前循环，等待 resume 恢复
+                    AgentEvent interrupted = AgentEvent.of(ctx.getSessionId(), turn, AgentEventType.AGENT_END,
+                            "{\"interrupted\":true,\"interruptId\":\"" + interruptId + "\"}");
+                    eventPublisher.publish(interrupted);
+                    sink.tryEmitNext(interrupted);
+                    return;
                 }
 
                 // 执行工具

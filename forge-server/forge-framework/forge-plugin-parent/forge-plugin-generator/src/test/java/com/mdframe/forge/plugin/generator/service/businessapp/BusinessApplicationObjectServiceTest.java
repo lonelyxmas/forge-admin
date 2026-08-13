@@ -43,7 +43,7 @@ class BusinessApplicationObjectServiceTest {
 
         List<BusinessApplicationObjectVO> objects = service.list(10L);
 
-        assertEquals("UNKNOWN", objects.get(0).getSyncStatus());
+        assertEquals("IN_SYNC", objects.get(0).getSyncStatus());
     }
 
     @Test

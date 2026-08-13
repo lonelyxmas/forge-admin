@@ -9,11 +9,11 @@ import {
 import { businessApplicationObjects } from '@/api/business-application'
 import {
   businessProcessDesigner,
+  businessProcessFlowModels,
   businessProcessPage,
   saveBusinessProcessSchema,
   validateBusinessProcess,
 } from '@/api/business-process'
-import flowApi from '@/api/flow'
 import messageApi from '@/api/message'
 import { businessProcessHashInput } from '@/components/business-process-designer/business-process-schema.js'
 import BusinessProcessDesigner from '@/components/business-process-designer/BusinessProcessDesigner.vue'
@@ -97,7 +97,7 @@ async function loadCatalogs() {
       applicationId ? businessApplicationObjects(applicationId) : Promise.resolve({ data: [] }),
       objectId ? businessObjectFields(objectId) : Promise.resolve({ data: [] }),
       objectId ? businessObjectActions(objectId) : Promise.resolve({ data: [] }),
-      flowApi.getModelList({ status: 1 }),
+      businessProcessFlowModels(processId.value),
       objectCode
         ? businessFlowFormAssets(objectCode, { includeInternal: true })
         : Promise.resolve({ data: { formAssets: [] } }),
@@ -138,7 +138,7 @@ async function loadCatalogs() {
 async function refreshFlowCatalog() {
   const objectCode = process.value?.subjectObjectCode || ''
   const [modelsResult, assetsResult] = await Promise.allSettled([
-    flowApi.getModelList({ status: 1 }),
+    businessProcessFlowModels(processId.value),
     objectCode
       ? businessFlowFormAssets(objectCode, { includeInternal: true })
       : Promise.resolve({ data: { formAssets: [] } }),

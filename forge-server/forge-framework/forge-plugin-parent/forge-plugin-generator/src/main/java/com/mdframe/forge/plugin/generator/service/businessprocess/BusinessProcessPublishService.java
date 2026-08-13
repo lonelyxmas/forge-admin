@@ -289,7 +289,14 @@ public class BusinessProcessPublishService {
             throw new BusinessException("Flowable 服务不可用，不能固定审批模型版本");
         }
         for (String modelKey : safeList(schema.getDependencies().getFlowModels())) {
-            FlowResult<Map<String, Object>> response = flowClient.getModelByKey(modelKey);
+            FlowResult<Map<String, Object>> response;
+            try {
+                response = flowClient.getModelByKey(modelKey);
+            } catch (RuntimeException exception) {
+                throw new BusinessException(
+                        "无法读取审批模型发布状态，请确认 Flow 服务可用后重试: " + modelKey,
+                        exception);
+            }
             Map<String, Object> model = response == null ? null : response.getData();
             Integer modelVersion = model == null ? null : integerValue(model.get("version"));
             if (response == null || !response.isSuccess() || model == null

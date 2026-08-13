@@ -173,6 +173,7 @@
           :striped="striped"
           :bordered="bordered"
           :size="tableSize"
+          :table-row-gap="tableRowGap"
           :render-mode="activeRenderMode"
           :card-props="cardProps"
           :show-render-mode-switch="showRenderModeSwitch"
@@ -738,6 +739,7 @@ import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
 import { normalizeExpandConfig, shouldExpandRow } from './expand-utils'
 import { isNumberFieldType } from './field-type-utils'
+import { isImageFileName, resolveFileRenderItems } from './file-render-utils'
 
 /**
  * ==================== Props 定义 ====================
@@ -2192,25 +2194,39 @@ function resolveColumnRender(col) {
   }
   else if (renderType === 'imageUpload') {
     nextCol.render = (row) => {
-      const value = row[key]
-      if (!value)
+      const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+      if (items.length === 0)
         return '-'
-      const fileIds = String(value).split(',').filter(Boolean)
-      if (fileIds.length === 0)
-        return '-'
-      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
+      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, items.map(item => h(AuthImage, {
+        src: item.value,
+        alt: item.name,
+        title: item.name,
+        imgClass: 'ai-crud-file-image',
+        preview: true,
+        style: 'width: 32px; height: 32px;',
+        imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+      })))
     }
   }
   else if (renderType === 'fileUpload') {
     nextCol.render = (row) => {
-      const value = row[key]
-      if (!value)
+      const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+      if (items.length === 0)
         return '-'
-      const nameField = col.render.targetField || `${key}Name`
-      const name = row[nameField]
-      if (name)
-        return name
-      return `${String(value).split(',').filter(Boolean).length} 个文件`
+      return h('div', { style: 'display: flex; gap: 6px; align-items: center; flex-wrap: wrap;' }, items.map((item) => {
+        if (isImageFileName(item.name)) {
+          return h(AuthImage, {
+            src: item.value,
+            alt: item.name,
+            title: item.name,
+            imgClass: 'ai-crud-file-image',
+            preview: true,
+            style: 'width: 32px; height: 32px;',
+            imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+          })
+        }
+        return h('span', { title: item.name }, item.name)
+      }))
     }
   }
   return nextCol

@@ -251,14 +251,18 @@ public class BusinessObjectPublishService {
 
     @Transactional(rollbackFor = Exception.class)
     public void rollback(Long objectId, Long versionId) {
-        rollbackForApplication(objectId, versionId);
+        rollbackInternal(objectId, versionId, true);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public Long rollbackForApplication(Long objectId, Long versionId) {
+        return rollbackInternal(objectId, versionId, false);
+    }
+
+    private Long rollbackInternal(Long objectId, Long versionId, boolean syncMenu) {
         BusinessObjectDesignVersionVO version = designVersionService.detail(objectId, versionId);
         if (version.getConfigId() != null && version.getCrudConfigVersionId() != null) {
-            lowcodePublishService.rollback(version.getConfigId(), version.getCrudConfigVersionId());
+            lowcodePublishService.rollback(version.getConfigId(), version.getCrudConfigVersionId(), syncMenu);
         }
         designerService.rollbackDesignVersion(objectId, versionId);
         BusinessObjectDesignerService.DesignerContext context = designerService.loadContext(objectId);
@@ -298,6 +302,7 @@ public class BusinessObjectPublishService {
         publishDTO.setConfirmOnlineDdl(syncTable);
         publishDTO.setMenuName(context.getObject().getObjectName());
         publishDTO.setMenuSort(context.getConfig() == null ? context.getObject().getSortOrder() : context.getConfig().getMenuSort());
+        publishDTO.setSyncMenu(dto == null ? null : dto.getSyncMenu());
         publishDTO.setBusinessSuiteCode(context.getObject().getSuiteCode());
         publishDTO.setBusinessObjectCode(context.getObject().getObjectCode());
         publishDTO.setBusinessObjectName(context.getObject().getObjectName());

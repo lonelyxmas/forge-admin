@@ -131,6 +131,9 @@
       <n-alert v-if="selectedRun?.errorSummary" type="error" :bordered="false" title="最近失败原因">
         {{ selectedRun.errorSummary }}
       </n-alert>
+      <div v-if="selectedRun?.errorCode" class="step-error-code">
+        错误码：{{ selectedRun.errorCode }}
+      </div>
     </n-modal>
   </div>
 </template>
@@ -354,10 +357,15 @@ function handleRunResult(result) {
     return
   }
   if (result?.recoverable) {
-    window.$message.warning(result.message || '发布部分完成，请处理失败项后恢复')
+    window.$message.warning(resolveRunFailureMessage(result, '发布部分完成，请处理失败项后恢复'))
     return
   }
-  window.$message.error(result?.message || '应用发布未完成')
+  window.$message.error(resolveRunFailureMessage(result, '应用发布未完成'))
+}
+
+function resolveRunFailureMessage(result = {}, fallback) {
+  const message = result.message || fallback
+  return result.errorCode ? `${message}（错误码：${result.errorCode}）` : message
 }
 
 function openVersion(version) {
@@ -379,6 +387,7 @@ function stepLabel(step) {
   return {
     PRECHECK: '发布预检查',
     SNAPSHOT: '准备快照',
+    PROCESSES: '发布业务流程',
     OBJECTS: '发布业务对象',
     ENTRIES: '切换页面入口',
     PAGE_MENUS: '同步应用页面菜单',
@@ -680,6 +689,13 @@ function stepLabel(step) {
 
 .step-copy small {
   color: var(--text-tertiary, #86909c);
+}
+
+.step-error-code {
+  margin-top: 8px;
+  color: var(--text-tertiary, #86909c);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
 }
 
 @media (max-width: 900px) {

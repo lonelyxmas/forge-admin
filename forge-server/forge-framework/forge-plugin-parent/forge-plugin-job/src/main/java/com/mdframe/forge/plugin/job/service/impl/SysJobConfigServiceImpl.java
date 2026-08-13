@@ -139,6 +139,17 @@ public class SysJobConfigServiceImpl extends ServiceImpl<SysJobConfigMapper, Sys
             throw new BusinessException("重新同步失败，请检查调度服务状态后再试", exception);
         }
     }
+
+    @Override
+    public void rebuild(Long id) {
+        SysJobConfig jobConfig = requireConfig(id);
+        managementSecurityService.assertCanManageProtectedTask(jobConfig);
+        try {
+            scheduleCoordinator.rebuild(id);
+        } catch (JobScheduleException exception) {
+            throw new BusinessException("定时任务重建失败，请检查调度服务状态后再试", exception);
+        }
+    }
     
     @Override
     public void updateCron(Long id, String cronExpression) {

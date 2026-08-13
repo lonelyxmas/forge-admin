@@ -308,9 +308,11 @@
                             v-for="item in group.items"
                             :key="item.blockType"
                             type="button"
-                            :draggable="editing"
+                            :draggable="false"
+                            @pointerdown.stop="startCatalogPointerDrag($event, item)"
                             @dragstart="handleComponentCatalogDragStart($event, item)"
-                            @click="insertComponent(item)"
+                            @dragend="handleComponentCatalogDragEnd"
+                            @click="handleComponentCatalogClick(item, $event)"
                           >
                             <span class="component-icon-slot" :class="`kind-${group.key}`" aria-hidden="true">
                               <img v-if="resolveComponentIcon(item)" :src="resolveComponentIcon(item)" alt="">
@@ -344,8 +346,9 @@
                   :fallback-tolerance="2"
                   ghost-class="page-block-ghost"
                   chosen-class="page-block-chosen"
-                  @dragover.prevent
-                  @drop="handlePageDrop"
+                  @dragenter="handlePageFlowDragOver"
+                  @dragover="handlePageFlowDragOver"
+                  @drop="handlePageFlowDrop"
                   @update:model-value="updatePageBlocks"
                 >
                   <template #item="{ element: block }">
@@ -427,11 +430,18 @@
                         :block="resolvePagePreviewBlock(block)"
                         :fields="resolvePageBlockFields(block)"
                         :runtime-crud-props="resolvePageBlockRuntimeCrudProps(block)"
+                        :runtime-crud-loading="isPageBlockRuntimeCrudLoading(block)"
                         :selected="false"
+                        :selected-block-id="selectedPageBlockId"
                         :inline-text-editing="editing"
-                        readonly
+                        :readonly="!editing"
+                        :catalog-drag-block-type="catalogDragBlockType"
                         @block-activate="selectPageBlock"
                         @inline-text-update="handleInlineTextUpdate"
+                        @child-block-select="handleNestedPageBlockSelect"
+                        @child-block-menu-select="handleNestedPageBlockMenuSelect"
+                        @child-block-resize-start="handleNestedPageBlockResizeStart"
+                        @tab-drop="handlePageFlowTabDrop"
                       />
                     </section>
                   </template>
@@ -452,6 +462,7 @@
                     :block="resolvePagePreviewBlock(dragPreviewBlock)"
                     :fields="resolvePageBlockFields(dragPreviewBlock)"
                     :runtime-crud-props="resolvePageBlockRuntimeCrudProps(dragPreviewBlock)"
+                    :runtime-crud-loading="isPageBlockRuntimeCrudLoading(dragPreviewBlock)"
                     :selected="false"
                     readonly
                   />
@@ -782,7 +793,7 @@
 <script setup>
 import { AddOutline, AppsOutline, ArrowBackOutline, ArrowDownOutline, ArrowRedoOutline, ArrowUndoOutline, ArrowUpOutline, BarChartOutline, ColorFillOutline, CopyOutline, CreateOutline, CubeOutline, DocumentTextOutline, DuplicateOutline, EllipsisHorizontalOutline, ExpandOutline, EyeOutline, FolderOpenOutline, FunnelOutline, GitBranchOutline, InformationCircleOutline, ListOutline, MoveOutline, ReaderOutline, RemoveOutline, ResizeOutline, RocketOutline, SaveOutline, SettingsOutline, SquareOutline, StatsChartOutline, SwapHorizontalOutline, TextOutline, TrashOutline } from '@vicons/ionicons5'
 import { NIcon, useMessage } from 'naive-ui'
-import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { crudConfigRender } from '@/api/ai'
@@ -801,6 +812,7 @@ import DesignerAsyncLoader from '@/views/app-center/components/designer/Designer
 import ForgeFormDesigner from '@/views/app-center/components/designer/forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets, createFieldFromComponent } from '@/views/app-center/components/designer/form-first/autoFieldRegistry'
 import { createDefaultFormDesignerSchema, isFieldComponent, normalizeFormDesignerSchema } from '@/views/app-center/components/designer/form-first/formDesignerSchema'
+import { createApplicationRuntimeLoadCoordinator, resolveApplicationRuntimeLoadKey } from './application-runtime-load'
 import {
   createInAppFormAsset,
   createNavigationNode,
@@ -912,9 +924,13 @@ const configPanelVisible = ref(false)
 const inspectorTab = ref('properties')
 const componentButtonPosition = ref({ x: null, y: null })
 const componentButtonMoveCtx = ref(null)
+const catalogDragBlockType = ref('')
+const suppressCatalogClick = ref(false)
+const activePageFlowTabTarget = ref(null)
+let catalogPointerDragCtx = null
 const runtimeCrudPropsByObjectId = ref({})
-const runtimeCrudLoadingObjectIds = new Set()
-const runtimeCrudUnavailableObjectIds = new Set()
+const runtimeCrudLoadingObjectIds = reactive(new Set())
+const runtimeCrudUnavailableObjectIds = reactive(new Set())
 const formDesignerMode = ref(false)
 const activeFormAssetId = ref('')
 const sidebarCollapsed = ref(false)
@@ -928,6 +944,7 @@ const formAssetSelectorKeyword = ref('')
 const formDataProvisioningByAssetId = ref({})
 const objectSetupVisible = ref(false)
 const publishDrawerVisible = ref(false)
+const applicationRuntimeLoadCoordinator = createApplicationRuntimeLoadCoordinator(load)
 
 const componentPickerGroupOptions = [
   { key: 'list', label: '列表' },
@@ -996,7 +1013,7 @@ const componentButtonStyle = computed(() => ({
     ? { top: `${componentButtonPosition.value.y}px` }
     : { bottom: '20px' }),
 }))
-const selectedPageBlock = computed(() => pageBlocks.value.find(item => item.id === selectedPageBlockId.value) || null)
+const selectedPageBlock = computed(() => findPageBlockInTree(pageBlocks.value, selectedPageBlockId.value))
 const formAssets = computed(() => builder.value?.formAssets || [])
 const filteredFormAssets = computed(() => {
   const keyword = formAssetSelectorKeyword.value.trim().toLowerCase()
@@ -1124,7 +1141,7 @@ watch([
   () => route.query.draft,
 ], ([, edit]) => {
   editing.value = edit === '1'
-  load()
+  applicationRuntimeLoadCoordinator.run(resolveApplicationRuntimeLoadKey(route))
 }, { immediate: true })
 watch(() => route.query.pageId, (pageId) => {
   if (!builder.value)
@@ -1897,6 +1914,18 @@ function resolvePageBlockRuntimeCrudProps(block = {}) {
   return runtimeCrudPropsByObjectId.value[cacheKey] || null
 }
 
+function isPageBlockRuntimeCrudLoading(block = {}) {
+  if (block.blockType !== 'AiCrudPage')
+    return false
+  const objectRef = resolvePageBlockObjectRef(block)
+  const cacheKey = resolveRuntimeObjectCacheKey(objectRef)
+  if (!cacheKey)
+    return false
+  if (!runtimeCrudPropsByObjectId.value[cacheKey] && !runtimeCrudUnavailableObjectIds.has(cacheKey))
+    preloadPageBlockCrudRuntimeProps(block)
+  return runtimeCrudLoadingObjectIds.has(cacheKey)
+}
+
 function preloadCurrentPageCrudRuntimeProps() {
   pageBlocks.value
     .filter(block => block.blockType === 'AiCrudPage')
@@ -1904,6 +1933,8 @@ function preloadCurrentPageCrudRuntimeProps() {
 }
 
 function preloadPageBlockCrudRuntimeProps(block = {}) {
+  if (block.blockType !== 'AiCrudPage')
+    return
   const objectRef = resolvePageBlockObjectRef(block)
   const cacheKey = resolveRuntimeObjectCacheKey(objectRef)
   const objectId = objectRef?.objectId ?? objectRef?.id
@@ -1992,7 +2023,7 @@ function updateSelectedBlockFormAsset(formAssetId) {
     return
   const asset = formAssets.value.find(item => item.id === formAssetId)
   const fieldRefs = asset ? resolveFormAssetFields(asset).map(field => field.fieldCode) : []
-  updatePageBlocks(pageBlocks.value.map(item => item.id === selectedPageBlock.value.id
+  updatePageBlocks(mapPageBlocksInTree(pageBlocks.value, item => item.id === selectedPageBlock.value.id
     ? {
         ...item,
         fieldRefs: fieldRefs.length ? fieldRefs : item.fieldRefs,
@@ -2051,7 +2082,7 @@ function updateSelectedPageBlockRuntimeObject(objectId) {
   // 数据源切换不影响坐标和尺寸，直接更新布局，避免触发根页面碰撞重算。
   updateCurrentGridLayout({
     ...currentGridLayout.value,
-    items: pageBlocks.value.map(block => block.id === nextBlock.id ? nextBlock : block),
+    items: mapPageBlocksInTree(pageBlocks.value, block => block.id === nextBlock.id ? nextBlock : block),
   })
   runtimeCrudUnavailableObjectIds.delete(resolveRuntimeObjectCacheKey(object))
   preloadPageBlockCrudRuntimeProps(nextBlock)
@@ -2315,6 +2346,13 @@ function selectPageBlock(blockId) {
   inspectorTab.value = 'properties'
 }
 
+function handleNestedPageBlockSelect(blockId) {
+  const block = findPageBlockInTree(pageBlocks.value, blockId)
+  if (!block)
+    return
+  openPageBlockConfiguration(block)
+}
+
 function handleInlineTextUpdate({ blockId, patch }) {
   if (!blockId || !patch)
     return
@@ -2341,14 +2379,343 @@ function resolvePagePreviewBlock(block) {
 }
 
 function handleComponentCatalogDragStart(event, component) {
+  if (!editing.value || !component?.blockType)
+    return
+  catalogDragBlockType.value = component.blockType
+  suppressCatalogClick.value = true
   event.dataTransfer.effectAllowed = 'copy'
   event.dataTransfer.setData('application/x-forge-app-page-block', component.blockType)
+  // 兼容列表设计器的原生拖拽协议，确保从同一套左侧组件面板拖入运行时 Tabs 时可命中。
+  event.dataTransfer.setData('application/x-list-block', component.blockType)
+  // 使用表单设计器相同的布局拖拽协议，避免 Popover/浏览器清理自定义页面协议。
+  event.dataTransfer.setData('application/x-forge-form-layout', JSON.stringify({
+    componentKey: component.blockType,
+    label: component.title || component.label || component.blockType,
+  }))
 }
 
-function handlePageDrop(event) {
-  const blockType = event.dataTransfer.getData('application/x-forge-app-page-block')
-  if (blockType)
+function startCatalogPointerDrag(event, component) {
+  if (!editing.value || !component?.blockType)
+    return
+  catalogDragBlockType.value = component.blockType
+  suppressCatalogClick.value = false
+  catalogPointerDragCtx = {
+    blockType: component.blockType,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+  }
+  window.addEventListener('pointermove', handleCatalogPointerMove, { passive: false })
+  window.addEventListener('pointerup', finishCatalogPointerDrag, { once: true })
+  window.addEventListener('pointercancel', finishCatalogPointerDrag, { once: true })
+}
+
+function handleCatalogPointerMove(event) {
+  if (!catalogPointerDragCtx)
+    return
+  const ctx = catalogPointerDragCtx
+  if (!ctx.moved && Math.hypot(event.clientX - ctx.startX, event.clientY - ctx.startY) < 6)
+    return
+  ctx.moved = true
+  suppressCatalogClick.value = true
+  event.preventDefault()
+  activePageFlowTabTarget.value = resolvePageFlowTabTargetFromPoint(event)
+}
+
+function finishCatalogPointerDrag(event) {
+  const ctx = catalogPointerDragCtx
+  catalogPointerDragCtx = null
+  window.removeEventListener('pointermove', handleCatalogPointerMove)
+  window.removeEventListener('pointercancel', finishCatalogPointerDrag)
+  if (!ctx?.moved) {
+    catalogDragBlockType.value = ''
+    return
+  }
+  const blockType = ctx.blockType
+  const tabTarget = activePageFlowTabTarget.value || resolvePageFlowTabTargetFromPoint(event)
+  activePageFlowTabTarget.value = null
+  if (tabTarget)
+    appendPageBlockToTab(blockType, tabTarget.blockId, tabTarget.tabKey)
+  else
     appendPageBlock(blockType)
+  catalogDragBlockType.value = ''
+}
+
+function handleComponentCatalogDragEnd() {
+  // drop 事件在部分浏览器中晚于 dragend 到达，延迟清理拖拽类型。
+  window.setTimeout(() => {
+    if (catalogPointerDragCtx)
+      return
+    catalogDragBlockType.value = ''
+    suppressCatalogClick.value = false
+  }, 250)
+}
+
+function handleComponentCatalogClick(component, event) {
+  if (suppressCatalogClick.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    suppressCatalogClick.value = false
+    return
+  }
+  insertComponent(component)
+}
+
+function isPageCatalogDrag(event) {
+  return Boolean(catalogDragBlockType.value)
+    || Array.from(event.dataTransfer?.types || []).some(type => [
+      'application/x-forge-app-page-block',
+      'application/x-list-block',
+      'application/x-forge-form-layout',
+    ].includes(type))
+}
+
+function resolvePageFlowTabTarget(event) {
+  const pointTarget = Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
+    ? document.elementFromPoint(event.clientX, event.clientY)
+    : null
+  const target = pointTarget?.closest?.('[data-grid-container-id][data-grid-tab-key]')
+    || event.target?.closest?.('[data-grid-container-id][data-grid-tab-key]')
+  if (!target || !event.currentTarget?.contains?.(target))
+    return null
+  const rect = target.getBoundingClientRect?.()
+  const style = window.getComputedStyle?.(target)
+  if (!rect || rect.width <= 0 || rect.height <= 0 || style?.display === 'none' || style?.visibility === 'hidden')
+    return null
+  const blockId = String(target.dataset.gridContainerId || '')
+  const tabKey = String(target.dataset.gridTabKey || '')
+  return blockId && tabKey ? { blockId, tabKey } : null
+}
+
+function resolvePageFlowTabTargetFromPoint(event) {
+  if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY))
+    return null
+  const pointTarget = document.elementFromPoint(event.clientX, event.clientY)
+  const target = pointTarget?.closest?.('[data-grid-container-id][data-grid-tab-key]')
+  if (!target)
+    return null
+  const rect = target.getBoundingClientRect?.()
+  if (!rect || rect.width <= 0 || rect.height <= 0)
+    return null
+  const blockId = String(target.dataset.gridContainerId || '')
+  const tabKey = String(target.dataset.gridTabKey || '')
+  return blockId && tabKey ? { blockId, tabKey } : null
+}
+
+function handlePageFlowDragOver(event) {
+  if (!isPageCatalogDrag(event))
+    return
+  event.preventDefault()
+  activePageFlowTabTarget.value = resolvePageFlowTabTargetFromPoint(event) || resolvePageFlowTabTarget(event)
+  event.dataTransfer.dropEffect = 'copy'
+}
+
+function handlePageFlowDrop(event) {
+  const blockType = event.dataTransfer?.getData('application/x-forge-app-page-block')
+    || event.dataTransfer?.getData('application/x-list-block')
+    || resolveFormLayoutBlockType(event)
+    || catalogDragBlockType.value
+  if (!blockType)
+    return
+  const tabTarget = activePageFlowTabTarget.value || resolvePageFlowTabTargetFromPoint(event) || resolvePageFlowTabTarget(event)
+  if (tabTarget) {
+    event.preventDefault()
+    event.stopPropagation()
+    appendPageBlockToTab(blockType, tabTarget.blockId, tabTarget.tabKey)
+    catalogDragBlockType.value = ''
+    activePageFlowTabTarget.value = null
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  appendPageBlock(blockType)
+  catalogDragBlockType.value = ''
+  activePageFlowTabTarget.value = null
+}
+
+function resolveFormLayoutBlockType(event) {
+  const raw = event.dataTransfer?.getData('application/x-forge-form-layout')
+  if (!raw)
+    return ''
+  try {
+    return String(JSON.parse(raw)?.componentKey || '').trim()
+  }
+  catch {
+    return ''
+  }
+}
+
+function handlePageFlowTabDrop(payload = {}) {
+  if (!editing.value)
+    return
+  const blockType = String(payload.blockType || '').trim()
+  const blockId = String(payload.blockId || '').trim()
+  const tabKey = String(payload.tabKey || '').trim()
+  if (!blockType || !blockId || !tabKey)
+    return
+  appendPageBlockToTab(blockType, blockId, tabKey)
+  catalogDragBlockType.value = ''
+}
+
+function findPageBlockInTree(items = [], blockId = '') {
+  for (const block of items || []) {
+    if (block?.id === blockId)
+      return block
+    const nested = findPageBlockInTree(resolvePageBlockChildren(block), blockId)
+    if (nested)
+      return nested
+  }
+  return null
+}
+
+function resolvePageBlockChildren(block = {}) {
+  const children = Array.isArray(block.children) ? block.children : []
+  const tabChildren = (block.props?.tabs || []).flatMap(tab => Array.isArray(tab.children) ? tab.children : [])
+  const cellChildren = (block.props?.cells || []).flatMap(cell => Array.isArray(cell.children) ? cell.children : [])
+  return [...children, ...tabChildren, ...cellChildren]
+}
+
+function mapPageBlocksInTree(items = [], mapper) {
+  return (items || []).map((block) => {
+    let next = block
+    if (Array.isArray(next.children) && next.children.length) {
+      next = {
+        ...next,
+        children: mapPageBlocksInTree(next.children, mapper),
+      }
+    }
+    if (Array.isArray(next.props?.tabs) && next.props.tabs.length) {
+      next = {
+        ...next,
+        props: {
+          ...(next.props || {}),
+          tabs: next.props.tabs.map(tab => ({
+            ...tab,
+            children: mapPageBlocksInTree(tab.children || [], mapper),
+          })),
+        },
+      }
+    }
+    if (Array.isArray(next.props?.cells) && next.props.cells.length) {
+      next = {
+        ...next,
+        props: {
+          ...(next.props || {}),
+          cells: next.props.cells.map(cell => ({
+            ...cell,
+            children: mapPageBlocksInTree(cell.children || [], mapper),
+          })),
+        },
+      }
+    }
+    return mapper(next)
+  })
+}
+
+function removePageBlockFromTree(items = [], blockId = '') {
+  return (items || [])
+    .filter(block => block?.id !== blockId)
+    .map((block) => {
+      let next = block
+      if (Array.isArray(next.children)) {
+        next = {
+          ...next,
+          children: removePageBlockFromTree(next.children, blockId),
+        }
+      }
+      if (Array.isArray(next.props?.tabs)) {
+        next = {
+          ...next,
+          props: {
+            ...(next.props || {}),
+            tabs: next.props.tabs.map(tab => ({
+              ...tab,
+              children: removePageBlockFromTree(tab.children || [], blockId),
+            })),
+          },
+        }
+      }
+      if (Array.isArray(next.props?.cells)) {
+        next = {
+          ...next,
+          props: {
+            ...(next.props || {}),
+            cells: next.props.cells.map(cell => ({
+              ...cell,
+              children: removePageBlockFromTree(cell.children || [], blockId),
+            })),
+          },
+        }
+      }
+      return next
+    })
+}
+
+function handleNestedPageBlockMenuSelect(payload = {}) {
+  const blockId = String(payload.block?.id || '').trim()
+  if (!blockId)
+    return
+  if (payload.key === 'delete') {
+    updatePageBlocks(removePageBlockFromTree(pageBlocks.value, blockId))
+    if (selectedPageBlockId.value === blockId)
+      selectedPageBlockId.value = ''
+    return
+  }
+  if (payload.key === 'duplicate') {
+    const source = findPageBlockInTree(pageBlocks.value, blockId)
+    if (!source)
+      return
+    const copy = JSON.parse(JSON.stringify(source))
+    copy.id = `${source.blockType}_${Date.now()}`
+    updatePageBlocks(mapPageBlocksInTree(pageBlocks.value, (block) => {
+      if (!Array.isArray(block.props?.tabs))
+        return block
+      return {
+        ...block,
+        props: {
+          ...(block.props || {}),
+          tabs: block.props.tabs.map((tab) => {
+            const index = (tab.children || []).findIndex(child => child.id === blockId)
+            if (index < 0)
+              return tab
+            const children = [...tab.children]
+            children.splice(index + 1, 0, copy)
+            return { ...tab, children }
+          }),
+        },
+      }
+    }))
+    selectedPageBlockId.value = copy.id
+  }
+}
+
+function appendPageBlockToTab(blockType, containerId, tabKey) {
+  const meta = resolveListPageBlockMeta(blockType)
+  const container = findPageBlockInTree(pageBlocks.value, containerId)
+  if (!meta || container?.blockType !== 'tabs')
+    return
+  const tabs = Array.isArray(container.props?.tabs) && container.props.tabs.length
+    ? container.props.tabs
+    : [{ key: 'tab1', title: '标签一', children: [] }]
+  if (!tabs.some(tab => tab.key === tabKey))
+    return
+  let block = createGridBlock(blockType, applicationGridModelSchema.value, {
+    gridX: 0,
+    gridY: (tabs.find(tab => tab.key === tabKey)?.children || []).length * 2,
+  })
+  if (!block)
+    return
+  block = attachDefaultRuntimeObject(block)
+  block = attachSingleFormAsset(block)
+  block = normalizePageBlockForContainer(block)
+  const nextTabs = tabs.map(tab => tab.key === tabKey
+    ? { ...tab, children: [...(tab.children || []), block] }
+    : tab)
+  updatePageBlocks(mapPageBlocksInTree(pageBlocks.value, item => item.id === containerId
+    ? { ...item, props: { ...(item.props || {}), tabs: nextTabs } }
+    : item))
+  selectedPageBlockId.value = containerId
+  preloadPageBlockCrudRuntimeProps(block)
 }
 
 function resolvePageBlockMoreOptions(block = {}) {
@@ -2610,7 +2977,7 @@ function updateSelectedBlockAppearance(patch = {}) {
     return
   const borderColorMode = patch.borderColor || itemBorderColorMode(selectedPageBlock.value)
   const normalizeBorderColor = borderColorMode === 'theme' ? 'var(--primary-color, #3370ff)' : borderColorMode
-  updatePageBlocks(pageBlocks.value.map(item => item.id === selectedPageBlock.value.id
+  updatePageBlocks(mapPageBlocksInTree(pageBlocks.value, item => item.id === selectedPageBlock.value.id
     ? {
         ...item,
         props: {
@@ -2633,6 +3000,72 @@ function itemBorderColorMode(block = {}) {
 }
 
 let pageBlockResizeCtx = null
+let nestedPageBlockResizeCtx = null
+
+function handleNestedPageBlockResizeStart(payload = {}) {
+  const block = payload.block
+  const event = payload.event
+  if (!block?.id || !event || event.button !== 0)
+    return
+  const node = event.currentTarget?.closest?.('[data-grid-child-id]')
+  const rect = node?.getBoundingClientRect?.()
+  if (!rect)
+    return
+  event.preventDefault()
+  handleNestedPageBlockSelect(block.id)
+  nestedPageBlockResizeCtx = {
+    blockId: block.id,
+    anchor: payload.anchor || 'bottom-right',
+    startX: event.clientX,
+    startY: event.clientY,
+    originWidth: rect.width,
+    originHeight: rect.height,
+  }
+  window.addEventListener('pointermove', resizeNestedPageBlock)
+  window.addEventListener('pointerup', endNestedPageBlockResize)
+}
+
+function resizeNestedPageBlock(event) {
+  const ctx = nestedPageBlockResizeCtx
+  if (!ctx)
+    return
+  const dx = event.clientX - ctx.startX
+  const dy = event.clientY - ctx.startY
+  let width = ctx.originWidth
+  let height = ctx.originHeight
+  if (ctx.anchor.includes('right'))
+    width += dx
+  if (ctx.anchor.includes('left'))
+    width -= dx
+  if (ctx.anchor.includes('bottom'))
+    height += dy
+  if (ctx.anchor.includes('top'))
+    height -= dy
+  const nextWidth = Math.max(120, Math.round(width))
+  const nextHeight = Math.max(56, Math.round(height))
+  updatePageBlocks(mapPageBlocksInTree(pageBlocks.value, block => block.id === ctx.blockId
+    ? {
+        ...block,
+        props: {
+          ...(block.props || {}),
+          style: {
+            ...(block.props?.style || {}),
+            widthMode: 'fixed',
+            width: `${nextWidth}px`,
+            heightMode: 'fixed',
+            height: `${nextHeight}px`,
+          },
+        },
+      }
+    : block))
+}
+
+function endNestedPageBlockResize() {
+  nestedPageBlockResizeCtx = null
+  window.removeEventListener('pointermove', resizeNestedPageBlock)
+  window.removeEventListener('pointerup', endNestedPageBlockResize)
+}
+
 function startPageBlockResize(block, event, anchor = 'bottom-right') {
   if (event.button !== 0)
     return
@@ -2775,6 +3208,12 @@ function applyPageBlockMove(event) {
   const pageFlowX = Math.round(Math.max(0, Math.min(ctx.maxX, ctx.originX + event.clientX - ctx.startX)))
   const pageFlowY = Math.round(Math.max(0, ctx.originY + event.clientY - ctx.startY))
   dragPreview.value = { ...dragPreview.value, x: pageFlowX, y: pageFlowY }
+  ctx.activeTabTarget = resolvePageFlowTabTargetFromPoint(event)
+  if (ctx.activeTabTarget) {
+    if (ctx.activeSwapTargetId)
+      clearPageBlockSwapPreview(ctx)
+    return
+  }
   const targetId = resolvePageBlockSwapTarget(ctx.blockId, {
     left: ctx.originClientLeft + event.clientX - ctx.startX,
     top: ctx.originClientTop + event.clientY - ctx.startY,
@@ -2859,7 +3298,7 @@ function animatePageBlockSwap(blockId, previousRect) {
   })
 }
 
-function endPageBlockMove() {
+function endPageBlockMove(event) {
   if (pageBlockMoveFrame) {
     window.cancelAnimationFrame(pageBlockMoveFrame)
     pageBlockMoveFrame = 0
@@ -2867,6 +3306,16 @@ function endPageBlockMove() {
   }
   const ctx = pageBlockMoveCtx
   if (ctx) {
+    const tabTarget = ctx.activeTabTarget
+      || (event ? resolvePageFlowTabTargetFromPoint(event) : null)
+    if (tabTarget && moveRootPageBlockToTab(ctx.blockId, tabTarget.blockId, tabTarget.tabKey)) {
+      pageBlockMoveCtx = null
+      draggingPageBlockId.value = ''
+      dragPreview.value = null
+      window.removeEventListener('pointermove', onPageBlockMove)
+      window.removeEventListener('pointerup', endPageBlockMove)
+      return
+    }
     const targetSlot = ctx.activeSwapTargetId ? ctx.blockSlots.get(ctx.activeSwapTargetId) : null
     const finalX = targetSlot?.x ?? Math.round(dragPreview.value?.x ?? ctx.originX)
     const finalY = targetSlot?.y ?? Math.round(dragPreview.value?.y ?? ctx.originY)
@@ -2882,6 +3331,31 @@ function endPageBlockMove() {
   dragPreview.value = null
   window.removeEventListener('pointermove', onPageBlockMove)
   window.removeEventListener('pointerup', endPageBlockMove)
+}
+
+function moveRootPageBlockToTab(blockId, containerId, tabKey) {
+  const source = pageBlocks.value.find(item => item.id === blockId)
+  const container = findPageBlockInTree(pageBlocks.value, containerId)
+  if (!source || container?.blockType !== 'tabs' || source.id === container.id)
+    return false
+  const tabs = Array.isArray(container.props?.tabs) ? container.props.tabs : []
+  if (!tabs.some(tab => tab.key === tabKey))
+    return false
+  const nested = normalizePageBlockForContainer(source)
+  const withoutSource = pageBlocks.value.filter(item => item.id !== blockId)
+  updatePageBlocks(mapPageBlocksInTree(withoutSource, item => item.id === containerId
+    ? {
+        ...item,
+        props: {
+          ...(item.props || {}),
+          tabs: item.props.tabs.map(tab => tab.key === tabKey
+            ? { ...tab, children: [...(tab.children || []), nested] }
+            : tab),
+        },
+      }
+    : item))
+  selectedPageBlockId.value = containerId
+  return true
 }
 
 function resolvePageBlockSwapTarget(blockId, movingRectOverride) {

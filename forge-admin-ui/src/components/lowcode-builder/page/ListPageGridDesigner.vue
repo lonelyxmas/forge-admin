@@ -232,9 +232,12 @@
                 :runtime-tree-active-key="runtimeTreeActiveKey"
                 :active-drop-cell="activeDropCell"
                 :nested-moving-block-id="nestedMovingBlockId"
+                :catalog-drag-block-type="draggedBlockType"
                 @child-block-select="handleBlockClick"
                 @child-block-menu-select="handleNestedBlockMenuSelect"
                 @block-props-update="handleBlockPropsUpdate"
+                @tabs-active-change="handleTabsActiveChange"
+                @tab-drop="handleTabDrop"
                 @child-block-drag-start="handleNestedBlockDragStart"
                 @child-block-move-start="payload => startNestedMove(payload.block, payload.event)"
                 @child-block-drag-end="resetCanvasDragState"
@@ -3004,34 +3007,77 @@
               </template>
 
               <template v-if="selectedBlock.blockType === 'tabs'">
-                <n-form-item label="Tab 项">
-                  <div class="metrics-editor">
-                    <div
-                      v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
-                      :key="idx"
-                      class="metric-row"
-                    >
-                      <n-input
-                        :value="tab.title"
-                        placeholder="标题"
-                        size="small"
-                        @update:value="updateTab(idx, { title: $event })"
-                      />
-                      <n-input
-                        :value="tab.key"
-                        placeholder="key"
-                        size="small"
-                        @update:value="updateTab(idx, { key: $event })"
-                      />
-                      <n-button size="tiny" quaternary @click="removeTab(idx)">
-                        删
-                      </n-button>
-                    </div>
-                    <n-button size="small" dashed block @click="addTab">
-                      + 添加 Tab
+                <n-divider>标签页</n-divider>
+                <n-form-item label="样式">
+                  <n-select
+                    :value="selectedBlock.props?.type || 'line'"
+                    :options="tabsTypeOptions"
+                    @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'line' })"
+                  />
+                </n-form-item>
+                <n-form-item label="位置">
+                  <n-select
+                    :value="selectedBlock.props?.placement || 'top'"
+                    :options="tabsPlacementOptions"
+                    @update:value="patchBlockProps(selectedBlock.id, { placement: $event || 'top' })"
+                  />
+                </n-form-item>
+                <n-form-item label="切换方式">
+                  <n-select
+                    :value="selectedBlock.props?.trigger || 'click'"
+                    :options="tabsTriggerOptions"
+                    @update:value="patchBlockProps(selectedBlock.id, { trigger: $event || 'click' })"
+                  />
+                </n-form-item>
+                <div class="tabs-switch-list">
+                  <label>
+                    <span>切换动画</span>
+                    <n-switch
+                      size="small"
+                      :value="selectedBlock.props?.animated !== false"
+                      @update:value="patchBlockProps(selectedBlock.id, { animated: $event })"
+                    />
+                  </label>
+                  <label>
+                    <span>可关闭</span>
+                    <n-switch
+                      size="small"
+                      :value="!!selectedBlock.props?.closable"
+                      @update:value="patchBlockProps(selectedBlock.id, { closable: $event })"
+                    />
+                  </label>
+                </div>
+                <div class="tab-manager">
+                  <div class="tab-manager-head">
+                    <span>页签管理</span>
+                    <n-button size="tiny" type="primary" secondary @click="addTab">
+                      新增页签
                     </n-button>
                   </div>
-                </n-form-item>
+                  <div
+                    v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
+                    :key="tab.key"
+                    class="tab-manager-card"
+                  >
+                    <n-input
+                      :value="tab.title"
+                      placeholder="页签名称"
+                      size="small"
+                      @update:value="updateTab(idx, { title: $event || `标签 ${idx + 1}` })"
+                    />
+                    <div class="tab-manager-actions">
+                      <n-button size="tiny" tertiary :disabled="idx === 0" @click="moveTab(idx, -1)">
+                        上移
+                      </n-button>
+                      <n-button size="tiny" tertiary :disabled="idx === (selectedBlock.props?.tabs?.length || 0) - 1" @click="moveTab(idx, 1)">
+                        下移
+                      </n-button>
+                      <n-button size="tiny" quaternary type="error" :disabled="(selectedBlock.props?.tabs?.length || 0) <= 1" @click="removeTab(idx)">
+                        删除
+                      </n-button>
+                    </div>
+                  </div>
+                </div>
                 <n-form-item label="当前 Tab 内容">
                   <div class="container-child-editor">
                     <n-select
@@ -5067,6 +5113,22 @@ const componentSizeOptions = [
   { label: '中', value: 'medium' },
   { label: '大', value: 'large' },
 ]
+const tabsTypeOptions = [
+  { label: '线型', value: 'line' },
+  { label: '条型', value: 'bar' },
+  { label: '卡片', value: 'card' },
+  { label: '分段', value: 'segment' },
+]
+const tabsPlacementOptions = [
+  { label: '上方', value: 'top' },
+  { label: '下方', value: 'bottom' },
+  { label: '左侧', value: 'left' },
+  { label: '右侧', value: 'right' },
+]
+const tabsTriggerOptions = [
+  { label: '点击', value: 'click' },
+  { label: '悬停', value: 'hover' },
+]
 const tableDensityOptions = [
   { label: '紧凑', value: 'small' },
   { label: '默认', value: 'medium' },
@@ -5399,7 +5461,7 @@ const localLayout = ref(normalizeDesignerLayout(syncGridLayoutWithModel(
 
 const blocks = computed(() => localLayout.value.items || [])
 watch(() => props.activeBlockId, (blockId) => {
-  if (blockId && blocks.value.some(block => block.id === blockId))
+  if (blockId && findBlockInTree(blocks.value, blockId))
     selectedBlockId.value = blockId
 }, { immediate: true })
 const runtimeTreeFilter = ref({})
@@ -6924,7 +6986,7 @@ function handleCanvasDrop(event) {
     }
     if (container?.block && container.block.blockType !== 'grid-layout' && container.block.id !== existingBlockId) {
       resetCanvasDragState()
-      moveExistingBlockToContainer(existingBlockId, container.id)
+      moveExistingBlockToContainer(existingBlockId, container.id, container.tabKey)
       return
     }
     const point = pixelToPoint(event.clientX, event.clientY)
@@ -6942,7 +7004,7 @@ function handleCanvasDrop(event) {
     return
   const container = resolveDropContainer(event)
   if (container) {
-    appendContainerChild(container.id, blockType, container.cellKey)
+    appendContainerChild(container.id, blockType, container.cellKey, container.tabKey)
     return
   }
   if (resolveNonContainerDropBlock(event)) {
@@ -7086,10 +7148,15 @@ function resolveDropContainer(event) {
   const cellKey = match.block.blockType === 'grid-layout' && cellNode?.dataset?.gridContainerId === match.block.id
     ? cellNode.dataset.gridCellKey || ''
     : ''
+  const tabNode = event.target?.closest?.('[data-grid-tab-key][data-grid-container-id]')
+  const tabKey = match.block.blockType === 'tabs' && tabNode?.dataset?.gridContainerId === match.block.id
+    ? tabNode.dataset.gridTabKey || ''
+    : ''
   return {
     block: match.block,
     id: match.block.id,
     cellKey,
+    tabKey,
   }
 }
 
@@ -7106,10 +7173,14 @@ function resolveDropContainerFromPoint(clientX, clientY) {
         cellRect: cellNode.getBoundingClientRect?.() || null,
       }
     }
+    const tabNode = target?.closest?.('[data-grid-tab-key][data-grid-container-id]')
     return {
       block: match.block,
       id: match.block.id,
       cellKey: '',
+      tabKey: match.block.blockType === 'tabs' && tabNode?.dataset?.gridContainerId === match.block.id
+        ? tabNode.dataset.gridTabKey || ''
+        : '',
     }
   }
   const cellNode = target?.closest?.('[data-grid-cell-key][data-grid-container-id]')
@@ -7154,12 +7225,12 @@ function isContainerBlock(block = {}) {
   return ['card', 'tabs', 'grid-layout', 'box-layout'].includes(block?.blockType)
 }
 
-function appendContainerChild(containerId, blockType, cellKey = '') {
+function appendContainerChild(containerId, blockType, cellKey = '', tabKey = '') {
   const container = findBlockInTree(blocks.value, containerId)
   if (!container || !blockType)
     return
   if (container.blockType === 'tabs') {
-    appendTabChild(blockType, containerId)
+    appendTabChild(blockType, containerId, tabKey)
     selectBlock(containerId)
     return
   }
@@ -7354,7 +7425,7 @@ function moveExistingBlockToGridCell(blockId, containerId, cellKey, stylePatch =
   selectBlock(blockId)
 }
 
-function moveExistingBlockToContainer(blockId, containerId) {
+function moveExistingBlockToContainer(blockId, containerId, tabKey = '') {
   if (!blockId || !containerId || blockId === containerId)
     return
   const source = findBlockInTree(blocks.value, blockId)
@@ -7394,7 +7465,7 @@ function moveExistingBlockToContainer(blockId, containerId) {
           ...block,
           props: {
             ...(block.props || {}),
-            tabs: tabs.map((tab, index) => index === 0
+            tabs: tabs.map((tab, index) => (tab.key === tabKey || (!tabKey && index === 0))
               ? { ...tab, children: [...(tab.children || []), movedSource] }
               : tab),
           },
@@ -7504,8 +7575,8 @@ function removeGridCell(index) {
   })
 }
 
-function appendTabChild(blockType, containerId = selectedBlock.value?.id) {
-  const container = blocks.value.find(block => block.id === containerId)
+function appendTabChild(blockType, containerId = selectedBlock.value?.id, tabKey = '') {
+  const container = findBlockInTree(blocks.value, containerId)
   if (!container || container.blockType !== 'tabs')
     return
   const child = createContainerChildBlock(blockType)
@@ -7514,17 +7585,18 @@ function appendTabChild(blockType, containerId = selectedBlock.value?.id) {
   const tabs = container.props?.tabs?.length
     ? container.props.tabs
     : [{ key: 'tab1', title: '标签一', children: [] }]
-  const targetKey = tabs.some(tab => tab.key === activeTabKey.value)
-    ? activeTabKey.value
+  const requestedKey = tabKey || activeTabKey.value
+  const targetKey = tabs.some(tab => tab.key === requestedKey)
+    ? requestedKey
     : tabs[0]?.key
   const nextTabs = tabs.map(tab => (tab.key === targetKey || (!targetKey && tab === tabs[0]))
     ? { ...tab, children: [...(tab.children || []), child] }
     : tab)
   localLayout.value = {
     ...localLayout.value,
-    items: blocks.value.map(block => block.id === container.id
+    items: normalizeGridItems(mapBlocksInTree(blocks.value, block => block.id === container.id
       ? { ...block, props: { ...(block.props || {}), tabs: nextTabs } }
-      : block),
+      : block)),
   }
   activeTabKey.value = targetKey || nextTabs[0]?.key || ''
 }
@@ -7784,6 +7856,20 @@ function handleBlockPropsUpdate(payload = {}) {
   if (!payload.blockId || !payload.propsData)
     return
   patchBlockProps(payload.blockId, payload.propsData)
+}
+
+function handleTabsActiveChange(payload = {}) {
+  if (!payload.blockId || !payload.tabKey)
+    return
+  activeTabKey.value = payload.tabKey
+  selectBlock(payload.blockId)
+}
+
+function handleTabDrop({ blockId, tabKey, blockType } = {}) {
+  if (!blockId || !tabKey || !blockType)
+    return
+  appendTabChild(blockType, blockId, tabKey)
+  selectBlock(blockId)
 }
 
 function handleCrudPreviewStateChange(payload = {}) {
@@ -8303,8 +8389,44 @@ function normalizeDesignerLayout(layout = {}) {
   return {
     ...layout,
     designWidth: clamp(layout.designWidth || LIST_PAGE_DESIGN_WIDTH, 960, 2560),
-    items: normalizeGridItems(layout.items || []),
+    items: normalizeGridItems(layout.items || []).map(normalizeTabsBlock),
   }
+}
+
+function normalizeTabsBlock(block = {}) {
+  let next = block
+  if (Array.isArray(next.children))
+    next = { ...next, children: next.children.map(normalizeTabsBlock) }
+  if (Array.isArray(next.props?.tabs)) {
+    const tabs = next.props.tabs.length
+      ? next.props.tabs
+      : [{ key: 'tab_1', title: '标签 1', children: [] }]
+    next = {
+      ...next,
+      props: {
+        ...(next.props || {}),
+        tabs: tabs.map((tab, index) => ({
+          ...tab,
+          key: tab.key || `tab_${index + 1}`,
+          title: tab.title || `标签 ${index + 1}`,
+          children: Array.isArray(tab.children) ? tab.children.map(normalizeTabsBlock) : [],
+        })),
+      },
+    }
+  }
+  if (Array.isArray(next.props?.cells)) {
+    next = {
+      ...next,
+      props: {
+        ...(next.props || {}),
+        cells: next.props.cells.map(cell => ({
+          ...cell,
+          children: Array.isArray(cell.children) ? cell.children.map(normalizeTabsBlock) : [],
+        })),
+      },
+    }
+  }
+  return next
 }
 
 function normalizeGridItems(items = []) {
@@ -8527,7 +8649,7 @@ function endNestedMove(event) {
     return
   }
   if (container?.block && container.block.blockType !== 'grid-layout' && container.block.id !== blockId) {
-    moveExistingBlockToContainer(blockId, container.id)
+    moveExistingBlockToContainer(blockId, container.id, container.tabKey)
     return
   }
   moveExistingBlockToCanvas(blockId, point)
@@ -9073,7 +9195,11 @@ function applySelectedTableGlobalAlign(value) {
     return
   const align = ['left', 'center', 'right'].includes(value) ? value : 'left'
   const nextSettings = { ...(selectedBlock.value.props?.fieldSettings || {}) }
-  ;(selectedFieldRefs.value || []).forEach((fieldName) => {
+  const tableRefs = resolveSelectedFieldRefs(selectedBlock.value, 'table')
+  const fieldRefs = tableRefs.length
+    ? tableRefs
+    : props.fields.filter(field => isPageFieldVisible(field, 'table')).map(field => field.field)
+  fieldRefs.forEach((fieldName) => {
     nextSettings[fieldName] = {
       ...(nextSettings[fieldName] || {}),
       align,
@@ -9903,20 +10029,37 @@ function actionPathPlaceholder(action = {}) {
   return '/ai/xxx/:id'
 }
 
-// Tab editing
+// Tab keys bind nested content and remain system-managed when titles change.
 function updateTab(idx, patch) {
   const list = [...(selectedBlock.value?.props?.tabs || [])]
+  if (!list[idx])
+    return
   list[idx] = { ...list[idx], ...patch }
   patchBlockProps(selectedBlock.value.id, { tabs: list })
 }
 function addTab() {
-  const list = [...(selectedBlock.value?.props?.tabs || []), { key: `tab_${Date.now()}`, title: '新 Tab' }]
+  const key = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  const list = [...(selectedBlock.value?.props?.tabs || []), { key, title: `标签 ${selectedBlock.value?.props?.tabs?.length + 1 || 1}`, children: [] }]
+  patchBlockProps(selectedBlock.value.id, { tabs: list })
+  activeTabKey.value = key
+}
+function moveTab(idx, offset) {
+  const list = [...(selectedBlock.value?.props?.tabs || [])]
+  const targetIndex = idx + offset
+  if (!list[idx] || targetIndex < 0 || targetIndex >= list.length)
+    return
+  const [tab] = list.splice(idx, 1)
+  list.splice(targetIndex, 0, tab)
   patchBlockProps(selectedBlock.value.id, { tabs: list })
 }
 function removeTab(idx) {
   const list = [...(selectedBlock.value?.props?.tabs || [])]
+  if (list.length <= 1)
+    return
   list.splice(idx, 1)
   patchBlockProps(selectedBlock.value.id, { tabs: list })
+  if (!list.some(tab => tab.key === activeTabKey.value))
+    activeTabKey.value = list[Math.max(0, idx - 1)]?.key || list[0]?.key || ''
 }
 
 function propertySectionVisible(keywords = []) {
@@ -10731,8 +10874,14 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   z-index: 28;
   height: 24px;
   opacity: 0.58;
-  pointer-events: auto;
+  /* Keep the transparent tool strip from covering interactive block content such as tab headers. */
+  pointer-events: none;
   transition: opacity 160ms ease;
+}
+
+.block-node-overlay .block-drag-handle,
+.block-node-overlay .block-menu-trigger {
+  pointer-events: auto;
 }
 
 .grid-item:hover .block-node-overlay,
@@ -12710,6 +12859,55 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   grid-template-columns: 1fr 1fr 80px auto;
   gap: 4px;
   align-items: center;
+}
+
+.tabs-switch-list {
+  display: grid;
+  gap: 8px;
+  margin: -2px 0 12px;
+}
+
+.tabs-switch-list label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.tab-manager {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 12px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;
+}
+
+.tab-manager-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tab-manager-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.tab-manager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 /* Field drawer */

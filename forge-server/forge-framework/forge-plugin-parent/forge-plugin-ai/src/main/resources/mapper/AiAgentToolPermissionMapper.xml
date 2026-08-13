@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.agenttool.mapper.AiAgentToolPermissionMapper">
+  <sql id="permColumns">
+    id, tenant_id, agent_id, tool_key, decision,
+    create_by, create_time, create_dept, update_by, update_time, del_flag
+  </sql>
+
+  <select id="selectByAgentId" resultType="com.mdframe.forge.plugin.ai.agenttool.domain.AiAgentToolPermission">
+    SELECT <include refid="permColumns" />
+    FROM ai_agent_tool_permission
+    WHERE del_flag = 0 AND agent_id = #{agentId}
+    ORDER BY create_time DESC
+  </select>
+
+  <select id="selectByAgentIdAndToolKey" resultType="com.mdframe.forge.plugin.ai.agenttool.domain.AiAgentToolPermission">
+    SELECT <include refid="permColumns" />
+    FROM ai_agent_tool_permission
+    WHERE del_flag = 0 AND agent_id = #{agentId} AND tool_key = #{toolKey}
+    ORDER BY create_time DESC
+  </select>
+
+  <update id="deleteByAgentIdAndToolKey">
+    UPDATE ai_agent_tool_permission
+    SET del_flag = id
+    WHERE del_flag = 0 AND agent_id = #{agentId} AND tool_key = #{toolKey}
+  </update>
+</mapper>

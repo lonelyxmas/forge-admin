@@ -30,6 +30,10 @@ export function businessProcessDesigner(id) {
   return request.get(`/ai/business/process/${id}/designer`, ENCRYPTED_REQUEST)
 }
 
+export function businessProcessFlowModels(id) {
+  return request.get(`/ai/business/process/${id}/flow-models`, ENCRYPTED_REQUEST)
+}
+
 export function saveBusinessProcessSchema(id, data) {
   return request.put(`/ai/business/process/${id}/schema`, data, ENCRYPTED_REQUEST)
 }

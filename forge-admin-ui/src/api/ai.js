@@ -307,9 +307,11 @@ export function providerFetchModels(id) {
 
 /**
  * 批量导入模型到供应商
+ * @param {string|number} id 供应商 ID
+ * @param {Array<{modelId: string, modelType?: string}>} items 导入项列表
  */
-export function providerBatchImportModels(id, modelIds) {
-  return request.post(`/ai/provider/${id}/models/batch`, modelIds)
+export function providerBatchImportModels(id, items) {
+  return request.post(`/ai/provider/${id}/models/batch`, items)
 }
 
 // ========== 模型管理 ==========
@@ -408,6 +410,19 @@ export function sessionDelete(sessionId) {
 
 export function sessionStatistics() {
   return request.get('/ai/admin/session/statistics')
+}
+
+// 当前用户会话（AI 对话页使用）
+export function sessionList() {
+  return request.get('/ai/session/list')
+}
+
+export function sessionMessagesByUser(sessionId) {
+  return request.get(`/ai/session/${sessionId}/messages`)
+}
+
+export function sessionDeleteByUser(sessionId) {
+  return request.delete(`/ai/session/${sessionId}`)
 }
 
 // ========== AiClient 通用调用 ==========
@@ -612,6 +627,14 @@ export function skillGetFiles(id) {
 
 export function skillGetAgentSkills(agentId) {
   return request.get(`/ai/skill/agent/${agentId}`)
+}
+
+export function skillAddAgentSkill(data) {
+  return request.post(`/ai/skill/agent/${data.agentId}`, { skillId: data.skillId })
+}
+
+export function skillDeleteAgentSkill(agentId, skillId) {
+  return request.delete(`/ai/skill/agent/${agentId}/${skillId}`)
 }
 
 export function skillAdd(data) {
@@ -846,4 +869,38 @@ export function storeInstanceDelete(id) {
 /** 测试存储实例连接 */
 export function storeInstanceTest(id) {
   return request.post(`/ai/store/${id}/test`)
+}
+
+// ========== Agent 工具管理 ==========
+
+export function agentToolPage(params) {
+  return request.get('/ai/agent-tool/page', { params })
+}
+
+export function agentToolGetById(id) {
+  return request.get(`/ai/agent-tool/${id}`)
+}
+
+export function agentToolAdd(data) {
+  return request.post('/ai/agent-tool', data)
+}
+
+export function agentToolUpdate(data) {
+  return request.put('/ai/agent-tool', data)
+}
+
+export function agentToolDelete(id) {
+  return request.delete(`/ai/agent-tool/${id}`)
+}
+
+export function agentToolPermissions(agentId, toolKey) {
+  return request.get(`/ai/agent-tool/permission/${agentId}`, { params: { toolKey } })
+}
+
+export function agentToolSavePermissions(agentId, toolKey, data) {
+  return request.post(`/ai/agent-tool/permission/${agentId}`, data, { params: { toolKey } })
+}
+
+export function agentToolDeletePermissions(agentId, toolKey) {
+  return request.delete(`/ai/agent-tool/permission/${agentId}`, { params: { toolKey } })
 }

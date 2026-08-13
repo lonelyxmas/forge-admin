@@ -17,6 +17,16 @@ public interface IDataScopeService {
      * @return 数据权限上下文
      */
     DataScopeContext getCurrentUserDataScope();
+
+    /**
+     * 根据业务模块获取当前用户的数据权限上下文。
+     *
+     * @param moduleCode 业务模块编码
+     * @return 数据权限上下文
+     */
+    default DataScopeContext getCurrentUserDataScope(String moduleCode) {
+        return getCurrentUserDataScope();
+    }
     
     /**
      * 根据Mapper方法ID获取数据权限配置
