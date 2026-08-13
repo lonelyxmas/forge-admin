@@ -263,9 +263,12 @@
                 :runtime-record="runtimeRecord"
                 :active-drop-cell="activeDropCell"
                 :nested-moving-block-id="nestedMovingBlockId"
+                :catalog-drag-block-type="catalogDragBlockType"
                 @child-block-select="emit('childBlockSelect', $event)"
                 @child-block-menu-select="emit('childBlockMenuSelect', $event)"
                 @block-props-update="emit('blockPropsUpdate', $event)"
+                @tabs-active-change="emit('tabsActiveChange', $event)"
+                @tab-drop="emit('tabDrop', $event)"
                 @child-block-drag-start="emit('childBlockDragStart', $event)"
                 @child-block-move-start="emit('childBlockMoveStart', $event)"
                 @child-block-drag-end="emit('childBlockDragEnd')"
@@ -898,10 +901,13 @@
           :readonly="readonly"
           :runtime-crud-props="runtimeCrudProps"
           :runtime-record="runtimeRecord"
+          :catalog-drag-block-type="catalogDragBlockType"
           @click.stop="emit('childBlockSelect', child.id)"
           @child-block-select="emit('childBlockSelect', $event)"
           @child-block-menu-select="emit('childBlockMenuSelect', $event)"
           @block-props-update="emit('blockPropsUpdate', $event)"
+          @tabs-active-change="emit('tabsActiveChange', $event)"
+          @tab-drop="emit('tabDrop', $event)"
           @child-block-move-start="emit('childBlockMoveStart', $event)"
           @child-block-drag-end="emit('childBlockDragEnd')"
           @child-block-resize-start="emit('childBlockResizeStart', $event)"
@@ -995,6 +1001,8 @@
               @child-block-select="emit('childBlockSelect', $event)"
               @child-block-menu-select="emit('childBlockMenuSelect', $event)"
               @block-props-update="emit('blockPropsUpdate', $event)"
+              @tabs-active-change="emit('tabsActiveChange', $event)"
+              @tab-drop="emit('tabDrop', $event)"
               @child-block-move-start="emit('childBlockMoveStart', $event)"
               @child-block-drag-end="emit('childBlockDragEnd')"
               @child-block-resize-start="emit('childBlockResizeStart', $event)"
@@ -1009,37 +1017,104 @@
 
     <!-- Tabs 布局 -->
     <template v-else-if="block.blockType === 'tabs'">
-      <n-tabs type="line" size="small" :default-value="block.props?.tabs?.[0]?.key" class="layout-tabs">
+      <n-tabs
+        :type="block.props?.type || 'line'"
+        size="small"
+        :placement="block.props?.placement || 'top'"
+        :trigger="block.props?.trigger || 'click'"
+        :animated="block.props?.animated !== false"
+        :closable="!!block.props?.closable"
+        :value="resolveActiveTabKey(block)"
+        class="layout-tabs"
+        @update:value="value => handleTabsValueChange(block, value)"
+      >
         <n-tab-pane
           v-for="tab in (block.props?.tabs || [])"
           :key="tab.key"
           :name="tab.key"
           :tab="tab.title"
         >
-          <div v-if="tab.children?.length" class="container-child-list">
-            <GridBlockRenderer
-              v-for="child in tab.children"
-              :key="child.id"
-              :block="child"
-              :fields="fields"
-              :selected="child.id === selectedBlockId"
-              :selected-block-id="selectedBlockId"
-              :readonly="readonly"
-              :runtime-crud-props="runtimeCrudProps"
-              :runtime-record="runtimeRecord"
-              :active-drop-cell="activeDropCell"
-              :nested-moving-block-id="nestedMovingBlockId"
-              @click.stop="emit('childBlockSelect', child.id)"
-              @child-block-select="emit('childBlockSelect', $event)"
-              @child-block-menu-select="emit('childBlockMenuSelect', $event)"
-              @block-props-update="emit('blockPropsUpdate', $event)"
-              @child-block-move-start="emit('childBlockMoveStart', $event)"
-              @child-block-drag-end="emit('childBlockDragEnd')"
-              @child-block-resize-start="emit('childBlockResizeStart', $event)"
-            />
-          </div>
-          <div v-else class="sub-tab-empty">
-            拖入组件到当前标签页
+          <div
+            class="tab-pane-drop-target"
+            :data-grid-container-id="block.id"
+            :data-grid-tab-key="tab.key"
+            @pointerenter="emit('tabsActiveChange', { blockId: block.id, tabKey: tab.key })"
+            @dragenter.prevent.stop="handleTabPaneDragEnter"
+            @dragover.prevent.stop="handleTabPaneDragOver"
+            @drop.prevent.stop="event => handleTabPaneDrop(event, tab.key)"
+          >
+            <div v-if="tab.children?.length" class="container-child-list">
+              <div
+                v-for="child in tab.children"
+                :key="child.id"
+                class="tab-pane-child"
+                :class="{ selected: child.id === selectedBlockId }"
+                :style="nestedChildShellStyle(child)"
+                :data-grid-child-id="child.id"
+                @click.stop="emit('childBlockSelect', child.id)"
+              >
+                <div v-if="!readonly" class="nested-block-node-overlay">
+                  <span
+                    class="nested-block-drag-handle"
+                    title="拖动组件"
+                    @click.stop
+                    @pointerdown.stop.prevent="emit('childBlockMoveStart', { block: child, event: $event })"
+                  >
+                    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M8.25 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm0 7.25a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm1.75 5.5a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 0 3.5ZM14.753 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5ZM16.5 12a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Zm-1.747 9a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Z" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <n-dropdown
+                    trigger="click"
+                    placement="bottom-end"
+                    :options="nestedBlockMenuOptions"
+                    @select="key => emit('childBlockMenuSelect', { key, block: child })"
+                  >
+                    <button type="button" class="nested-block-menu-trigger" title="更多操作" @click.stop @mousedown.stop>
+                      <svg width="1em" height="1em" viewBox="0 0 512 512" aria-hidden="true">
+                        <circle cx="256" cy="256" r="32" fill="currentColor" />
+                        <circle cx="416" cy="256" r="32" fill="currentColor" />
+                        <circle cx="96" cy="256" r="32" fill="currentColor" />
+                      </svg>
+                    </button>
+                  </n-dropdown>
+                </div>
+                <GridBlockRenderer
+                  :block="child"
+                  :fields="fields"
+                  :selected="false"
+                  :selected-block-id="selectedBlockId"
+                  :readonly="readonly"
+                  :runtime-crud-props="runtimeCrudProps"
+                  :runtime-record="runtimeRecord"
+                  :active-drop-cell="activeDropCell"
+                  :nested-moving-block-id="nestedMovingBlockId"
+                  :catalog-drag-block-type="catalogDragBlockType"
+                  @child-block-select="emit('childBlockSelect', $event)"
+                  @child-block-menu-select="emit('childBlockMenuSelect', $event)"
+                  @block-props-update="emit('blockPropsUpdate', $event)"
+                  @tabs-active-change="emit('tabsActiveChange', $event)"
+                  @tab-drop="emit('tabDrop', $event)"
+                  @child-block-move-start="emit('childBlockMoveStart', $event)"
+                  @child-block-drag-end="emit('childBlockDragEnd')"
+                  @child-block-resize-start="emit('childBlockResizeStart', $event)"
+                />
+                <template v-if="!readonly && child.id === selectedBlockId">
+                  <button
+                    v-for="anchor in resizeAnchors"
+                    :key="anchor"
+                    type="button"
+                    class="nested-resize-anchor"
+                    :class="`anchor-${anchor}`"
+                    title="调整组件大小"
+                    @pointerdown.stop="emit('childBlockResizeStart', { block: child, event: $event, anchor })"
+                  />
+                </template>
+              </div>
+            </div>
+            <div v-else class="sub-tab-empty">
+              拖入组件到当前标签页
+            </div>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -1130,6 +1205,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  catalogDragBlockType: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits([
@@ -1145,6 +1224,8 @@ const emit = defineEmits([
   'childBlockResizeStart',
   'inlineTextUpdate',
   'blockActivate',
+  'tabsActiveChange',
+  'tabDrop',
 ])
 
 const localDataBindableBlockTypes = new Set([
@@ -1189,6 +1270,7 @@ const blockBindingError = ref('')
 const remoteBlockBindingData = ref(null)
 const previewTreeExpanded = ref(true)
 const treePanelCollapsed = ref(false)
+const activeTabKeyByBlockId = ref({})
 const runtimeTreeChildrenField = computed(() => props.block.props?.childrenField || 'children')
 const runtimeSelectedTreeKeys = computed(() => props.runtimeTreeActiveKey === '__all__' ? [] : [props.runtimeTreeActiveKey])
 const runtimeRuleContext = computed(() => ({
@@ -1349,6 +1431,73 @@ function shouldShowGridCellDropPreview(cell = {}) {
 }
 function shouldShowGridCellEmpty(cell = {}) {
   return !props.readonly && !hasGridCellChildren(cell) && !isActiveDropCell(cell)
+}
+function handleTabPaneDragOver(event) {
+  const types = Array.from(event.dataTransfer?.types || [])
+  if (!props.catalogDragBlockType
+    && !types.includes('application/x-forge-app-page-block')
+    && !types.includes('application/x-list-block')
+    && !types.includes('application/x-forge-form-layout')) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleTabPaneDragEnter(event) {
+  const types = Array.from(event.dataTransfer?.types || [])
+  if (!props.catalogDragBlockType
+    && !types.includes('application/x-forge-app-page-block')
+    && !types.includes('application/x-list-block')
+    && !types.includes('application/x-forge-form-layout')) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  event.dataTransfer.dropEffect = 'copy'
+}
+
+function resolveActiveTabKey(block = {}) {
+  const tabs = Array.isArray(block.props?.tabs) ? block.props.tabs : []
+  const requested = activeTabKeyByBlockId.value[block.id]
+  return tabs.some(tab => tab.key === requested) ? requested : tabs[0]?.key
+}
+
+function handleTabsValueChange(block, tabKey) {
+  activeTabKeyByBlockId.value = {
+    ...activeTabKeyByBlockId.value,
+    [block.id]: tabKey,
+  }
+  emit('tabsActiveChange', { blockId: block.id, tabKey })
+}
+
+function handleTabPaneDrop(event, tabKey) {
+  const blockType = props.catalogDragBlockType
+    || event.dataTransfer?.getData('application/x-forge-app-page-block')
+    || event.dataTransfer?.getData('application/x-list-block')
+    || resolveFormLayoutBlockType(event)
+  if (!blockType)
+    return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('tabDrop', {
+    blockId: props.block.id,
+    tabKey,
+    blockType,
+  })
+}
+
+function resolveFormLayoutBlockType(event) {
+  const raw = event.dataTransfer?.getData('application/x-forge-form-layout')
+  if (!raw)
+    return ''
+  try {
+    return String(JSON.parse(raw)?.componentKey || '').trim()
+  }
+  catch {
+    return ''
+  }
 }
 function clampGridSpan(value, fallback = 1) {
   const columns = Math.max(1, Number(props.block.props?.columns || 24))
@@ -3961,6 +4110,36 @@ watch(
   min-height: 72px;
 }
 
+.tab-pane-child {
+  position: relative;
+  min-width: 0;
+  min-height: 72px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.tab-pane-child:hover {
+  border-color: #93c5fd;
+}
+
+.tab-pane-child.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.14);
+}
+
+.tab-pane-child:hover .nested-block-node-overlay,
+.tab-pane-child.selected .nested-block-node-overlay {
+  opacity: 1;
+}
+
+.tab-pane-child > :deep(.grid-block) {
+  min-height: 72px;
+}
+
 .signature-block-preview,
 .transfer-preview,
 .step-form-preview,
@@ -4275,6 +4454,29 @@ watch(
 
 .layout-tabs {
   min-height: 0;
+}
+
+.tab-pane-drop-target {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 156px;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  pointer-events: auto;
+}
+
+.tab-pane-drop-target:empty,
+.tab-pane-drop-target:has(.sub-tab-empty) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.tab-pane-drop-target:has(.sub-tab-empty):hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 
 .layout-spacer {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createForgeFieldTemplateComponent } from '../../forge-form-designer/designerLayoutFactory'
 import { buildAutoFieldAssets } from '../autoFieldRegistry'
 import {
+  appendDesignerLayoutChild,
   getDesignerComponent,
   insertDesignerComponent,
   normalizeFormDesignerSchema,
@@ -87,5 +88,31 @@ describe('formDesignerSchema', () => {
       dataType: 'varchar',
       componentType: 'input',
     })
+  })
+
+  it('adds every new tab pane to the selected tabs component', () => {
+    let schema = normalizeFormDesignerSchema({
+      components: [{
+        id: 'tabs_main',
+        componentKey: 'tabs',
+        label: '信息页签',
+        children: [{
+          id: 'tab_first',
+          componentKey: 'tabPane',
+          label: '标签 1',
+          props: { label: '标签 1', name: 'tab_first' },
+          children: [],
+        }],
+      }],
+    })
+
+    schema = appendDesignerLayoutChild(schema, 'tabs_main', 'tabPane')
+    schema = appendDesignerLayoutChild(schema, 'tabs_main', 'tabPane')
+
+    const tabs = getDesignerComponent(schema, 'tabs_main')
+    expect(tabs.children).toHaveLength(3)
+    expect(tabs.children.map(item => item.componentKey)).toEqual(['tabPane', 'tabPane', 'tabPane'])
+    expect(new Set(tabs.children.map(item => item.id)).size).toBe(3)
+    expect(tabs.children.every(item => Array.isArray(item.children))).toBe(true)
   })
 })

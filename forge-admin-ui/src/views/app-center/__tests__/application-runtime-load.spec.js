@@ -63,4 +63,21 @@ describe('application runtime route loading', () => {
     expect(rendererSource).toContain('<div v-if="runtimeCrudLoading" class="runtime-crud-loading">')
     expect(rendererSource).toContain('v-else-if="effectiveRuntimeCrudProps"')
   })
+
+  it('keeps nested tab blocks selectable and configurable from the runtime canvas', () => {
+    const runtimeSource = readFileSync(resolve('src/views/app-center/application-runtime.[applicationCode].vue'), 'utf8')
+    const rendererSource = readFileSync(resolve('src/components/lowcode-builder/page/GridBlockRenderer.vue'), 'utf8')
+    const designerSource = readFileSync(resolve('src/components/lowcode-builder/page/ListPageGridDesigner.vue'), 'utf8')
+
+    expect(runtimeSource).toContain('@child-block-select="handleNestedPageBlockSelect"')
+    expect(runtimeSource).toContain('@child-block-menu-select="handleNestedPageBlockMenuSelect"')
+    expect(runtimeSource).toContain('@child-block-resize-start="handleNestedPageBlockResizeStart"')
+    expect(runtimeSource).toContain('findPageBlockInTree(pageBlocks.value, selectedPageBlockId.value)')
+    expect(rendererSource).toContain('class="tab-pane-child"')
+    expect(rendererSource).toContain('emit(\'childBlockSelect\', child.id)')
+    expect(rendererSource).toContain('class="nested-block-menu-trigger"')
+    expect(rendererSource).toContain('v-for="anchor in resizeAnchors"')
+    expect(designerSource).toContain('if (blockId && findBlockInTree(blocks.value, blockId))')
+    expect(designerSource).not.toContain('if (blockId && blocks.value.some(block => block.id === blockId))')
+  })
 })

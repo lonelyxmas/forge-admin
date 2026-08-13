@@ -22,8 +22,8 @@
       :style="nodeCustomStyle"
       draggable="false"
       tabindex="0"
-      @click.stop="$emit('select', component.id)"
-      @focus="$emit('select', component.id)"
+      @click.stop="selectNode"
+      @focus="selectNode"
     >
       <div v-if="!isStructuralSlot" class="node-overlay">
         <div class="quick-actions">
@@ -309,6 +309,34 @@
           </div>
         </n-collapse-item>
       </n-collapse>
+      <div
+        v-else-if="isTabPaneLayout"
+        class="layout-children real-layout-children tab-pane-drop-zone"
+        :class="{ active: activeInside }"
+        @dragenter.prevent.stop="handleInsideDragOver"
+        @dragover.prevent.stop="handleInsideDragOver"
+        @drop.stop="handleInsideDrop"
+      >
+        <div v-if="!component.children?.length" class="empty-child-zone" :class="{ active: activeInside }">
+          拖入组件到当前标签页
+        </div>
+        <ForgeFormCanvasNode
+          v-for="(child, childIndex) in component.children"
+          :key="child.id"
+          :component="child"
+          :fields="fields"
+          :schema="schema"
+          :selected-id="selectedId"
+          :depth="depth + 1"
+          :parent-id="component.id"
+          :index="childIndex"
+          @select="$emit('select', $event)"
+          @update:schema="$emit('update:schema', $event)"
+          @configure="$emit('configure', $event)"
+          @drop-before="event => handleChildDrop(childIndex, event)"
+          @drop-after="event => handleChildDrop(childIndex + 1, event)"
+        />
+      </div>
       <PageWidgetRenderer
         v-else-if="isPageWidget"
         :component-key="component.componentKey"
@@ -460,6 +488,7 @@ const isGridRow = computed(() => ['row', 'fcRow'].includes(props.component.compo
 const isTableLayout = computed(() => ['table', 'fcTable'].includes(props.component.componentKey))
 const isCardLayout = computed(() => ['card', 'elCard'].includes(props.component.componentKey))
 const isTabsLayout = computed(() => ['tabs', 'elTabs'].includes(props.component.componentKey))
+const isTabPaneLayout = computed(() => ['tabPane', 'elTabPane'].includes(props.component.componentKey))
 const isCollapseLayout = computed(() => ['collapse', 'elCollapse'].includes(props.component.componentKey))
 const isPageWidget = computed(() => isPageWidgetComponentKey(props.component.componentKey))
 const isStructuralSlot = computed(() => ['col', 'tableGrid', 'fcTableGrid', 'tabPane', 'elTabPane', 'collapseItem', 'elCollapseItem'].includes(props.component.componentKey))
@@ -476,6 +505,13 @@ const previewContext = computed(() => ({ mode: 'designer-preview' }))
 const previewFormData = computed(() => ({
   [props.component.fieldBinding?.fieldCode || props.component.id]: previewValue.value,
 }))
+
+function selectNode() {
+  // A tab pane is structural content of Tabs. Selecting it made the property
+  // panel show generic pane properties instead of the Tabs pane manager.
+  emit('select', isTabPaneLayout.value && props.parentId ? props.parentId : props.component.id)
+}
+
 const rootColumns = computed(() => Math.max(1, Math.min(MAX_FORM_GRID_COLUMNS, Number(props.schema.layout?.gridColumns || 2))))
 const parentGridColumns = computed(() => {
   if (props.component.componentKey !== 'col')
@@ -881,7 +917,7 @@ function handleNodeDragOver(event) {
   if (!hasForgeDragType(event))
     return
   const target = event.target
-  const insideDropArea = target?.closest?.('.layout-children, .crud-empty-drop')
+  const insideDropArea = target?.closest?.('.layout-children, .crud-empty-drop, .tab-pane-drop-zone')
   if (insideDropArea && nodeRef.value?.contains?.(insideDropArea)) {
     handleInsideDragOver(event)
     return
@@ -965,6 +1001,10 @@ function handleInsideDrop(event) {
   }
   if (isTableLayout.value) {
     handleTableDropToCell(0, event)
+    return
+  }
+  if (isTabsLayout.value) {
+    showInvalidDrop('请拖入具体标签页内容区')
     return
   }
   if (!canDropIntoCurrentNode(event)) {
@@ -1082,6 +1122,10 @@ function canDropIntoCurrentNode(event) {
     return child?.componentKey === 'col' || resolveContainerSlotTarget(event, child)?.parentId
   if (isTableLayout.value)
     return ['tableGrid', 'fcTableGrid'].includes(child?.componentKey) || Boolean(resolveContainerSlotTarget(event, child)?.parentId)
+  if (isTabsLayout.value) {
+    return Boolean((props.component.children || []).length)
+      && canAcceptDesignerChild((props.component.children || [])[0], child)
+  }
   return canAcceptDesignerChild(props.component, child)
 }
 
@@ -2367,6 +2411,10 @@ function buildFormDividerProps(component) {
 
 .real-layout-tabs :deep(.n-tab-pane) {
   padding: 8px 0 0;
+}
+
+.tab-pane-drop-zone {
+  min-height: 84px;
 }
 
 .real-layout-collapse :deep(.n-collapse-item__header) {

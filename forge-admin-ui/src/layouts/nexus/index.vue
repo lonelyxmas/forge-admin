@@ -2,7 +2,7 @@
   <div class="nexus-layout">
     <!-- 左侧浮岛侧边栏 -->
     <Transition name="sidebar-slide">
-      <aside v-if="showSidebar && !appStore.collapsed" class="nexus-sidebar-wrapper">
+      <aside v-if="!appStore.collapsed" class="nexus-sidebar-wrapper">
         <div class="nexus-sidebar-inner">
           <Sidebar />
         </div>
@@ -11,7 +11,7 @@
 
     <!-- 展开拖拽条（收起时贴在左侧边缘） -->
     <div
-      v-show="showSidebar && appStore.collapsed"
+      v-show="appStore.collapsed"
       ref="expandBarRef"
       class="nexus-expand-bar"
       :style="{ top: `${expandBarTop}px` }"
@@ -51,7 +51,6 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppTab } from '@/layouts/components'
-import { useSidebarVisibility } from '@/layouts/composables/useSidebarVisibility'
 import { useAppStore } from '@/store'
 import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import Header from './header/index.vue'
@@ -60,7 +59,6 @@ import Sidebar from './sidebar/index.vue'
 const appStore = useAppStore()
 const route = useRoute()
 const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
-const { showSidebar } = useSidebarVisibility()
 const expandBarRef = ref(null)
 const expandBarTop = ref(400)
 const isDragging = ref(false)

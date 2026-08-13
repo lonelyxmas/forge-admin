@@ -733,6 +733,42 @@ export function updateDesignerComponent(source = {}, componentId = '', patch = {
   return normalizeFormDesignerSchema(schema)
 }
 
+/**
+ * Adds a structural child to a layout component through the schema mutation
+ * layer so a panel re-render cannot lose a newly added tab pane.
+ */
+export function appendDesignerLayoutChild(source = {}, componentId = '', componentKey = '') {
+  const schema = normalizeFormDesignerSchema(source)
+  const parent = getDesignerComponent(schema, componentId)
+  const parentKey = parent?.componentKey || ''
+  const isTabs = ['tabs', 'elTabs'].includes(parentKey)
+  const isCollapse = ['collapse', 'elCollapse'].includes(parentKey)
+  const childKey = componentKey || (isTabs ? 'tabPane' : isCollapse ? 'collapseItem' : '')
+  if (!parent || !childKey || !canAcceptDesignerChild(parent, { componentKey: childKey }))
+    return schema
+
+  const children = Array.isArray(parent.children) ? parent.children : []
+  const childIndex = children.length + 1
+  const childId = reserveComponentId(
+    `${parent.id}_${isTabs ? 'pane' : 'item'}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    collectReservedComponentIds(schema.components),
+  )
+  const label = isTabs ? `标签 ${childIndex}` : `分组 ${childIndex}`
+  return updateDesignerComponent(schema, parent.id, {
+    children: [...children, {
+      id: childId,
+      componentKey: childKey,
+      label,
+      props: isTabs ? { label, name: childId } : { title: label, name: childId },
+      layout: {
+        span: parent.layout?.span || schema.layout?.gridColumns || 1,
+        align: 'left',
+      },
+      children: [],
+    }],
+  })
+}
+
 export function updateDesignerLayout(source = {}, patch = {}) {
   const schema = normalizeFormDesignerSchema(source)
   const next = normalizeFormDesignerSchema({

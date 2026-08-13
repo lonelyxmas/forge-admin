@@ -1269,6 +1269,73 @@
                 </section>
               </n-collapse-item>
 
+              <n-collapse-item v-if="isTabsLayout" title="标签页" name="tabs">
+                <section class="panel-item">
+                  <n-form-item label="样式">
+                    <n-select
+                      :value="selectedComponent.props?.type || 'line'"
+                      :options="tabsTypeOptions"
+                      @update:value="updateComponent({ props: { type: $event || 'line' } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="位置">
+                    <n-select
+                      :value="selectedComponent.props?.placement || 'top'"
+                      :options="tabsPlacementOptions"
+                      @update:value="updateComponent({ props: { placement: $event || 'top' } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="切换方式">
+                    <n-select
+                      :value="selectedComponent.props?.trigger || 'click'"
+                      :options="tabsTriggerOptions"
+                      @update:value="updateComponent({ props: { trigger: $event || 'click' } })"
+                    />
+                  </n-form-item>
+                  <div class="switch-list">
+                    <label>
+                      <span>切换动画</span>
+                      <n-switch size="small" :value="selectedComponent.props?.animated !== false" @update:value="updateComponent({ props: { animated: $event } })" />
+                    </label>
+                    <label>
+                      <span>可关闭</span>
+                      <n-switch size="small" :value="!!selectedComponent.props?.closable" @update:value="updateComponent({ props: { closable: $event } })" />
+                    </label>
+                  </div>
+                  <div class="layout-child-manager">
+                    <div class="panel-title-row">
+                      <div class="panel-item-title">
+                        页签管理
+                      </div>
+                      <n-button size="tiny" type="primary" secondary @click="addLayoutChild('tabPane')">
+                        新增页签
+                      </n-button>
+                    </div>
+                    <div v-for="(child, childIndex) in layoutChildren" :key="child.id" class="layout-child-card">
+                      <div class="layout-child-card-main">
+                        <n-input
+                          :value="child.props?.label || child.label"
+                          size="small"
+                          placeholder="页签名称"
+                          @update:value="updateLayoutChild(childIndex, { label: $event || `标签 ${childIndex + 1}`, props: { label: $event || `标签 ${childIndex + 1}` } })"
+                        />
+                      </div>
+                      <div class="layout-child-actions">
+                        <n-button size="tiny" tertiary :disabled="childIndex === 0" @click="moveLayoutChild(childIndex, -1)">
+                          上移
+                        </n-button>
+                        <n-button size="tiny" tertiary :disabled="childIndex === layoutChildren.length - 1" @click="moveLayoutChild(childIndex, 1)">
+                          下移
+                        </n-button>
+                        <n-button size="tiny" quaternary type="error" :disabled="layoutChildren.length <= 1" @click="removeLayoutChild(childIndex)">
+                          删除
+                        </n-button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </n-collapse-item>
+
               <n-collapse-item v-if="isField" title="校验规则" name="validation">
                 <section class="panel-item validation-panel">
                   <div class="switch-line compact">
@@ -2080,6 +2147,14 @@
                     size="small"
                     :value="!!selectedComponent.props?.closable"
                     @update:value="updateComponent({ props: { closable: $event } })"
+                  />
+                </label>
+                <label>
+                  <span>addable</span>
+                  <n-switch
+                    size="small"
+                    :value="!!selectedComponent.props?.addable"
+                    @update:value="updateComponent({ props: { addable: $event } })"
                   />
                 </label>
               </div>
@@ -4074,7 +4149,7 @@ import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRules
 import { getDictData } from '@/composables/useDict'
 import { COMMON_VALIDATION_PRESETS, getValidationPreset } from '@/utils/validation-presets'
 import BusinessFieldPropertyPanel from '../BusinessFieldPropertyPanel.vue'
-import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
+import { appendDesignerLayoutChild, cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
 import { buildDefaultPlaceholder, buildFieldAssetPlaceholderPatch, shouldSyncPlaceholder } from './placeholder-utils'
 
@@ -4369,8 +4444,10 @@ const datePickerType = computed(() => {
 
 watch(() => props.selectedId, () => {
   propertySearchHit.value = ''
-  selectedBasicExpandedNames.value = [...basicExpandedNames]
-})
+  selectedBasicExpandedNames.value = isTabsLayout.value
+    ? [...basicExpandedNames, 'tabs']
+    : [...basicExpandedNames]
+}, { immediate: true })
 
 watch(() => props.objectCode, () => {
   codeRuleRequestVersion += 1
@@ -5908,24 +5985,7 @@ function updateDefaultValue(value) {
 function addLayoutChild(componentKey = '') {
   if (!selectedComponent.value)
     return
-  const nextChildren = cloneValue(layoutChildren.value || [])
-  const index = nextChildren.length + 1
-  const isTabsChild = componentKey === 'tabPane'
-  const label = isTabsChild ? `标签 ${index}` : `分组 ${index}`
-  const id = `${selectedComponent.value.id}_${isTabsChild ? 'pane' : 'item'}_${Date.now()}`
-  nextChildren.push({
-    id,
-    componentKey: isTabsChild ? 'tabPane' : 'collapseItem',
-    label,
-    props: isTabsChild ? { label, name: id } : { title: label, name: id },
-    layout: {
-      span: selectedComponent.value.layout?.span || normalizedFormGridColumns.value,
-      align: 'left',
-    },
-    children: [],
-  })
-  updateComponent({ children: nextChildren })
-  emit('update:selectedId', id)
+  emit('update:schema', appendDesignerLayoutChild(props.schema, selectedComponent.value.id, componentKey))
 }
 
 function updateLayoutChild(index, patch = {}) {
