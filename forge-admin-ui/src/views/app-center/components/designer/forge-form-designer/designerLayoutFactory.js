@@ -256,7 +256,7 @@ export function createForgeFieldTemplateComponent(template = {}, schema = {}) {
       ...(template.props || {}),
     },
     layout: {
-      span: ['textarea', 'fileUpload', 'imageUpload', 'daterange', 'datetimerange', 'timerange'].includes(componentKey) ? Math.min(2, gridColumns) : 1,
+      span: ['textarea', 'fileUpload', 'imageUpload', 'barcodeScanner', 'daterange', 'datetimerange', 'timerange'].includes(componentKey) ? Math.min(2, gridColumns) : 1,
       align: 'left',
     },
     validation: {
@@ -273,6 +273,11 @@ export function createForgeFieldTemplateComponent(template = {}, schema = {}) {
 
 function buildTemplateDefaultProps(componentKey = '') {
   const map = {
+    barcodeScanner: {
+      allowManualInput: true,
+      timeoutMs: 30000,
+      formats: ['CODE128', 'CODE39', 'EAN13', 'EAN8', 'UPC', 'ITF14'],
+    },
     radioButton: {
       options: buildDefaultOptions(),
     },

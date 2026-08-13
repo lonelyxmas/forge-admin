@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createForgeFieldTemplateComponent } from '../../forge-form-designer/designerLayoutFactory'
 import { buildAutoFieldAssets } from '../autoFieldRegistry'
 import {
+  createDefaultFormDesignerSchema,
   appendDesignerLayoutChild,
   getDesignerComponent,
   insertDesignerComponent,
@@ -114,5 +115,75 @@ describe('formDesignerSchema', () => {
     expect(tabs.children.map(item => item.componentKey)).toEqual(['tabPane', 'tabPane', 'tabPane'])
     expect(new Set(tabs.children.map(item => item.id)).size).toBe(3)
     expect(tabs.children.every(item => Array.isArray(item.children))).toBe(true)
+  })
+
+  it('preserves managed offline draft governance through schema normalization', () => {
+    const schema = normalizeFormDesignerSchema({
+      formKey: 'presale_form',
+      settings: {
+        governance: {
+          offlineDraft: {
+            enabled: true,
+            formCode: 'presale_form',
+            replayActionCode: 'submit_presale',
+            recordVersionField: 'updateTime',
+          },
+        },
+      },
+    })
+
+    expect(schema.settings.governance.offlineDraft).toEqual({
+      enabled: true,
+      formCode: 'presale_form',
+      replayActionCode: 'submit_presale',
+      recordVersionField: 'updateTime',
+    })
+  })
+
+  it('migrates legacy show-hide interactions to target runtime rules', () => {
+    const schema = normalizeFormDesignerSchema({
+      components: [
+        {
+          id: 'source',
+          componentKey: 'select',
+          fieldBinding: { fieldCode: 'deliveryMode' },
+          props: {
+            __events: [{ id: 'show_pickup', action: 'showHide', targetId: 'pickup', whenValue: 'PICKUP', value: 'true' }],
+          },
+        },
+        {
+          id: 'pickup',
+          componentKey: 'input',
+          fieldBinding: { fieldCode: 'pickupAddress' },
+        },
+      ],
+    })
+
+    expect(schema.components[1].props.runtimeRules).toEqual([
+      expect.objectContaining({
+        legacyEventId: 'legacy:source:show_pickup:showHide',
+        conditions: [{ source: 'formData', field: 'deliveryMode', operator: 'eq', value: 'PICKUP' }],
+        effect: { visible: true, whenUnmatched: 'hidden' },
+      }),
+    ])
+
+    schema.components[0].props.__events = []
+    const normalizedAfterRemoval = normalizeFormDesignerSchema(schema)
+    expect(normalizedAfterRemoval.components[1].props.runtimeRules).toEqual([])
+  })
+
+  it('keeps hidden field assets when they carry visibility rules', () => {
+    const schema = createDefaultFormDesignerSchema({
+      fields: [{
+        field: 'pickupAddress',
+        fieldName: '取货地址',
+        formVisible: false,
+        basicProps: {
+          runtimeRules: [{ conditions: [{ field: 'deliveryMode', value: 'PICKUP' }], effect: { visible: true } }],
+        },
+      }],
+    })
+
+    expect(schema.components.map(component => component.fieldBinding.fieldCode)).toContain('pickupAddress')
   })
 })

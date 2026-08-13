@@ -16,6 +16,7 @@ export {
 
 const FIELD_COMPONENT_KEYS = new Set([
   'input',
+  'barcodeScanner',
   'textarea',
   'number',
   'inputNumber',
@@ -109,6 +110,7 @@ export const VIRTUAL_COMPONENT_KEYS = new Set([
   'html-tag',
   'markdown',
   'barcode',
+  'barcodeScanner',
   'qrcode',
   'calendar',
   'code',
@@ -209,6 +211,7 @@ const GENERIC_COMPONENT_ID_SUFFIXES = new Set([
   'htmltag',
   'markdown',
   'barcode',
+  'barcodeScanner',
   'qrcode',
   'calendar',
   'code',
@@ -246,6 +249,7 @@ const FULL_ROW_COMPONENT_KEYS = new Set([
   'html-tag',
   'markdown',
   'barcode',
+  'barcodeScanner',
   'qrcode',
   'calendar',
   'code',
@@ -304,6 +308,7 @@ const LAYOUT_COMPONENT_LABELS = Object.assign({
   watermark: '水印',
   markdown: 'Markdown',
   barcode: '条形码',
+  barcodeScanner: '扫码输入',
   qrcode: '二维码',
   calendar: '日历',
   code: '代码',
@@ -403,7 +408,7 @@ export function createDefaultFormDesignerSchema(options = {}) {
       columnGap: 16,
     },
     components: fields
-      .filter(field => field && field.formVisible !== false && !field.systemField && (options.includeReadonlyFields || !field.readonly))
+      .filter(field => field && (field.formVisible !== false || hasFieldRuntimeVisibilityRules(field)) && !field.systemField && (options.includeReadonlyFields || !field.readonly))
       .map((field, index) => createComponentFromField(field, index)),
   }, gridColumns)
 }
@@ -412,16 +417,124 @@ export function normalizeFormDesignerSchema(source = {}) {
   const schema = isPlainObject(source) ? cloneValue(source) : {}
   const components = Array.isArray(schema.components) ? schema.components : []
   const usedIds = new Set()
+  const normalizedComponents = components
+    .map((component, index) => normalizeComponent(component, index, usedIds))
+    .filter(Boolean)
   return {
     schemaVersion: schema.schemaVersion || FORM_DESIGNER_SCHEMA_VERSION,
     formKey: schema.formKey || buildFormKey(schema.objectCode),
     formName: schema.formName || '业务表单',
     layout: normalizeLayout(schema.layout),
-    components: components
-      .map((component, index) => normalizeComponent(component, index, usedIds))
-      .filter(Boolean),
+    components: migrateLegacyInteractionRules(normalizedComponents),
     settings: isPlainObject(schema.settings) ? schema.settings : {},
   }
+}
+
+/**
+ * 兼容早期属性面板把“显示/隐藏、启用/禁用”保存到 source.props.__events 的协议。
+ * 运行时规则属于目标组件，因此在规范化阶段把旧事件投影到目标组件，保证预览、发布和下载共用同一份规则。
+ */
+function migrateLegacyInteractionRules(components = []) {
+  const byId = new Map()
+  const sources = []
+  const walk = (items = []) => {
+    ;(Array.isArray(items) ? items : []).forEach((component) => {
+      if (!component || typeof component !== 'object')
+        return
+      if (component.id)
+        byId.set(component.id, component)
+      sources.push(component)
+      walk(component.children || [])
+    })
+  }
+  walk(components)
+
+  // 派生规则由旧事件重新计算；先清理旧投影，确保删除或修改来源事件后目标状态同步更新。
+  sources.forEach((component) => {
+    const currentRules = Array.isArray(component.props?.runtimeRules) ? component.props.runtimeRules : []
+    const retainedRules = currentRules.filter(rule => !rule?.legacyEventId)
+    if (retainedRules.length === currentRules.length)
+      return
+    component.props = {
+      ...(component.props || {}),
+      runtimeRules: retainedRules,
+    }
+  })
+
+  sources.forEach((source) => {
+    const sourceField = source.fieldBinding?.fieldCode
+    if (!sourceField)
+      return
+    const events = Array.isArray(source.props?.__events) ? source.props.__events : []
+    events.forEach((event, eventIndex) => {
+      const action = String(event?.action || '').trim()
+      if (!['showHide', 'enableDisable'].includes(action) || !event?.targetId)
+        return
+      const target = byId.get(event.targetId)
+      if (!target || target === source)
+        return
+      const marker = `legacy:${source.id}:${event.id || eventIndex}:${action}`
+      const currentRules = Array.isArray(target.props?.runtimeRules) ? target.props.runtimeRules : []
+      if (currentRules.some(rule => rule?.id === marker || rule?.legacyEventId === marker))
+        return
+
+      const nextRule = {
+        id: marker,
+        legacyEventId: marker,
+        enabled: event.enabled !== false,
+        mode: 'all',
+        conditions: event.whenValue === undefined || event.whenValue === ''
+          ? []
+          : [{ source: 'formData', field: sourceField, operator: 'eq', value: event.whenValue }],
+        effect: action === 'showHide'
+          ? buildLegacyVisibilityEffect(event.value)
+          : buildLegacyDisabledEffect(event.value),
+      }
+      target.props = {
+        ...(target.props || {}),
+        runtimeRules: [...currentRules, nextRule],
+      }
+    })
+  })
+  return components
+}
+
+function buildLegacyVisibilityEffect(value) {
+  const visible = parseLegacyBoolean(value, true)
+  return visible
+    ? { visible: true, whenUnmatched: 'hidden' }
+    : { hidden: true, whenUnmatched: 'visible' }
+}
+
+function buildLegacyDisabledEffect(value) {
+  const enabled = parseLegacyBoolean(value, true)
+  return { disabled: !enabled }
+}
+
+function parseLegacyBoolean(value, fallback) {
+  if (value === true || value === false)
+    return value
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized))
+    return true
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized))
+    return false
+  return fallback
+}
+
+function hasFieldRuntimeVisibilityRules(field = {}) {
+  const candidates = [field.runtimeRules, field.props?.runtimeRules, field.basicProps?.runtimeRules]
+  return candidates.some(value => Array.isArray(value) && value.some((rule) => {
+    if (rule?.enabled === false)
+      return false
+    const effect = {
+      ...(rule?.effect || {}),
+      ...(rule?.actions || {}),
+      ...(rule?.then || {}),
+      ...rule,
+    }
+    return Object.prototype.hasOwnProperty.call(effect, 'visible') || effect.hidden === true
+  }))
 }
 
 export function normalizeMultiFormDesignerSchema(source = {}) {

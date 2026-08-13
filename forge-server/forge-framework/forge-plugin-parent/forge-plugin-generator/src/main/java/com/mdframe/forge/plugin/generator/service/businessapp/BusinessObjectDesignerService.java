@@ -75,7 +75,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
     private static final String OBJECT_OPTION_RUNTIME_DATASOURCE_ID = "runtimeDatasourceId";
     private static final String OBJECT_OPTION_RUNTIME_DATASOURCE = "runtimeDatasource";
     private static final Set<String> FORM_FIELD_COMPONENT_KEYS = Set.of(
-            "input", "textarea", "number", "inputNumber", "input-number", "inputnumber",
+            "input", "barcodeScanner", "textarea", "number", "inputNumber", "input-number", "inputnumber",
             "integer", "money", "date", "datetime", "time",
             "switch", "select", "radio", "checkbox", "dictSelect", "cascader",
             "regionTreeSelect", "orgTreeSelect", "orgSelect", "departmentSelect", "departmentTreeSelect",
@@ -114,6 +114,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
     );
     private static final Map<String, ComponentFieldDefaults> COMPONENT_FIELD_DEFAULTS = Map.ofEntries(
             Map.entry("input", new ComponentFieldDefaults("TEXT", "varchar", 128, 2, "like")),
+            Map.entry("barcodeScanner", new ComponentFieldDefaults("TEXT", "varchar", 2048, 2, "eq")),
             Map.entry("textarea", new ComponentFieldDefaults("MULTILINE", "text", null, 2, "like")),
             Map.entry("number", new ComponentFieldDefaults("NUMBER", "int", 11, 0, "eq")),
             Map.entry("inputNumber", new ComponentFieldDefaults("NUMBER", "int", 11, 0, "eq")),
@@ -1319,6 +1320,8 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
         props.put("sourceObjectCode", relation.getSourceObjectCode());
         props.put("targetObjectCode", relation.getTargetObjectCode());
         props.put("businessObjectCode", relation.getTargetObjectCode());
+        props.put("relationKey", StringUtils.defaultIfBlank(
+                text(config.get("relationKey")), defaultRelationKey(relation.getTargetObjectCode())));
         props.put("showInDetail", readBoolean(config.get("showInDetail"), true));
         props.put("inlineCreateEnabled", readBoolean(config.get("inlineCreateEnabled"), true));
         props.put("inlineEditEnabled", readBoolean(config.get("inlineEditEnabled"), true));
@@ -1329,6 +1332,10 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
         Object recordSelector = config.get("recordSelector");
         if (recordSelector instanceof Map<?, ?> selector && !selector.isEmpty()) {
             props.put("recordSelector", selector);
+        }
+        Object rowActions = config.get("rowActions");
+        if (rowActions instanceof List<?> actions && !actions.isEmpty()) {
+            props.put("rowActions", actions);
         }
         putIfNotBlank(props, "displayField", resolveRelationDisplayField(relation));
         return props;
@@ -1342,6 +1349,15 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
 
     private String normalizeChildSaveMode(Object value) {
         return "merge".equalsIgnoreCase(text(value)) ? "merge" : "replace";
+    }
+
+    private String defaultRelationKey(String value) {
+        return StringUtils.defaultString(value)
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replaceAll("[^A-Za-z0-9_]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_+|_+$", "")
+                .toLowerCase(Locale.ROOT);
     }
 
     private Map<String, Object> toLookupRelationProps(AiBusinessObjectRelation relation) {
@@ -2184,6 +2200,9 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
     private String resolveFormComponentKey(LowcodeFieldSchema field) {
         String componentType = StringUtils.defaultString(field.getComponentType());
         String businessType = StringUtils.defaultString(field.getBusinessFieldType()).toUpperCase(Locale.ROOT);
+        if ("barcodeScanner".equals(componentType)) {
+            return "barcodeScanner";
+        }
         if ("textarea".equals(componentType) || "MULTILINE".equals(businessType)) {
             return "textarea";
         }
@@ -2551,7 +2570,8 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
                     continue;
                 }
                 Map<String, Object> visibility = mapValue(component.get("visibility"));
-                if (readBoolean(visibility.get("hidden"), false)) {
+                if (readBoolean(visibility.get("hidden"), false)
+                        && !hasRuntimeVisibilityRules(component)) {
                     continue;
                 }
                 formFieldRefs.add(fieldCode);
@@ -2604,7 +2624,8 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
             Map<String, Object> binding = mapValue(component.get("fieldBinding"));
             String fieldCode = text(binding.get("fieldCode"));
             if (StringUtils.isBlank(fieldCode) || !modelFields.contains(fieldCode)
-                    || readBoolean(mapValue(component.get("visibility")).get("hidden"), false)) {
+                    || (readBoolean(mapValue(component.get("visibility")).get("hidden"), false)
+                    && !hasRuntimeVisibilityRules(component))) {
                 return null;
             }
             Map<String, Object> node = new LinkedHashMap<>();
@@ -2739,11 +2760,47 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
         if (visibility.containsKey("readonly")) {
             setting.put("readonly", readBoolean(visibility.get("readonly"), false));
         }
+        if (visibility.containsKey("hidden")) {
+            setting.put("hidden", readBoolean(visibility.get("hidden"), false));
+            setting.put("formVisible", !readBoolean(visibility.get("hidden"), false));
+        }
+        Object runtimeRules = props.get("runtimeRules");
+        if (runtimeRules instanceof List<?> runtimeRuleList && !runtimeRuleList.isEmpty()) {
+            setting.put("runtimeRules", runtimeRuleList);
+        } else if (component.get("runtimeRules") instanceof List<?> directRuleList) {
+            setting.put("runtimeRules", directRuleList);
+        }
         putIfNotBlank(setting, "dictType", text(props.get("dictType")));
         if (props.containsKey("defaultValue")) {
             setting.put("defaultValue", props.get("defaultValue"));
         }
         return setting;
+    }
+
+    private boolean hasRuntimeVisibilityRules(Map<String, Object> component) {
+        if (component == null) {
+            return false;
+        }
+        Object directRules = component.get("runtimeRules");
+        if (containsVisibilityRule(directRules)) {
+            return true;
+        }
+        return containsVisibilityRule(mapValue(component.get("props")).get("runtimeRules"));
+    }
+
+    private boolean containsVisibilityRule(Object value) {
+        if (!(value instanceof List<?> rules)) {
+            return false;
+        }
+        return rules.stream().filter(item -> item instanceof Map<?, ?>)
+                .map(item -> (Map<?, ?>) item)
+                .anyMatch(rule -> {
+                    Object effectValue = rule.get("effect");
+                    if (effectValue instanceof Map<?, ?> effect) {
+                        return effect.containsKey("visible") || effect.containsKey("hidden");
+                    }
+                    return rule.containsKey("visible") || rule.containsKey("hidden");
+                });
     }
 
     private Map<String, Object> sanitizeRuntimeFieldProps(Map<String, Object> source) {

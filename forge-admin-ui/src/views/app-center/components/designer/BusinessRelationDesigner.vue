@@ -1544,6 +1544,7 @@ function toRelationPayload(relation = {}) {
 
 function buildRelationConfig(relation) {
   const config = {}
+  config.relationKey = relationCollectionKey(relation)
   if (relation.detailTabTitle)
     config.detailTabTitle = relation.detailTabTitle
   config.showInDetail = relation.showInDetail !== false

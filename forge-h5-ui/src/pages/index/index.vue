@@ -395,6 +395,7 @@ function isRegisteredH5Route(path) {
     'pages/mine/index',
     'pages/demo/loading/index',
     'pages/app-entry',
+    'pages/lowcode-runtime',
   ].includes(normalized)
 }
 
@@ -512,7 +513,16 @@ function openBackendMenu(item) {
     uni.navigateTo({ url: `/pages/app-entry?title=${encodeURIComponent(item.label)}&path=${encodeURIComponent(path)}` })
     return
   }
+  const lowcodeConfigKey = resolveLowcodeConfigKey(path)
+  if (lowcodeConfigKey) {
+    uni.navigateTo({ url: `/pages/lowcode-runtime?configKey=${encodeURIComponent(lowcodeConfigKey)}&title=${encodeURIComponent(item.label)}` })
+    return
+  }
   toast(`${item.label}页面待接入`, { type: 'info' })
+}
+
+function resolveLowcodeConfigKey(path) {
+  return String(path || '').match(/(?:crud-page|crud)\/([^/?]+)/)?.[1] || ''
 }
 
 function openMessage(message) {

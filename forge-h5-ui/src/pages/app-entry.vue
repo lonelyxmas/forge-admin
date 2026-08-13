@@ -22,7 +22,22 @@ const title = ref('应用功能')
 
 onLoad((query = {}) => {
   title.value = String(query.title || '应用功能')
+  const configKey = String(query.configKey || '').trim()
+  const path = String(query.path || '').trim()
+  if (configKey || /(?:crud-page|crud)\//.test(path)) {
+    const params = Object.entries({
+      configKey: configKey || resolveConfigKey(path),
+      title: title.value,
+      ...(query.mode ? { mode: query.mode } : {}),
+      ...(query.recordId ? { recordId: query.recordId } : {}),
+    }).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&')
+    uni.redirectTo({ url: `/pages/lowcode-runtime?${params}` })
+  }
 })
+
+function resolveConfigKey(path) {
+  return String(path || '').match(/(?:crud-page|crud)\/([^/?]+)/)?.[1] || ''
+}
 
 function goHome() {
   uni.switchTab({ url: '/pages/index/index' })

@@ -210,6 +210,7 @@ const fieldTemplateGroups = [
     title: '输入',
     items: [
       { componentKey: 'input', label: '输入框', icon: TextOutline },
+      { componentKey: 'barcodeScanner', label: '扫码输入', icon: StatsChartOutline },
       { componentKey: 'textarea', label: '多行文本', icon: DocumentTextOutline },
       { componentKey: 'number', label: '数字', icon: CalculatorOutline },
       { componentKey: 'money', label: '金额', icon: CashOutline },

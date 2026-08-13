@@ -269,6 +269,7 @@ import {
   isReadonlySystemField,
   syncPageSchemaWithModel,
 } from '@/components/lowcode-builder/page/page-schema'
+import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/runtime-rules'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets } from './form-first/autoFieldRegistry'
@@ -314,6 +315,7 @@ const emit = defineEmits(['update:modelValue', 'update:formDesignerSchema', 'sav
 
 const FORM_FIELD_COMPONENT_KEYS = new Set([
   'input',
+  'barcodeScanner',
   'textarea',
   'number',
   'inputNumber',
@@ -352,6 +354,7 @@ const DICT_FIELD_TYPES = new Set(['DICT', 'SELECT', 'RADIO', 'CHECKBOX', 'MULTI_
 const DICT_COMPONENT_TYPES = new Set(['dictSelect', 'select', 'radio', 'checkbox', 'cascader'])
 const COMPONENT_FIELD_DEFAULTS = {
   input: { fieldType: 'TEXT', businessFieldType: 'TEXT', dataType: 'varchar', componentType: 'input', length: 128, precision: 2, queryType: 'like' },
+  barcodeScanner: { fieldType: 'TEXT', businessFieldType: 'TEXT', dataType: 'varchar', componentType: 'barcodeScanner', length: 2048, precision: 2, queryType: 'eq' },
   textarea: { fieldType: 'MULTILINE', businessFieldType: 'MULTILINE', dataType: 'text', componentType: 'textarea', length: null, precision: 2, queryType: 'like' },
   number: { fieldType: 'NUMBER', businessFieldType: 'NUMBER', dataType: 'int', componentType: 'number', length: 11, precision: 0, queryType: 'eq' },
   inputNumber: { fieldType: 'NUMBER', businessFieldType: 'NUMBER', dataType: 'int', componentType: 'number', length: 11, precision: 0, queryType: 'eq' },
@@ -666,7 +669,7 @@ function buildFormRuntimeFieldSettings(schema, fieldSet, gridColumns, defaultLab
     if (!FORM_FIELD_COMPONENT_KEYS.has(componentKey))
       return
     const fieldCode = component?.fieldBinding?.fieldCode || ''
-    if (!fieldCode || !fieldSet.has(fieldCode) || component?.visibility?.hidden)
+    if (!fieldCode || !fieldSet.has(fieldCode) || (component?.visibility?.hidden && !hasRuntimeVisibilityRules(component)))
       return
     settings[fieldCode] = buildRuntimeFormFieldSetting(component, gridColumns, defaultLabelWidth, inheritedSpan)
   })
@@ -700,6 +703,10 @@ function buildRuntimeFormFieldSetting(component, gridColumns, defaultLabelWidth,
       setting.trigger = requiredRule.trigger
     if (!setting.requiredMessage && requiredRule?.message)
       setting.requiredMessage = requiredRule.message
+  }
+  if (component.visibility && Object.prototype.hasOwnProperty.call(component.visibility, 'hidden')) {
+    setting.hidden = Boolean(component.visibility.hidden)
+    setting.formVisible = !component.visibility.hidden
   }
   if (component.visibility && Object.prototype.hasOwnProperty.call(component.visibility, 'readonly'))
     setting.readonly = Boolean(component.visibility.readonly)
@@ -755,7 +762,7 @@ function buildRuntimeFormLayoutNode(component = {}, index = 0, fieldSet, gridCol
   const key = component.id || `${componentKey || 'node'}_${index}`
   if (FORM_FIELD_COMPONENT_KEYS.has(componentKey)) {
     const fieldCode = component.fieldBinding?.fieldCode || ''
-    if (!fieldCode || !fieldSet.has(fieldCode) || component.visibility?.hidden)
+    if (!fieldCode || !fieldSet.has(fieldCode) || (component.visibility?.hidden && !hasRuntimeVisibilityRules(component)))
       return null
     return {
       nodeType: 'field',

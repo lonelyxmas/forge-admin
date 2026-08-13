@@ -1190,7 +1190,8 @@ function handleListCustomActionsUpdate(actions = []) {
   const nextActions = normalizeListCustomActions(actions)
   listCustomActions.value = nextActions
   setLocalSchema(syncSchemaCustomActions(localSchema.value, nextActions))
-  emit('update:designerActions', cloneSchema(nextActions.map((action, index) => listActionToDesignerAction(action, index, { preserveDraftParams: true }))))
+  const managedActions = nextActions.map((action, index) => listActionToDesignerAction(action, index, { preserveDraftParams: true }))
+  emit('update:designerActions', cloneSchema(mergeUnmanagedChildRowActions(managedActions)))
   emit('dirtyChange', true)
 }
 
@@ -1207,13 +1208,29 @@ function createRowCustomAction() {
 }
 
 function buildDesignerActionsForSave() {
-  return normalizeListCustomActions(listCustomActions.value).map((action, index) => listActionToDesignerAction(action, index))
+  const managedActions = normalizeListCustomActions(listCustomActions.value)
+    .map((action, index) => listActionToDesignerAction(action, index))
+  return mergeUnmanagedChildRowActions(managedActions)
 }
 
 function normalizeDesignerActionsForList(actions = []) {
   if (!Array.isArray(actions))
     return []
-  return normalizeListCustomActions(actions.map(designerActionToListAction))
+  return normalizeListCustomActions(actions
+    .filter(action => !isChildRowDesignerAction(action))
+    .map(designerActionToListAction))
+}
+
+function mergeUnmanagedChildRowActions(managedActions = []) {
+  const childActions = (Array.isArray(props.designerActions) ? props.designerActions : [])
+    .filter(isChildRowDesignerAction)
+  return [...managedActions, ...cloneSchema(childActions)]
+}
+
+function isChildRowDesignerAction(action = {}) {
+  return String(action.actionPosition || action.position || '')
+    .replace(/[-\s]+/g, '_')
+    .toUpperCase() === 'CHILD_ROW'
 }
 
 function syncSchemaCustomActions(schema = {}, actions = []) {

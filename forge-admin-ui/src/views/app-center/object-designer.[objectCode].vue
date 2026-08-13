@@ -159,6 +159,8 @@
       :model-schema="draft.modelSchema"
       :relations="draft.relations"
       :suite-code="draft.suiteCode"
+      :object-code="draft.objectCode"
+      :config-key="draft.configKey"
       :document-config="draft.documentConfig"
       @update:actions="handleActionsUpdated"
       @dirty-change="handleDirtyChange"

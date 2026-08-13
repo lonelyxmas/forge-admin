@@ -501,7 +501,7 @@ const beforeActive = computed(() => designerDropKey.value === beforeDropKey.valu
 const afterActive = computed(() => designerDropKey.value === afterDropKey.value)
 const activeInside = computed(() => designerDropKey.value === insideDropKey.value)
 const displayLabel = computed(() => props.component.label || props.component.props?.header || props.component.props?.title || props.component.componentKey)
-const previewContext = computed(() => ({ mode: 'designer-preview' }))
+const previewContext = computed(() => ({ mode: 'designer-preview', disableRuntimeRules: true }))
 const previewFormData = computed(() => ({
   [props.component.fieldBinding?.fieldCode || props.component.id]: previewValue.value,
 }))
@@ -615,6 +615,7 @@ const previewField = computed(() => {
     options: resolvePreviewOptions(rawProps, componentKey),
     props: {
       ...rawProps,
+      runtimeRules: [],
       disabled: false,
       readonly: false,
     },
