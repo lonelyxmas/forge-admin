@@ -87,24 +87,29 @@
         <view class="runtime-child-card__head">
           <view>
             <text class="runtime-child-card__title">{{ childTitle(child) }}</text>
-            <text class="runtime-child-card__count">{{ childRows(child).length }} 条</text>
+            <text class="runtime-child-card__count">{{ childSubtitle(child) || `${childRows(child).length} 条` }}</text>
           </view>
           <AiButton v-if="mode !== 'detail' && child.inlineCreateEnabled !== false && child.readonly !== true" size="sm" variant="secondary" @click="addChildRow(child)">添加</AiButton>
         </view>
         <view v-if="childRows(child).length" class="runtime-child-list">
           <view v-for="(row, rowIndex) in childRows(child)" :key="String(row.id || rowIndex)" class="runtime-child-row">
-            <LowcodeForm
-              :ref="instance => setChildFormRef(child, row, rowIndex, instance)"
-              :fields="child.fields"
-              :data="row"
-              :dict-options="dictOptions"
-              :current-children="childData"
-              :readonly="mode === 'detail' || child.readonly === true"
-              :context="runtimeContext"
-              @field-event="payload => handleChildFieldEvent(child, row, payload)"
-            />
-            <view v-if="mode !== 'detail' && child.readonly !== true" class="runtime-child-row__tools">
-              <AiButton size="sm" variant="danger" @click="removeChildRow(child, rowIndex)">删除</AiButton>
+            <view class="runtime-child-row__head">
+              <text class="runtime-child-row__title">第 {{ rowIndex + 1 }} 条</text>
+              <view v-if="mode !== 'detail' && child.readonly !== true" class="runtime-child-row__tools">
+                <AiButton size="sm" variant="danger" @click="removeChildRow(child, rowIndex)">删除</AiButton>
+              </view>
+            </view>
+            <view class="runtime-child-row__body">
+              <LowcodeForm
+                :ref="instance => setChildFormRef(child, row, rowIndex, instance)"
+                :fields="child.fields"
+                :data="row"
+                :dict-options="dictOptions"
+                :current-children="childData"
+                :readonly="mode === 'detail' || child.readonly === true"
+                :context="runtimeContext"
+                @field-event="payload => handleChildFieldEvent(child, row, payload)"
+              />
             </view>
             <view v-if="childActions(child, row).length" class="runtime-actions runtime-actions--child">
               <AiButton v-for="action in childActions(child, row)" :key="action.actionCode || action.key" size="sm" variant="secondary" @click="runAction(action, row, child)">
@@ -161,6 +166,7 @@ import {
   resolveActionDefinition,
   resolveChildRows,
   resolveChildTitle,
+  resolveChildSubtitle,
   safeEventRules,
   shouldSkipFieldEvent,
   syncChildRowAliases,
@@ -470,7 +476,7 @@ async function runAction(action, row, child) {
     formData[input.name] = input.type === 'INTEGER' || input.type === 'NUMBER' ? Number(value) : value
   }
   try {
-    const objectCode = child?.objectCode || child?.targetObjectCode || child?.modelCode?.toUpperCase() || config.value.objectCode
+    const objectCode = resolveActionObjectCode(child)
     const parentId = child ? (mainData.id || mainData[config.value.rowKey || 'id']) : undefined
     const response = await api.executeBusinessAction(buildActionPayload({
       action: resolved,
@@ -495,6 +501,13 @@ async function runAction(action, row, child) {
 
 function mainActions(row) { return normalizeActions(config.value).filter(action => !action.relationKey && actionVisible(action, row)) }
 function childActions(child, row) { return child.rowActions.map(action => resolveActionDefinition(config.value, action)).filter(action => actionVisible(action, row)) }
+function childSubtitle(child) { return resolveChildSubtitle(child) }
+function resolveActionObjectCode(child) {
+  return child?.businessObjectCode
+    || config.value?.objectCode
+    || child?.objectCode
+    || child?.targetObjectCode
+}
 function rowTitle(row) { return row.presaleNo || row[config.value.rowKey || 'id'] || config.value.objectName || '记录' }
 function displayStatus(row) { return formatValue(row.status, { dictType: 'ps_presale_status', prop: 'status' }) }
 function formatValue(value, column = {}) { if (value === undefined || value === null || value === '') return '-'; if (column.dictType) return dictOptions[column.dictType]?.find(item => String(item.value) === String(value))?.label || value; return String(value) }
@@ -536,8 +549,11 @@ function queryString(query = {}) { return Object.entries(query).map(([key, value
 .runtime-form-card__head { flex-direction: column; gap: 6rpx; }
 .runtime-child-card__head { align-items: center; }
 .runtime-child-card__head > view { display: flex; align-items: baseline; gap: 12rpx; }
-.runtime-child-row { padding: 20rpx; border: 1rpx solid #eef2f7; border-radius: 14rpx; background: #fbfdff; }
-.runtime-child-row__tools { margin-top: 4rpx; }
+.runtime-child-row { padding: 20rpx; border: 1rpx solid #eef2f7; border-radius: 16rpx; background: #fbfdff; }
+.runtime-child-row__head { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin-bottom: 14rpx; }
+.runtime-child-row__title { color: #334155; font-size: 24rpx; font-weight: 700; }
+.runtime-child-row__tools { display: flex; align-items: center; justify-content: flex-end; gap: 12rpx; }
+.runtime-child-row__body { padding: 4rpx 0 2rpx; }
 .runtime-child-empty { padding: 30rpx 0; color: #94a3b8; font-size: 24rpx; text-align: center; }
 .runtime-footer-actions { position: sticky; bottom: 0; z-index: 2; justify-content: stretch; padding: 18rpx 0 calc(18rpx + env(safe-area-inset-bottom)); background: rgba(248, 250, 252, .95); }
 .runtime-footer-actions > * { flex: 1; }

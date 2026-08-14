@@ -5,6 +5,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFieldDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageZone;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeModelSchemaNormalizer;
@@ -181,6 +182,40 @@ class BusinessObjectDesignerPageSchemaTest {
         assertEquals("pw_order_status", ((Map<?, ?>) searchSettings.get("orderStatus")).get("dictType"));
         Map<String, Object> tableSettings = fieldSettings(pageSchema, "table");
         assertEquals("dictTag", ((Map<?, ?>) tableSettings.get("orderStatus")).get("renderType"));
+    }
+
+    @Test
+    @DisplayName("keeps existing chinese child tab titles when merging refs")
+    void keepsExistingChineseChildTabTitlesWhenMergingRefs() throws Exception {
+        BusinessObjectDesignerService service = designerService();
+        Method method = BusinessObjectDesignerService.class.getDeclaredMethod(
+                "mergeExistingPageModelRef", LowcodePageModelRef.class, LowcodePageModelRef.class);
+        method.setAccessible(true);
+
+        LowcodePageModelRef target = new LowcodePageModelRef();
+        target.setModelCode("ps_presale_order_item");
+        target.setModelName("预售商品明细");
+        target.setProps(new java.util.LinkedHashMap<>(Map.of(
+                "relationKey", "presale_items",
+                "tabTitle", "presale_items",
+                "relationName", "presale_items"
+        )));
+
+        LowcodePageModelRef existing = new LowcodePageModelRef();
+        existing.setModelCode("ps_presale_order_item");
+        existing.setModelName("预售商品");
+        existing.setProps(new java.util.LinkedHashMap<>(Map.of(
+                "relationKey", "presale_items",
+                "tabTitle", "预售商品",
+                "relationName", "预售商品"
+        )));
+
+        method.invoke(service, target, existing);
+
+        assertEquals("预售商品", target.getModelName());
+        assertEquals("预售商品", target.getProps().get("tabTitle"));
+        assertEquals("预售商品", target.getProps().get("relationName"));
+        assertEquals("presale_items", target.getProps().get("relationKey"));
     }
 
     private LowcodePageSchema ensurePageSchema(LowcodePageSchema pageSchema,

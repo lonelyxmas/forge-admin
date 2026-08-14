@@ -62,6 +62,10 @@ public class LowcodeRuntimeConfigBuilder {
 
         LowcodeRuntimeConfig runtimeConfig = new LowcodeRuntimeConfig();
         runtimeConfig.setConfigKey(configKey);
+        runtimeConfig.setObjectCode(StringUtils.firstNonBlank(
+                modelSchema.getObject() == null ? null : modelSchema.getObject().getCode(),
+                configKey,
+                modelSchema.getTableName()));
         runtimeConfig.setTableName(modelSchema.getTableName());
         runtimeConfig.setTableComment(modelSchema.getBusinessName());
         runtimeConfig.setLayoutType(StringUtils.defaultIfBlank(pageSchema.getLayoutType(), "simple-crud"));

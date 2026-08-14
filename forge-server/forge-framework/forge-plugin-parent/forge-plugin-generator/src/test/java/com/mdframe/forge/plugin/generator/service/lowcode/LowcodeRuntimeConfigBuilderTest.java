@@ -298,6 +298,14 @@ class LowcodeRuntimeConfigBuilderTest {
         assertEquals("COMMAND", action.get("actionType"));
     }
 
+    @Test
+    @DisplayName("publishes primary object code into runtime config")
+    void publishesPrimaryObjectCodeIntoRuntimeConfig() throws Exception {
+        LowcodeRuntimeConfig runtimeConfig = builder.buildRuntimeConfig("pw_purchase_order", purchaseOrderModelSchema(), pageSchema());
+
+        assertEquals("pw_purchase_order", runtimeConfig.getObjectCode());
+    }
+
     private LowcodeModelSchema modelSchema() {
         LowcodeFieldSchema itemName = new LowcodeFieldSchema();
         itemName.setField("itemName");

@@ -114,6 +114,15 @@ export function resolveChildTitle(child = {}) {
   return prettifyTechnicalName(child.key || child.relationKey || child.modelCode || '明细')
 }
 
+export function resolveChildSubtitle(child = {}) {
+  const label = [
+    child.modelName,
+    child.objectName,
+    child.tableComment,
+  ].map(value => String(value || '').trim()).find(Boolean)
+  return label || ''
+}
+
 export function normalizeActions(config = {}) {
   const source = Array.isArray(config.options?.actions) ? config.options.actions : []
   const byCode = new Map(source.map(action => [String(action?.actionCode || action?.key || ''), action]))

@@ -1231,6 +1231,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
     private void syncInlineEditRelationsToPageSchema(DesignerContext context,
                                                      List<AiBusinessObjectRelation> relations) {
         LowcodePageSchema pageSchema = context.getPageSchema() == null ? new LowcodePageSchema() : context.getPageSchema();
+        Map<String, LowcodePageModelRef> existingRefs = indexPageModelRefs(pageSchema);
         LowcodePageModelRef primaryRef = toPageModelRef(context.getObject(), context.getModel(), context.getModelSchema(), true);
         List<LowcodePageModelRef> refs = new ArrayList<>();
         Set<String> addedModelCodes = new LinkedHashSet<>();
@@ -1248,6 +1249,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
             DesignerContext targetContext = loadContext(target.getId());
             LowcodePageModelRef targetRef = toPageModelRef(target, targetContext.getModel(),
                     targetContext.getModelSchema(), false);
+            mergeExistingPageModelRef(targetRef, existingRefs.get(targetRef.getModelCode()));
             if (isEmbeddedRelation(relation)) {
                 targetRef.setRelations(List.of(toRelationToPrimary(relation, primaryRef.getModelCode())));
                 targetRef.setProps(toInlineRelationProps(relation));
@@ -1276,6 +1278,46 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
         }
         syncInlineEditRefsToEditZone(pageSchema, primaryRef, childFieldRefs);
         context.setPageSchema(pageSchema);
+    }
+
+    private Map<String, LowcodePageModelRef> indexPageModelRefs(LowcodePageSchema pageSchema) {
+        Map<String, LowcodePageModelRef> result = new LinkedHashMap<>();
+        if (pageSchema == null || pageSchema.getModelRefs() == null) {
+            return result;
+        }
+        for (LowcodePageModelRef ref : pageSchema.getModelRefs()) {
+            if (ref != null && StringUtils.isNotBlank(ref.getModelCode())) {
+                result.put(ref.getModelCode(), ref);
+            }
+        }
+        return result;
+    }
+
+    private void mergeExistingPageModelRef(LowcodePageModelRef targetRef, LowcodePageModelRef existingRef) {
+        if (targetRef == null || existingRef == null) {
+            return;
+        }
+        Map<String, Object> mergedProps = new LinkedHashMap<>();
+        if (targetRef.getProps() != null) {
+            mergedProps.putAll(targetRef.getProps());
+        }
+        if (existingRef.getProps() != null) {
+            mergedProps.putAll(existingRef.getProps());
+        }
+        targetRef.setProps(mergedProps);
+        if (StringUtils.isNotBlank(existingRef.getModelName())) {
+            targetRef.setModelName(existingRef.getModelName());
+        }
+        if (StringUtils.isNotBlank(text(existingRef.getProps().get("tabTitle")))) {
+            targetRef.getProps().put("tabTitle", text(existingRef.getProps().get("tabTitle")));
+        }
+        if (StringUtils.isNotBlank(text(existingRef.getProps().get("relationName")))) {
+            targetRef.getProps().put("relationName", text(existingRef.getProps().get("relationName")));
+        }
+        if (StringUtils.isBlank(text(targetRef.getProps().get("relationKey")))
+                && StringUtils.isNotBlank(text(existingRef.getProps().get("relationKey")))) {
+            targetRef.getProps().put("relationKey", text(existingRef.getProps().get("relationKey")));
+        }
     }
 
     private boolean addPageModelRef(List<LowcodePageModelRef> refs, Set<String> addedModelCodes, LowcodePageModelRef ref) {

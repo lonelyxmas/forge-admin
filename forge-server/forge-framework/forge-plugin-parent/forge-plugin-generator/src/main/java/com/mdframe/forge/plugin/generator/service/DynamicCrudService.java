@@ -3625,7 +3625,7 @@ public class DynamicCrudService {
         try {
             String text = String.valueOf(rawValue).trim();
             if (StringUtils.isBlank(text)) {
-                throw new NumberFormatException("blank");
+                return null;
             }
             BigDecimal amount = new BigDecimal(text).stripTrailingZeros();
             if (amount.scale() > field.scale()) {
