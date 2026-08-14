@@ -3,8 +3,12 @@ package com.mdframe.forge.plugin.ai.provider.adapter;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.document.MetadataMode;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -44,6 +48,18 @@ public class OpenAiCompatibleProviderAdapter implements AiProviderAdapter {
                 .openAiApi(openAiApi)
                 .defaultOptions(optionsBuilder.build())
                 .build();
+    }
+
+    @Override
+    public EmbeddingModel createEmbeddingModel(AiProvider provider, String model) {
+        validateCommon(provider, new AiModelRuntimeOptions(model, null, null));
+        String baseUrl = AiProviderBaseUrlPolicy.normalizeAndValidate(adapterCode(), provider.getBaseUrl());
+        OpenAiApi openAiApi = OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(provider.getApiKey())
+                .build();
+        return new OpenAiEmbeddingModel(openAiApi, MetadataMode.NONE,
+                OpenAiEmbeddingOptions.builder().model(model).build());
     }
 
     private void validateCommon(AiProvider provider, AiModelRuntimeOptions options) {
