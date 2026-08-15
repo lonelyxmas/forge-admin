@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     preset="card"
-    title="添加子表分区"
+    :title="isEditing ? '编辑子表分区' : '添加子表分区'"
     :bordered="false"
     class="child-table-section-wizard"
     :style="{ width: 'min(760px, calc(100vw - 32px))' }"
@@ -19,6 +19,7 @@
           <n-select
             :value="selectedRelationKey"
             :options="relationOptions"
+            :disabled="relationLocked"
             filterable
             placeholder="请选择 DETAIL 关联关系"
             @update:value="handleRelationChange"
@@ -90,7 +91,7 @@
           取消
         </n-button>
         <n-button type="primary" :disabled="loadingFields" @click="confirmWizard">
-          生成子表分区
+          {{ isEditing ? '保存子表分区' : '生成子表分区' }}
         </n-button>
       </n-space>
     </template>
@@ -115,6 +116,10 @@ const props = defineProps({
   modelRefs: {
     type: Array,
     default: () => [],
+  },
+  modelValue: {
+    type: Object,
+    default: null,
   },
 })
 
@@ -155,11 +160,27 @@ const allFieldsSelected = computed(() => {
 const someFieldsSelected = computed(() => {
   return visibleFieldCodes.value.length > 0 && !allFieldsSelected.value
 })
+const isEditing = computed(() => Boolean(props.modelValue))
+const relationLocked = computed(() => Boolean(props.modelValue?.relationKey))
 
 watch(() => props.show, (show) => {
   if (show)
-    resetWizard()
+    initializeWizard()
 })
+
+async function initializeWizard() {
+  resetWizard()
+  const current = props.modelValue
+  if (!current)
+    return
+  selectedRelationKey.value = current.relationKey || ''
+  sectionTitle.value = current.title || ''
+  displayMode.value = current.displayMode || 'inline_grid'
+  titleTouched.value = true
+  const relation = selectedRelation.value
+  if (relation)
+    await loadRelationFields(relation, current.fieldCodes || [])
+}
 
 function resetWizard() {
   selectedRelationKey.value = ''
@@ -186,7 +207,7 @@ async function handleRelationChange(relationKey) {
   await loadRelationFields(relation)
 }
 
-async function loadRelationFields(relation) {
+async function loadRelationFields(relation, selectedFieldCodes = null) {
   const requestId = ++loadRequestId
   loadingFields.value = true
   try {
@@ -206,7 +227,11 @@ async function loadRelationFields(relation) {
       return
     resolvedObject.value = object || modelRef || null
     availableFields.value = fields
-    visibleFieldCodes.value = fields.map(fieldCode).filter(Boolean)
+    const availableCodes = fields.map(fieldCode).filter(Boolean)
+    const selectedCodes = Array.isArray(selectedFieldCodes) ? new Set(selectedFieldCodes) : null
+    visibleFieldCodes.value = selectedCodes
+      ? availableCodes.filter(code => selectedCodes.has(code))
+      : availableCodes
   }
   catch (error) {
     if (requestId !== loadRequestId)

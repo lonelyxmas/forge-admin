@@ -210,6 +210,8 @@
         :actions="actions"
         @update:model-value="updatePageSectionProtocol"
         @configure-bottom-action="emit('configureBottomAction', $event)"
+        @edit-child-table-section="emit('editChildTableSection', $event)"
+        @remove-child-table-section="emit('removeChildTableSection', $event)"
       />
       <div v-else class="inline-detail-settings">
         <slot name="detail-settings" />
@@ -518,7 +520,16 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'update:linkageSchema', 'dirtyChange', 'moreSelect', 'fieldAssetUpdated', 'configureBottomAction'])
+const emit = defineEmits([
+  'update:modelValue',
+  'update:linkageSchema',
+  'dirtyChange',
+  'moreSelect',
+  'fieldAssetUpdated',
+  'configureBottomAction',
+  'editChildTableSection',
+  'removeChildTableSection',
+])
 const slots = useSlots()
 
 const selectedId = ref('')

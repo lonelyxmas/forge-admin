@@ -61,12 +61,23 @@
               </n-tag>
               <strong>{{ selectedSection.title }}</strong>
             </div>
-            <n-button size="small" quaternary type="error" @click="removeSelectedSection">
-              <template #icon>
-                <n-icon><TrashOutline /></n-icon>
-              </template>
-              删除分区
-            </n-button>
+            <n-space size="small">
+              <n-button
+                v-if="selectedSection.sectionType === 'child_table'"
+                size="small"
+                secondary
+                type="primary"
+                @click="emit('editChildTableSection', { section: { ...selectedSection } })"
+              >
+                编辑子表配置
+              </n-button>
+              <n-button size="small" quaternary type="error" @click="handleRemoveSelectedSection">
+                <template #icon>
+                  <n-icon><TrashOutline /></n-icon>
+                </template>
+                删除分区
+              </n-button>
+            </n-space>
           </div>
 
           <div class="settings-grid">
@@ -567,7 +578,13 @@ const props = defineProps({
     default: () => [],
   },
 })
-const emit = defineEmits(['update:modelValue', 'dirtyChange', 'configureBottomAction'])
+const emit = defineEmits([
+  'update:modelValue',
+  'dirtyChange',
+  'configureBottomAction',
+  'editChildTableSection',
+  'removeChildTableSection',
+])
 
 const modeOptions = [
   { label: '新增', value: 'create' },
@@ -727,6 +744,14 @@ function removeSelectedSection() {
   const nextSections = pageSections.value.filter(section => section.sectionId !== selectedSectionId.value)
   draft.value = { ...draft.value, pageSections: nextSections }
   selectedSectionId.value = nextSections[Math.min(Math.max(currentIndex, 0), nextSections.length - 1)]?.sectionId || ''
+}
+
+function handleRemoveSelectedSection() {
+  if (selectedSection.value?.sectionType === 'child_table') {
+    emit('removeChildTableSection', { section: { ...selectedSection.value } })
+    return
+  }
+  removeSelectedSection()
 }
 
 function updateSectionFields(fieldCodes = []) {

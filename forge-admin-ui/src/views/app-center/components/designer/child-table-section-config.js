@@ -91,6 +91,86 @@ export function upsertChildTableSectionConfig(source = {}, input = {}) {
   return { pageSchema, formDesignerSchema }
 }
 
+export function resolveChildTableSectionEditConfig(source = {}, section = {}) {
+  const pageSchema = source.pageSchema || {}
+  const relationKey = firstNonBlank(section.relationKey, section.key)
+  const children = Array.isArray(pageSchema.options?.masterDetailConfig?.children)
+    ? pageSchema.options.masterDetailConfig.children
+    : []
+  const child = children.find(item => relationKeyOf(item) === relationKey) || {}
+  const modelRefs = Array.isArray(pageSchema.modelRefs) ? pageSchema.modelRefs : []
+  const modelRef = modelRefs.find((item) => {
+    const itemRelationKey = relationKeyOf(item)
+    if (itemRelationKey)
+      return itemRelationKey === relationKey
+    return Boolean(child.modelCode && item.modelCode === child.modelCode)
+  }) || {}
+  const fields = Array.isArray(child.fields) && child.fields.length
+    ? child.fields
+    : (Array.isArray(modelRef.fields) ? modelRef.fields : [])
+  return {
+    relationKey,
+    title: firstNonBlank(section.title, child.modelName, modelRef.modelName, relationKey, '子表分区'),
+    displayMode: ['inline_grid', 'card_list', 'bottom_sheet'].includes(section.displayMode)
+      ? section.displayMode
+      : 'inline_grid',
+    modelCode: firstNonBlank(child.modelCode, modelRef.modelCode, section.modelCode),
+    modelName: firstNonBlank(child.modelName, modelRef.modelName),
+    tableName: firstNonBlank(child.tableName, modelRef.tableName),
+    fieldCodes: fields.map(resolveFieldCode).filter(Boolean),
+  }
+}
+
+export function removeChildTableSectionConfig(source = {}, target = {}) {
+  const pageSchema = cloneValue(source.pageSchema || {})
+  const formDesignerSchema = cloneValue(source.formDesignerSchema || {})
+  const relationKey = firstNonBlank(target.relationKey, target.key)
+  const sectionId = firstNonBlank(target.sectionId, target.sectionKey)
+  const pageSections = Array.isArray(formDesignerSchema.pageSections) ? formDesignerSchema.pageSections : []
+  const removedSections = pageSections.filter(section => matchesRemovalTarget(section, relationKey, sectionId))
+  formDesignerSchema.pageSections = pageSections.filter(section => !matchesRemovalTarget(section, relationKey, sectionId))
+
+  const options = pageSchema.options && typeof pageSchema.options === 'object' ? pageSchema.options : {}
+  const masterDetailConfig = options.masterDetailConfig && typeof options.masterDetailConfig === 'object'
+    ? options.masterDetailConfig
+    : {}
+  const children = Array.isArray(masterDetailConfig.children) ? masterDetailConfig.children : []
+  const removedChildren = children.filter(child => matchesRemovalTarget(child, relationKey))
+  const remainingChildren = children.filter(child => !matchesRemovalTarget(child, relationKey))
+  pageSchema.options = {
+    ...options,
+    masterDetailConfig: {
+      ...masterDetailConfig,
+      children: remainingChildren,
+    },
+  }
+
+  const removedModelCodes = new Set([
+    ...removedChildren.map(child => child?.modelCode),
+    ...removedSections.map(section => section?.modelCode),
+  ].map(value => firstNonBlank(value)).filter(Boolean))
+  const remainingRelationKeys = new Set([
+    ...remainingChildren.map(relationKeyOf),
+    ...formDesignerSchema.pageSections.map(relationKeyOf),
+  ].filter(Boolean))
+  const remainingModelCodes = new Set(remainingChildren.map(child => firstNonBlank(child?.modelCode)).filter(Boolean))
+  const modelRefs = Array.isArray(pageSchema.modelRefs) ? pageSchema.modelRefs : []
+  pageSchema.modelRefs = modelRefs.filter((modelRef) => {
+    if (modelRef?.primary)
+      return true
+    const modelRefRelationKey = relationKeyOf(modelRef)
+    if (modelRefRelationKey) {
+      if (modelRefRelationKey !== relationKey)
+        return true
+      return remainingRelationKeys.has(modelRefRelationKey)
+    }
+    const modelCode = firstNonBlank(modelRef?.modelCode)
+    return !removedModelCodes.has(modelCode) || remainingModelCodes.has(modelCode)
+  })
+
+  return { pageSchema, formDesignerSchema }
+}
+
 export function resolveChildTableRelationKey(relation = {}) {
   const config = parseRelationConfig(relation.relationConfig || relation.config || relation.props)
   return firstNonBlank(
@@ -183,6 +263,16 @@ function matchesRelation(item = {}, config = {}) {
   if (itemRelationKey)
     return itemRelationKey === config.relationKey
   return Boolean(item.modelCode && item.modelCode === config.modelCode)
+}
+
+function matchesRemovalTarget(item = {}, relationKey = '', sectionId = '') {
+  if (sectionId && firstNonBlank(item.sectionId, item.sectionKey) === sectionId)
+    return true
+  return Boolean(relationKey && relationKeyOf(item) === relationKey)
+}
+
+function relationKeyOf(item = {}) {
+  return firstNonBlank(item.relationKey, item.key, item.props?.relationKey)
 }
 
 function upsertAt(items = [], index = -1, value) {

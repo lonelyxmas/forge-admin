@@ -108,6 +108,8 @@
             @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
             @configure-bottom-action="handleConfigureBottomAction"
+            @edit-child-table-section="handleEditChildTableSection"
+            @remove-child-table-section="handleRemoveChildTableSection"
           >
             <template #detail-settings>
               <BusinessDetailDesigner
@@ -283,6 +285,7 @@
       v-model:show="childTableWizardVisible"
       :relations="relations"
       :model-refs="pageModelRefs"
+      :model-value="childTableWizardValue"
       @confirm="handleChildTableSectionConfirm"
     />
     <ButtonActionConfig
@@ -313,7 +316,11 @@ import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/r
 import BusinessDetailDesigner from './BusinessDetailDesigner.vue'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
 import ButtonActionConfig from './ButtonActionConfig.vue'
-import { upsertChildTableSectionConfig } from './child-table-section-config'
+import {
+  removeChildTableSectionConfig,
+  resolveChildTableSectionEditConfig,
+  upsertChildTableSectionConfig,
+} from './child-table-section-config'
 import ChildTableSectionWizard from './ChildTableSectionWizard.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets } from './form-first/autoFieldRegistry'
@@ -452,6 +459,7 @@ const activeObjectKey = ref('primary')
 const formCreateDesignerRef = ref(null)
 const forgeFormDesignerRef = ref(null)
 const childTableWizardVisible = ref(false)
+const childTableWizardValue = ref(null)
 const buttonActionConfigVisible = ref(false)
 const buttonActionIndex = ref(-1)
 const buttonActionValue = ref({})
@@ -1096,6 +1104,16 @@ function handleFormDesignerMoreSelect(key = '') {
 }
 
 function openChildTableSectionWizard() {
+  childTableWizardValue.value = null
+  childTableWizardVisible.value = true
+}
+
+function handleEditChildTableSection(payload = {}) {
+  const section = payload.section || payload
+  childTableWizardValue.value = resolveChildTableSectionEditConfig({
+    pageSchema: localSchema.value,
+    formDesignerSchema: localFormDesignerSchema.value,
+  }, section)
   childTableWizardVisible.value = true
 }
 
@@ -1108,6 +1126,26 @@ function handleChildTableSectionConfirm(config) {
   localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
   emit('dirtyChange', true)
   nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
+}
+
+function handleRemoveChildTableSection(payload = {}) {
+  const section = payload.section || payload
+  window.$dialog.warning({
+    title: '删除子表分区',
+    content: `确认删除“${section.title || '当前子表分区'}”吗？关联的数据模型引用和级联配置将同步清理。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      const result = removeChildTableSectionConfig({
+        pageSchema: localSchema.value,
+        formDesignerSchema: localFormDesignerSchema.value,
+      }, section)
+      assignLocalSchema(result.pageSchema)
+      localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+      emit('dirtyChange', true)
+      nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
+    },
+  })
 }
 
 function handleConfigureBottomAction(payload = {}) {
