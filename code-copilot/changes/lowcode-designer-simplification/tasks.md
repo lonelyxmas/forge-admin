@@ -10,6 +10,8 @@
 
 ### Task 1：移除"默认视图"和"触发器"Tab
 
+**状态：completed（2026-08-15，`e65b6bc8`）**
+
 **文件**：`forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue`
 
 - [ ] 从 `standaloneNavItems` 数组中移除 `default-view`（默认视图）项
@@ -26,6 +28,8 @@
 
 ### Task 2：移除"单据闭环配置"进度块
 
+**状态：completed（2026-08-15，`d2873a3a`）**
+
 **文件**：`forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue`
 
 - [ ] 移除模板中 `closure-steps` 相关的 `<div>` 块（约 L113-L129）
@@ -37,6 +41,8 @@
 - 页面布局不出现空白区域
 
 ### Task 3：流程绑定子Tab 改为只读卡片
+
+**状态：completed（2026-08-15，`2641bb66`、`06afa841`）**
 
 **文件**：
 - `forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue`
@@ -57,6 +63,8 @@
 
 ### Task 4：移除 BusinessActionDesigner 入口
 
+**状态：completed（2026-08-15，`8ed7ee21`）**
+
 **文件**：`forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue`
 
 - [ ] 移除模板中任何直接打开 BusinessActionDesigner 的按钮或链接
@@ -68,6 +76,8 @@
 - `pnpm build` 编译通过
 
 ### Task 5：旧入口的引导提示
+
+**状态：completed（2026-08-15，`1f0d2a64`）**
 
 **文件**：`forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue`
 
@@ -88,6 +98,8 @@
 > 目标：用户在页面设计器中能自动生成子表配置、配置按钮行为。
 
 ### Task 6：子表分区配置向导
+
+**状态：completed（2026-08-15，`a83f618b`）**
 
 **文件**：
 - 新建 `forge-admin-ui/src/views/app-center/components/designer/ChildTableSectionWizard.vue`
@@ -116,6 +128,8 @@
 
 ### Task 7：按钮行为配置组件
 
+**状态：completed（2026-08-15，`70c1cc3b`；页面运行时启动流程依赖 Task 10）**
+
 **文件**：
 - 新建 `forge-admin-ui/src/views/app-center/components/designer/ButtonActionConfig.vue`
 - 修改 `forge-admin-ui/src/views/app-center/components/designer/BusinessFormDesigner.vue`
@@ -140,6 +154,8 @@
 
 ### Task 8：子表分区编辑与删除
 
+**状态：completed（2026-08-15，`4bf4ce79`）**
+
 **文件**：`forge-admin-ui/src/views/app-center/components/designer/BusinessFormDesigner.vue`
 
 - [ ] 分区列表中，子表分区支持点击编辑（重新打开向导，回填配置）
@@ -160,6 +176,8 @@
 
 ### Task 9：页面设计器 → 画布跳转链路
 
+**状态：completed（2026-08-15，`d0f019e1`）**
+
 **文件**：
 - `forge-admin-ui/src/views/app-center/components/designer/ButtonActionConfig.vue`
 - `forge-admin-ui/src/views/app-center/business-process.[processId].vue`
@@ -178,6 +196,8 @@
 
 ### Task 10：画布开始节点关联页面按钮
 
+**状态：blocked（2026-08-15）**。仓库尚未实现业务流程运行时编排器、手动发起接口、节点执行服务或页面运行时 `START_PROCESS` 投影；现有应用发布快照的 `runtimeActions` 明确保持为空，待编排运行时变更实现。继续本项将扩大为 `application-business-process-orchestrator` 中未完成的运行时状态机、动作执行与审批恢复工作，不能用只渲染按钮或返回 404 的占位实现替代。
+
 **文件**：
 - `forge-admin-ui/src/components/business-process-designer/StartNodeConfig.vue`
 - `forge-admin-ui/src/components/business-process-designer/business-process-schema.js`
@@ -195,6 +215,8 @@
 - 按钮点击能启动对应流程
 
 ### Task 11：节点配置场景模板
+
+**状态：completed（2026-08-15，`e89c6578`）**
 
 **文件**：
 - 新建 `forge-admin-ui/src/components/business-process-designer/node-templates.js`
@@ -230,6 +252,8 @@ export const ACTION_NODE_TEMPLATES = [
 
 ### Task 12：旧入口导航引导
 
+**状态：completed（2026-08-15，`466bb929`）**
+
 **文件**：
 - `forge-admin-ui/src/views/app-center/trigger.vue`
 - `forge-admin-ui/src/views/app-center/components/designer/BusinessFlowBindingPanel.vue`
@@ -247,6 +271,8 @@ export const ACTION_NODE_TEMPLATES = [
 - 不影响已有运行实例
 
 ### Task 13：后端 API — 对象参与流程查询
+
+**状态：completed（2026-08-15，`06afa841`）**
 
 **文件**：
 - `forge-server/.../service/businessapp/BusinessProcessService.java`（或新建）
