@@ -41,6 +41,7 @@ describe('standalone object designer navigation', () => {
     expect(objectDesigner).not.toContain('activePanel === \'default-view\'')
     expect(objectDesigner).not.toContain('activePanel === \'triggers\'')
     expect(objectDesigner).not.toContain('BusinessTriggerConfigPanel')
+    expect(objectDesigner).not.toContain('BusinessActionDesigner')
     expect(objectDesigner).toContain('const compatibilityPanel = [\'publish\', \'advanced\'].includes(normalizedPanel)')
     expect(listDesigner).toContain('v-if="!defaultViewOnly" class="list-custom-actions-entry"')
     expect(listDesigner).toContain('const visibleListCustomActions = computed(() => props.defaultViewOnly ? [] : listCustomActions.value)')

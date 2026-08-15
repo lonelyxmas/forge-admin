@@ -10,7 +10,7 @@ const legacySectionMap = {
   'page': 'pages',
   'pages': 'pages',
   'events': 'pages',
-  'actions': 'automation',
+  'actions': 'flow',
   'automation': 'automation',
   'automation-enhancements': 'automation',
   'business-flow': 'flow',
@@ -25,10 +25,6 @@ const objectDesignerSectionConfig = {
     initialPanel: 'form',
     initialFormPropertyTab: 'events',
     navPanels: ['form'],
-  },
-  'actions': {
-    initialPanel: 'actions',
-    navPanels: ['actions'],
   },
   'business-flow': {
     initialPanel: 'flow-app',
@@ -58,10 +54,6 @@ const objectDesignerSectionConfig = {
   'data-relations': {
     initialPanel: 'relations',
     navPanels: ['relations'],
-  },
-  'automation-actions': {
-    initialPanel: 'actions',
-    navPanels: ['actions'],
   },
   'automation-triggers': {
     initialPanel: 'triggers',
@@ -124,10 +116,12 @@ export function buildApplicationDesignerResourceGroups(options = {}) {
           label: '动作增强（JS / CSS / Java）',
           configured: hasItems(options.extensions),
         },
-        ...objectNodes.flatMap(item => [
-          createObjectNode(item, 'automation-triggers', `${item.objectName} · 触发器`, item.triggerConfigured),
-          createObjectNode(item, 'automation-actions', `${item.objectName} · 业务动作`, item.actionConfigured),
-        ]),
+        ...objectNodes.map(item => createObjectNode(
+          item,
+          'automation-triggers',
+          `${item.objectName} · 触发器`,
+          item.triggerConfigured,
+        )),
       ],
     },
     {
@@ -176,7 +170,7 @@ export function findApplicationDesignerResource(groups = [], resourceKey = '', l
   if (legacy === 'page')
     return nodes.find(node => node.kind === 'page-custom') || nodes.find(node => node.groupKey === 'pages') || nodes[0] || null
   if (legacy === 'actions')
-    return nodes.find(node => node.kind === 'automation-actions') || nodes[0] || null
+    return nodes.find(node => node.kind === 'flow-object') || nodes[0] || null
   if (legacy === 'automation-enhancements')
     return nodes.find(node => node.kind === 'automation-enhancements') || nodes[0] || null
   if (legacy === 'business-flow')

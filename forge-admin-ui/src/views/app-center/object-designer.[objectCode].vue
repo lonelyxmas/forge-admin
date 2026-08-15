@@ -174,20 +174,6 @@
       @dirty-change="handleDirtyChange"
     />
 
-    <BusinessActionDesigner
-      v-else-if="activePanel === 'actions'"
-      :actions="draft.designerOptions?.actions || []"
-      :fields="draft.fields"
-      :model-schema="draft.modelSchema"
-      :relations="draft.relations"
-      :suite-code="draft.suiteCode"
-      :object-code="draft.objectCode"
-      :config-key="draft.configKey"
-      :document-config="draft.documentConfig"
-      @update:actions="handleActionsUpdated"
-      @dirty-change="handleDirtyChange"
-    />
-
     <BusinessRelationDesigner
       v-else-if="activePanel === 'relations'"
       ref="relationDesignerRef"
@@ -327,7 +313,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved', 'dirtyChange', 'flowContextChange'])
 
 const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
-const BusinessActionDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessActionDesigner.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
 const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
@@ -412,7 +397,7 @@ const publishDisabled = computed(() => {
 const designerNavPanels = computed(() => {
   if (props.embedded && props.embeddedNavPanels.length)
     return props.embeddedNavPanels
-  return isCodeAppDesigner.value ? ['form', 'list', 'actions', 'flow-app'] : []
+  return isCodeAppDesigner.value ? ['form', 'list', 'flow-app'] : []
 })
 const fieldOptions = computed(() => {
   const modelFields = draft.modelSchema?.fields || []
@@ -608,7 +593,7 @@ function isCodeAppRoute() {
 }
 
 function shouldOpenCodeAppDesigner() {
-  return ['form', 'list', 'actions', 'flow-app'].includes(activePanel.value)
+  return ['form', 'list', 'flow-app'].includes(activePanel.value)
     && !props.embedded
     && !!objectCode.value
     && (isCodeAppRoute() || ['form', 'list', 'detail', 'actions', 'flow-app'].includes(String(route.query.panel || '')))
@@ -680,7 +665,7 @@ async function applyCodeAppDesignerDraft(sourceObject = null) {
   designer.value = virtualDesigner
   runtimeInfo.value = null
   publishCheckState.value = null
-  if (!['form', 'list', 'actions', 'flow-app'].includes(activePanel.value))
+  if (!['form', 'list', 'flow-app'].includes(activePanel.value))
     activePanel.value = 'form'
   Object.assign(draft, createDraftFromDesigner(virtualDesigner))
 }
@@ -1148,7 +1133,7 @@ function handleRelationsUpdated(relations) {
 async function handleFlowAppSaved() {
   await loadDesigner()
   if (isCodeAppDesigner.value) {
-    if (!['form', 'list', 'actions', 'flow-app'].includes(activePanel.value))
+    if (!['form', 'list', 'flow-app'].includes(activePanel.value))
       activePanel.value = 'flow-app'
     return
   }

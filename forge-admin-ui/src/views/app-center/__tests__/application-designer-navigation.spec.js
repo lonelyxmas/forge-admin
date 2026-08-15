@@ -16,7 +16,7 @@ describe('application designer navigation', () => {
   it('maps legacy section keys to resource groups', () => {
     expect(normalizeApplicationDesignerSection('page')).toBe('pages')
     expect(normalizeApplicationDesignerSection('events')).toBe('pages')
-    expect(normalizeApplicationDesignerSection('actions')).toBe('automation')
+    expect(normalizeApplicationDesignerSection('actions')).toBe('flow')
     expect(normalizeApplicationDesignerSection('business-flow')).toBe('flow')
     expect(normalizeApplicationDesignerSection('data-model')).toBe('data')
     expect(normalizeApplicationDesignerSection('unknown')).toBe('pages')
@@ -61,7 +61,7 @@ describe('application designer navigation', () => {
       objectCode: 'ORDER',
     })
     expect(findApplicationDesignerResource(groups, '', 'actions')).toMatchObject({
-      key: 'automation-actions:1910000000000000001',
+      key: 'flow:1910000000000000001',
       objectCode: 'ORDER',
     })
     expect(findApplicationDesignerResource(groups, '', 'data-model')).toMatchObject({
@@ -118,10 +118,9 @@ describe('application designer navigation', () => {
     const flow = groups.find(group => group.key === 'flow')
 
     expect(automation.nodes.find(node => node.key === 'automation-triggers:1')?.configured).toBe(true)
-    expect(automation.nodes.find(node => node.key === 'automation-actions:1')?.configured).toBe(true)
     expect(automation.nodes.find(node => node.key === 'automation-triggers:2')?.configured).toBe(false)
-    expect(automation.nodes.find(node => node.key === 'automation-actions:2')?.configured).toBe(false)
-    expect(automation).toMatchObject({ configuredCount: 2, totalCount: 5 })
+    expect(automation.nodes.some(node => node.kind === 'automation-actions')).toBe(false)
+    expect(automation).toMatchObject({ configuredCount: 1, totalCount: 3 })
     expect(flow.nodes.find(node => node.key === 'flow:1')?.configured).toBe(true)
     expect(flow.nodes.find(node => node.key === 'flow:2')?.configured).toBe(false)
     expect(flow).toMatchObject({ configuredCount: 1, totalCount: 2 })
