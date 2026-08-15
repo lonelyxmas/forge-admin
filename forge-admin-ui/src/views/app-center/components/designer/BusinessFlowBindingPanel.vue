@@ -1,5 +1,14 @@
 <template>
   <div class="business-flow-binding-panel" :class="{ compact, 'compact-expanded': compactExpanded }">
+    <n-alert type="info" :bordered="false" class="legacy-entry-alert">
+      流程绑定配置已整合到业务流程画布，建议在新入口维护。此处仅支持查看历史配置。
+      <template #action>
+        <n-button data-open-process-workspace text type="primary" @click="openProcessWorkspace">
+          前往应用工作台业务流程
+        </n-button>
+      </template>
+    </n-alert>
+
     <div class="flow-head">
       <div>
         <h3>{{ compact ? '流程绑定' : '流程与自动化' }}</h3>
@@ -12,13 +21,13 @@
         <n-button size="small" secondary :loading="loading" @click="loadBinding">
           刷新
         </n-button>
-        <n-button size="small" type="primary" :loading="saving" @click="saveConfig">
+        <n-button v-if="!legacyReadOnly" size="small" type="primary" :loading="saving" @click="saveConfig">
           保存流程
         </n-button>
       </n-space>
     </div>
 
-    <div class="flow-body">
+    <div class="flow-body" :class="{ 'is-read-only': legacyReadOnly }" aria-readonly="true">
       <main class="flow-main">
         <n-spin :show="loading">
           <section class="flow-card">
@@ -328,6 +337,7 @@
 <script setup>
 import { useMessage } from 'naive-ui'
 import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { businessFlowBinding, businessFlowFormAssets, businessFlowVariables, businessObjectActions, saveBusinessFlowBinding } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import TemplateVariableEditor from './TemplateVariableEditor.vue'
@@ -361,6 +371,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  applicationCode: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['dirtyChange', 'saved', 'loaded', 'contextChange'])
@@ -368,6 +382,8 @@ const emit = defineEmits(['dirtyChange', 'saved', 'loaded', 'contextChange'])
 const FlowDesignPage = defineAsyncComponent(() => import('@/views/flow/design.vue'))
 
 const message = useMessage()
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const flowModelsLoading = ref(false)
@@ -384,6 +400,7 @@ const actionOptions = ref([])
 const flowDesignerVisible = ref(false)
 const compactExpanded = ref(false)
 const form = reactive(createDefaultBinding())
+const legacyReadOnly = true
 
 const startModeOptions = [
   { label: '用户点击按钮', value: 'MANUAL' },
@@ -499,6 +516,21 @@ async function loadBinding() {
   finally {
     loading.value = false
   }
+}
+
+function openProcessWorkspace() {
+  const applicationCode = normalizeText(props.applicationCode)
+    || normalizeText(route.params.applicationCode)
+    || normalizeText(route.query.applicationCode)
+  if (!applicationCode) {
+    router.push('/app-center')
+    return
+  }
+  router.push({
+    name: 'BusinessApplicationWorkspace',
+    params: { applicationCode },
+    query: { section: 'automation' },
+  })
 }
 
 async function loadActionOptions() {
@@ -1072,8 +1104,12 @@ defineExpose({
 <style scoped>
 .business-flow-binding-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 100%;
+}
+
+.legacy-entry-alert {
+  margin: 12px 16px 0;
 }
 
 .business-flow-binding-panel.compact {
@@ -1158,6 +1194,12 @@ defineExpose({
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
+}
+
+.flow-body.is-read-only {
+  cursor: default;
+  opacity: 0.82;
+  pointer-events: none;
 }
 
 .flow-main {

@@ -120,6 +120,7 @@
               :object-id="objectId"
               :object-code="objectCode"
               :object-name="objectName"
+              :application-code="applicationCode"
               :fields="fields"
               :code-app="isCodeApp"
               :compact="compact"
@@ -178,6 +179,10 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false,
+  },
+  applicationCode: {
+    type: String,
+    default: '',
   },
 })
 

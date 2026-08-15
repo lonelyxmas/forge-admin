@@ -214,6 +214,7 @@
       :suite-code="draft.suiteCode"
       :object-code="draft.objectCode"
       :object-name="draft.objectName"
+      :application-code="applicationCode"
       :fields="draft.fields"
       :initial-config="draft.documentConfig"
       :initial-section="embedded ? 'flow' : route.query.section"
