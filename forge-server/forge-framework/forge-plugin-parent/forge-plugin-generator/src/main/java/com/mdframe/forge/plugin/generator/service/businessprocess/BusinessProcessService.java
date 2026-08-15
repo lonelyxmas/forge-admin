@@ -19,6 +19,7 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessProcessRunMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessProcessVersionMapper;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessNamingService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessApplicationObjectVO;
+import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessObjectProcessVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessFlowModelVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessVO;
 import com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessProcessValidationVO;
@@ -97,6 +98,15 @@ public class BusinessProcessService {
 
     public BusinessProcessVO detail(Long processId) {
         return toVO(requireProcess(requireTenantId(), processId), false);
+    }
+
+    public List<BusinessObjectProcessVO> listByObjectCode(String objectCode) {
+        Long tenantId = requireTenantId();
+        String normalizedObjectCode = StringUtils.trimToNull(objectCode);
+        if (normalizedObjectCode == null) {
+            throw new BusinessException("业务对象编码不能为空");
+        }
+        return safeList(processMapper.selectBySubjectObjectCode(tenantId, normalizedObjectCode));
     }
 
     @Transactional(rollbackFor = Exception.class)

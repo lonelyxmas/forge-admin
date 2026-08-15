@@ -147,6 +147,32 @@
         ORDER BY p.process_code ASC, p.id ASC
     </select>
 
+    <select id="selectBySubjectObjectCode"
+            resultType="com.mdframe.forge.plugin.generator.vo.businessprocess.BusinessObjectProcessVO">
+        SELECT CAST(p.id AS CHAR) AS id,
+               p.process_name AS processName,
+               p.process_code AS processCode,
+               p.status,
+               p.design_status AS designStatus,
+               (
+                 SELECT node.node_type
+                 FROM JSON_TABLE(
+                   IF(JSON_VALID(p.draft_schema_json), p.draft_schema_json, JSON_OBJECT()),
+                   '$.nodes[*]' COLUMNS (
+                     node_type VARCHAR(64) PATH '$.type' NULL ON EMPTY
+                   )
+                 ) node
+                 WHERE LEFT(node.node_type, 6) = 'START_'
+                 LIMIT 1
+               ) AS startNodeType
+        FROM ai_business_process p
+        <include refid="Active_Application_And_Subject"/>
+        WHERE p.tenant_id = #{tenantId}
+          AND p.subject_object_code = #{objectCode}
+          AND p.del_flag = 0
+        ORDER BY p.update_time DESC, p.id DESC
+    </select>
+
     <select id="selectForPublish" resultMap="BaseResultMap">
         SELECT <include refid="Base_Columns"/>
         FROM ai_business_process p
