@@ -3686,7 +3686,7 @@
               </section>
             </n-collapse-item>
 
-            <n-collapse-item title="表单事件与生命周期" name="events">
+            <n-collapse-item title="表单事件与生命周期（高级）" name="events">
               <section class="panel-item form-lifecycle-panel">
                 <FieldEventRulesEditor
                   :model-value="formFieldEventRows"
@@ -3869,6 +3869,29 @@
             </n-collapse-item>
           </n-collapse>
         </n-form>
+      </n-tab-pane>
+
+      <n-tab-pane name="events">
+        <template #tab>
+          <span class="property-tab-label">
+            <n-icon><FlashOutline /></n-icon>
+            事件
+            <i v-if="formFieldEventRows.length" class="property-tab-configured-dot" title="已有事件配置" />
+          </span>
+        </template>
+        <div class="form-event-primary-panel">
+          <FieldEventRulesEditor
+            :model-value="formFieldEventRows"
+            :field-options="formFieldOptions"
+            @update:model-value="updateFormFieldEvents"
+          />
+          <FieldLinkageRulesEditor
+            :model-value="formFieldLinkageRows"
+            :fields="formFieldCatalog"
+            :relations="relations"
+            @update:model-value="updateFormFieldLinkages"
+          />
+        </div>
       </n-tab-pane>
 
       <n-tab-pane name="style">
@@ -4318,6 +4341,7 @@ import BusinessFieldPropertyPanel from '../BusinessFieldPropertyPanel.vue'
 import { appendDesignerLayoutChild, cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
 import FieldEventRulesEditor from './FieldEventRulesEditor.vue'
+import FieldLinkageRulesEditor from './FieldLinkageRulesEditor.vue'
 import { buildDefaultPlaceholder, buildFieldAssetPlaceholderPatch, shouldSyncPlaceholder } from './placeholder-utils'
 
 const props = defineProps({
@@ -4340,6 +4364,10 @@ const props = defineProps({
   objectCode: {
     type: String,
     default: '',
+  },
+  initialFormTab: {
+    type: String,
+    default: 'basic',
   },
 })
 
@@ -4398,7 +4426,7 @@ const fieldFormulaPanelVisible = ref(false)
 const crudDescriptionFieldPanelOpen = ref(false)
 const editingCrudFieldId = ref('')
 const propertyActiveTab = ref('basic')
-const formPropertyActiveTab = ref('basic')
+const formPropertyActiveTab = ref(props.initialFormTab === 'events' ? 'events' : 'basic')
 const basicExpandedNames = ['identity', 'gridQuick', 'field', 'validation']
 const selectedBasicExpandedNames = ref([...basicExpandedNames])
 const formBasicExpandedNames = ref(['assets', 'layout', 'permissions', 'offline', 'events'])
@@ -4450,6 +4478,7 @@ const formPermissionConfig = computed(() => formGovernanceSettings.value.permiss
 const formFieldRuleRows = computed(() => Array.isArray(formGovernanceSettings.value.fieldRules) ? formGovernanceSettings.value.fieldRules : [])
 const formEventRows = computed(() => Array.isArray(formGovernanceSettings.value.events) ? formGovernanceSettings.value.events : [])
 const formFieldEventRows = computed(() => Array.isArray(formGovernanceSettings.value.fieldEvents) ? formGovernanceSettings.value.fieldEvents : [])
+const formFieldLinkageRows = computed(() => Array.isArray(formGovernanceSettings.value.fieldLinkages) ? formGovernanceSettings.value.fieldLinkages : [])
 const formOfflineDraftConfig = computed(() => {
   const source = formGovernanceSettings.value.offlineDraft
   const config = source && typeof source === 'object' ? source : {}
@@ -4461,6 +4490,13 @@ const formOfflineDraftConfig = computed(() => {
   }
 })
 const formFieldOptions = computed(() => collectBoundFieldOptions(props.schema.components || []))
+const formFieldCatalog = computed(() => {
+  const source = Array.isArray(props.fields) && props.fields.length ? props.fields : props.schema.components || []
+  return source.map(field => ({
+    fieldCode: field?.fieldCode || field?.field || field?.props?.field || field?.id,
+    fieldName: field?.fieldName || field?.label || field?.props?.label || field?.id,
+  })).filter(field => field.fieldCode)
+})
 const selectedFieldCode = computed(() => String(
   selectedComponent.value?.fieldBinding?.fieldCode
   || selectedComponent.value?.field
@@ -4640,6 +4676,11 @@ watch(() => props.objectCode, () => {
   loadCodeRuleOptions()
 })
 
+watch(() => props.initialFormTab, (tab) => {
+  if (!selectedComponent.value)
+    formPropertyActiveTab.value = tab === 'events' ? 'events' : 'basic'
+})
+
 const gridColumnOptions = Array.from({ length: maxFormGridColumns }).map((_, index) => index + 1)
 const gridColumnMarks = gridColumnOptions.reduce((marks, item) => {
   if (![1, 6, 12, 18, 24].includes(item))
@@ -4762,7 +4803,7 @@ const propertySearchIndex = [
   { keys: ['crud', '查询', '搜索', '表格', '列表', '分页', '接口', 'api', '数据源', '基础路径', '行主键', '渲染模式', '表格尺寸', '编辑表单'], label: 'CRUD 配置', selectedTab: 'crud' },
   { keys: ['布局', '跨度', '栅格', '列数', '宽度', 'labelWidth', '标签宽度', '标签位置', '标签对齐', '打开方式'], label: '布局', selectedTab: 'basic', selectedExpand: ['gridQuick'], formTab: 'basic', formExpand: ['layout'] },
   { keys: ['校验', '唯一', '唯一校验', '不能重复', '必填', '只读', '隐藏', '状态', 'unique', 'required', 'readonly'], label: '可见性与校验', selectedTab: 'basic', selectedExpand: ['validation'], formTab: 'basic', formExpand: ['spacing'] },
-  { keys: ['事件', '交互', '联动', '弹窗事件', 'openModal', '生命周期', '加载', '提交', '字段变化'], label: '交互 / 事件规则', selectedTab: 'interaction', formTab: 'basic', formExpand: ['events'] },
+  { keys: ['事件', '交互', '联动', '弹窗事件', 'openModal', '生命周期', '加载', '提交', '字段变化'], label: '交互 / 事件规则', selectedTab: 'interaction', formTab: 'events' },
   { keys: ['样式', '颜色', '背景', '边框', '圆角', '阴影', '间距', 'padding', 'margin'], label: '样式配置', selectedTab: 'style', formTab: 'style', formExpand: ['appearance', 'spacing'] },
   { keys: ['表单资产', '多表单', '表单名称', '表单编码'], label: '表单属性 / 表单资产', formTab: 'basic', formExpand: ['assets'] },
   { keys: ['弹窗', '抽屉', 'modal', 'drawer', '打开方式'], label: '表单属性 / AiForm 布局', formTab: 'basic', formExpand: ['layout'] },
@@ -5959,6 +6000,10 @@ function removeFormEvent(index) {
 
 function updateFormFieldEvents(fieldEvents = []) {
   updateFormGovernance({ fieldEvents: Array.isArray(fieldEvents) ? fieldEvents : [] })
+}
+
+function updateFormFieldLinkages(fieldLinkages = []) {
+  updateFormGovernance({ fieldLinkages: Array.isArray(fieldLinkages) ? fieldLinkages : [] })
 }
 
 function updateFormAssetMeta(formKey = '', patch = {}) {
@@ -7910,6 +7955,13 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
+.property-tab-configured-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f53f3f;
+}
+
 .property-tabs :deep(.n-tabs-tab--active .property-tab-label .n-icon) {
   color: #27272a;
 }
@@ -7940,6 +7992,12 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: auto;
   padding: 8px 8px 42px;
+  background: #fafafa;
+}
+
+.form-event-primary-panel {
+  min-height: 100%;
+  padding: 10px 8px 42px;
   background: #fafafa;
 }
 

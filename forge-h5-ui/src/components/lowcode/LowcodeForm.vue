@@ -1,8 +1,9 @@
 <template>
-  <view class="lowcode-form">
+  <view class="lowcode-form" :class="{ 'lowcode-form--inline-grid': layout === 'inline_grid' }">
     <LowcodeField
       v-for="field in renderedFields"
       :key="field.field"
+      class="lowcode-form__field"
       :field="field"
       :model-value="data[field.field]"
       :options="fieldOptions(field)"
@@ -19,7 +20,7 @@
 <script setup>
 import { computed, reactive } from 'vue'
 import LowcodeField from './LowcodeField.vue'
-import { resolveFieldControl } from '@/utils/lowcode-runtime'
+import { applyFieldLinkageChange, filterFieldOptionsByLinkage, resolveFieldControl, resolveFieldLinkageContext } from '@/utils/lowcode-runtime'
 
 const props = defineProps({
   fields: { type: Array, default: () => [] },
@@ -28,12 +29,18 @@ const props = defineProps({
   currentChildren: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
   context: { type: Object, default: () => ({}) },
+  layout: { type: String, default: 'stack' },
+  fieldLinkages: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['update:data', 'field-event'])
 const errors = reactive({})
 const renderedFields = computed(() => props.fields.map(field => ({
   ...field,
+  props: {
+    ...(field.props || {}),
+    linkageContext: resolveFieldLinkageContext(props.fieldLinkages, field.field, props.data),
+  },
   __runtimeControl: resolveFieldControl(field, {
     record: props.data,
     formData: props.data,
@@ -44,9 +51,15 @@ const renderedFields = computed(() => props.fields.map(field => ({
 })).filter(field => field.__runtimeControl.visible))
 
 function fieldOptions(field) {
-  if (field.type === 'dictSelect') return props.dictOptions[field.dictType || field.props?.dictType] || []
+  if (field.type === 'dictSelect' || field.type === 'pillSelect') {
+    const options = props.dictOptions[field.dictType || field.props?.dictType] || []
+    return filterFieldOptionsByLinkage(options, field.props?.linkageContext)
+  }
   const source = field.props?.options || field.options
-  if (Array.isArray(source)) return source.map(item => typeof item === 'object' ? item : ({ label: String(item), value: item }))
+  if (Array.isArray(source)) {
+    const options = source.map(item => typeof item === 'object' ? item : ({ label: String(item), value: item }))
+    return filterFieldOptionsByLinkage(options, field.props?.linkageContext)
+  }
   if (field.props?.optionSource?.type === 'CURRENT_CHILDREN') {
     const sourceRows = props.currentChildren[field.props.optionSource.relationKey] || []
     return sourceRows.filter(row => props.currentChildren[field.props.optionSource.relationKey]).map(row => ({
@@ -59,6 +72,7 @@ function fieldOptions(field) {
 
 function updateField(field, value) {
   props.data[field.field] = value
+  applyFieldLinkageChange(props.fieldLinkages, field.field, props.data)
   delete errors[field.field]
   emit('update:data', props.data)
 }
@@ -81,4 +95,17 @@ defineExpose({ validate })
 
 <style lang="scss" scoped>
 .lowcode-form { display: flex; flex-direction: column; }
+.lowcode-form--inline-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(132rpx, 0.65fr);
+  gap: 14rpx;
+  align-items: end;
+}
+.lowcode-form--inline-grid :deep(.lowcode-field) { min-width: 0; margin-bottom: 0; }
+.lowcode-form--inline-grid :deep(.lowcode-field__label) { min-height: 34rpx; font-size: 22rpx; }
+.lowcode-form--inline-grid :deep(.lowcode-field__control) { min-width: 0; }
+.lowcode-form--inline-grid :deep(.lowcode-field__readonly) { padding: 16rpx; font-size: 24rpx; }
+@media (max-width: 360px) {
+  .lowcode-form--inline-grid { grid-template-columns: minmax(0, 1fr) minmax(132rpx, 0.72fr); }
+}
 </style>

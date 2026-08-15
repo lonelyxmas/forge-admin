@@ -247,8 +247,15 @@ public class BusinessActionExecutionService {
         if (isChildRowAction(resolvedAction)) {
             populateChildRowContext(context, resolvedVersion, publishedOnly);
         } else if (StringUtils.isNotBlank(dto.getRecordId()) && StringUtils.isNotBlank(object.getConfigKey())) {
-            Map<String, Object> record = dynamicCrudService.selectById(object.getConfigKey(), dto.getRecordId());
-            context.setRecordData(record == null ? new LinkedHashMap<>() : new LinkedHashMap<>(record));
+            Map<String, Object> detail = dynamicCrudService.selectById(object.getConfigKey(), dto.getRecordId());
+            if (detail != null) {
+                // selectById 返回 { main: {...}, children: {...} }，recordData 只取 main 部分，
+                // 否则 targetRecordIdField='record.id' 在根找不到 id（id 在 main 内部）。
+                Map<String, Object> main = asStringMap(detail.get("main"));
+                context.setRecordData(main.isEmpty() ? new LinkedHashMap<>(detail) : new LinkedHashMap<>(main));
+            } else {
+                context.setRecordData(new LinkedHashMap<>());
+            }
         }
         context.setSystemContext(buildSystemContext(context));
         return context;
@@ -306,8 +313,13 @@ public class BusinessActionExecutionService {
         if (!(rawRows instanceof List<?>) && StringUtils.isNotBlank(relation.targetObjectCode())) {
             rawRows = children.get(relation.targetObjectCode());
         }
+        if (!(rawRows instanceof List<?>) && StringUtils.isNotBlank(relation.targetObjectCode())) {
+            rawRows = children.get(StringUtils.lowerCase(relation.targetObjectCode()));
+        }
         if (!(rawRows instanceof List<?>)) {
-            throw new BusinessException("发布关系未生成对应的子表运行配置");
+            throw new BusinessException("发布关系未生成对应的子表运行配置（relationKey="
+                    + relation.key() + ", targetObjectCode=" + relation.targetObjectCode()
+                    + ", childrenKeys=" + children.keySet() + "）");
         }
         List<?> rows = (List<?>) rawRows;
         Map<String, Object> childRecord = rows.stream()

@@ -93,11 +93,30 @@
             :object-code="objectCode"
             :object-name="objectName"
             :relations="relations"
+            :actions="actions"
+            :linkage-schema="linkageSchema"
+            :initial-property-tab="initialPropertyTab"
+            :initial-canvas-view="initialCanvasView"
             :extra-more-options="formDesignerMoreOptions"
             @dirty-change="emit('dirtyChange', $event)"
+            @update:linkage-schema="emit('update:linkageSchema', $event)"
             @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
-          />
+          >
+            <template #detail-settings>
+              <BusinessDetailDesigner
+                v-model="localSchema"
+                v-model:view-schema="localViewSchema"
+                settings-only
+                :object-id="objectId"
+                :model-schema="modelSchema"
+                :fields="fields"
+                :relations="relations"
+                @dirty-change="emit('dirtyChange', $event)"
+                @open-relations="emit('openRelations')"
+              />
+            </template>
+          </ForgeFormDesigner>
         </template>
 
         <section v-else class="relation-object-workbench">
@@ -270,6 +289,7 @@ import {
   syncPageSchemaWithModel,
 } from '@/components/lowcode-builder/page/page-schema'
 import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/runtime-rules'
+import BusinessDetailDesigner from './BusinessDetailDesigner.vue'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets } from './form-first/autoFieldRegistry'
@@ -297,6 +317,10 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  viewSchema: {
+    type: Object,
+    default: null,
+  },
   modelSchema: {
     type: Object,
     default: () => ({}),
@@ -309,9 +333,25 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  actions: {
+    type: Array,
+    default: () => [],
+  },
+  linkageSchema: {
+    type: Object,
+    default: null,
+  },
+  initialPropertyTab: {
+    type: String,
+    default: 'basic',
+  },
+  initialCanvasView: {
+    type: String,
+    default: 'layout',
+  },
 })
 
-const emit = defineEmits(['update:modelValue', 'update:formDesignerSchema', 'saved', 'fieldsUpdated', 'dirtyChange', 'createField', 'openRelations'])
+const emit = defineEmits(['update:modelValue', 'update:formDesignerSchema', 'update:viewSchema', 'update:linkageSchema', 'saved', 'fieldsUpdated', 'dirtyChange', 'createField', 'openRelations'])
 
 const FORM_FIELD_COMPONENT_KEYS = new Set([
   'input',
@@ -396,6 +436,7 @@ const baseModelSchema = computed(() => {
 
 const localSchema = ref(resolveSchema(props.modelValue, resolveDesignModelSchema(props.modelValue, baseModelSchema.value)))
 const localFormDesignerSchema = ref(cloneSchema(props.formDesignerSchema || null))
+const localViewSchema = ref(cloneSchema(props.viewSchema || null))
 let localSchemaDirtyMode = null
 const effectiveModelSchema = computed(() => resolveDesignModelSchema(localSchema.value, baseModelSchema.value))
 const designFields = computed(() => effectiveModelSchema.value.fields || [])
@@ -532,6 +573,16 @@ watch(
 )
 
 watch(
+  () => props.viewSchema,
+  (value) => {
+    const next = cloneSchema(value || null)
+    if (!isSameSchema(next, localViewSchema.value))
+      localViewSchema.value = next
+  },
+  { deep: true },
+)
+
+watch(
   () => editZone.value?.props?.formOpenMode || editZone.value?.props?.modalType,
   (value) => {
     const nextFormOpenMode = normalizeFormOpenMode(value)
@@ -584,6 +635,15 @@ watch(
       if (dirtyMode !== 'silent')
         emit('dirtyChange', true)
     }
+  },
+  { deep: true },
+)
+
+watch(
+  localViewSchema,
+  (value) => {
+    if (!isSameSchema(value, props.viewSchema))
+      emit('update:viewSchema', cloneSchema(value || null))
   },
   { deep: true },
 )
@@ -1303,6 +1363,7 @@ async function saveLayout() {
         modelSchema: cloneSchema(nextModelSchema || {}),
         pageSchema: cloneSchema(schema || {}),
         formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
+        viewSchema: cloneSchema(localViewSchema.value || {}),
       })
     }
     await saveBusinessObjectFormLayout(props.objectId, {
@@ -1343,6 +1404,7 @@ function syncDesignerDraft() {
   return {
     pageSchema: cloneSchema(schema),
     formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
+    viewSchema: cloneSchema(localViewSchema.value || {}),
     modelSchema: cloneSchema(nextModelSchema || {}),
     fields: cloneSchema(normalizedFields),
     createdFields: cloneSchema(createdFields),

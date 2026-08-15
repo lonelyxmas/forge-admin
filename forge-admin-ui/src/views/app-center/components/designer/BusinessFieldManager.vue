@@ -714,7 +714,7 @@ defineExpose({
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-height: calc(100vh - 106px);
-  background: var(--n-color-embedded, var(--bg-secondary, #f7f8fa));
+  background: #f7f8fa;
 }
 
 .field-asset-head {
@@ -723,7 +723,7 @@ defineExpose({
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--border-default, #e5e6eb);
-  background: var(--n-color, var(--bg-primary, #fff));
+  background: #fff;
   padding: 14px 18px;
 }
 
@@ -750,7 +750,7 @@ defineExpose({
 .field-summary span {
   border: 1px solid var(--border-default, #e5e6eb);
   border-radius: 5px;
-  background: var(--n-color-embedded, var(--bg-secondary, #f7f8fa));
+  background: #f7f8fa;
   color: var(--n-text-color-3, var(--text-secondary, #86909c));
   font-size: 12px;
   line-height: 24px;
@@ -769,7 +769,7 @@ defineExpose({
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--border-default, #e5e6eb);
-  background: var(--n-color, var(--bg-primary, #fff));
+  background: #fff;
   padding: 10px 18px;
 }
 
@@ -790,7 +790,7 @@ defineExpose({
   border: 1px solid var(--border-default, #e5e6eb);
   border-radius: 6px;
   color: var(--n-text-color-2, var(--text-regular, #4e5969));
-  background: var(--n-color-embedded, var(--bg-secondary, #f7f8fa));
+  background: #f7f8fa;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -811,14 +811,14 @@ defineExpose({
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--border-default, #e5e6eb);
-  background: var(--n-color-embedded, var(--bg-secondary, #f7f8fa));
+  background: #f7f8fa;
 }
 
 .field-property-pane {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--n-color, var(--bg-primary, #fff));
+  background: #fff;
 }
 
 .field-property-drawer-panel {
@@ -832,7 +832,7 @@ defineExpose({
   margin-bottom: 14px;
   border: 1px solid var(--border-default, #e5e6eb);
   border-radius: 6px;
-  background: var(--n-color-embedded, var(--bg-secondary, #f7f8fa));
+  background: #f7f8fa;
   color: var(--n-text-color-3, var(--text-secondary, #86909c));
   font-size: 12px;
   line-height: 1.6;

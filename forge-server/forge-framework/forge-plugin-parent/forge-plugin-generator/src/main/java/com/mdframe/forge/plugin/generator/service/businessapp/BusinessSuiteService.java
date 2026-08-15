@@ -393,6 +393,16 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
                     .append(app.getId())
                     .append("&runtimeOpenMode=")
                     .append(runtimeOpenMode);
+            // 入口配置的目标页面/表单必须体现在菜单路径上，否则设计态选择不会生效。
+            String targetPageKey = options == null ? null : StringUtils.trimToNull(options.getString("targetPageKey"));
+            if (targetPageKey == null) {
+                targetPageKey = "DETAIL".equals(runtimeOpenMode) ? "detail" : "list";
+            }
+            path.append("&pageKey=").append(targetPageKey);
+            String targetFormKey = options == null ? null : StringUtils.trimToNull(options.getString("targetFormKey"));
+            if (targetFormKey != null) {
+                path.append("&formKey=").append(targetFormKey);
+            }
             if ("CREATE_FORM".equals(runtimeOpenMode)) {
                 path.append("&mode=create");
             } else if ("DETAIL".equals(runtimeOpenMode)) {

@@ -440,7 +440,13 @@ public class BusinessObjectPublishService {
             putIfNotBlank(item, "routePath", resolveActionRoutePath(actionType, config));
             putIfNotBlank(item, "targetFormKey", text(config.get("targetFormKey")));
             putIfNotBlank(item, "openTarget", StringUtils.defaultIfBlank(text(config.get("openTarget")), "_self"));
-            putIfNotBlank(item, "permissionCode", text(action.get("permission")));
+            String permissionKey = StringUtils.firstNonBlank(
+                    text(action.get("permissionKey")),
+                    text(action.get("permissionCode")),
+                    text(action.get("permission")));
+            putIfNotBlank(item, "permissionKey", permissionKey);
+            putIfNotBlank(item, "permissionCode", permissionKey);
+            putIfNotBlank(item, "permissionStrategy", text(action.get("permissionStrategy")));
             putIfNotBlank(item, "successMessage", text(action.get("successMessage")));
             putIfNotBlank(item, "failureMessage", text(action.get("failureMessage")));
             putIfNotBlank(item, "successBehavior", text(config.get("successBehavior")));
@@ -775,7 +781,7 @@ public class BusinessObjectPublishService {
     private void validateCommandStepCompleteness(List<BusinessActionStepDTO> steps) {
         Set<String> supported = Set.of(
                 "CREATE_RECORD", "UPDATE_FIELD", "ADJUST_NUMBER", "TRANSITION_STATUS", "ASSERT_RECORD", "FOREACH",
-                "DOMAIN_ACTION", "SEND_MESSAGE", "START_FLOW");
+                "DOMAIN_ACTION", "SEND_MESSAGE", "START_FLOW", "CALL_API");
         for (BusinessActionStepDTO step : steps) {
             String type = StringUtils.upperCase(StringUtils.defaultString(step.getStepType()));
             if (!supported.contains(type)) {
@@ -826,6 +832,11 @@ public class BusinessObjectPublishService {
                     throw new BusinessException("逐行步骤没有配置子步骤");
                 }
                 validateCommandStepCompleteness(nested);
+            }
+            if ("CALL_API".equals(type)
+                    && StringUtils.isBlank(text(config.get("sourceKey")))
+                    && StringUtils.isBlank(text(config.get("querySourceKey")))) {
+                throw new BusinessException("CALL_API 步骤缺少 sourceKey");
             }
         }
     }

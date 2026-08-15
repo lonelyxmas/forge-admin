@@ -1,8 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildGridSyncModelSchema,
+  createDefaultListGridLayout,
   syncGridLayoutWithModel,
 } from '../page-schema'
+
+describe('default list columns', () => {
+  it('excludes audit/system fields from the default CRUD list columns', () => {
+    const modelSchema = {
+      appType: 'SIMPLE',
+      fields: [
+        { field: 'id', columnName: 'id' },
+        { field: 'customerName', columnName: 'customer_name', listVisible: true },
+        { field: 'amount', columnName: 'amount', listVisible: true },
+        { field: 'createBy', columnName: 'create_by' },
+        { field: 'createTime', columnName: 'create_time' },
+        { field: 'createDept', columnName: 'create_dept' },
+        { field: 'updateBy', columnName: 'update_by' },
+        { field: 'updateTime', columnName: 'update_time' },
+      ],
+    }
+    const layout = createDefaultListGridLayout(modelSchema, { layoutType: 'simple-crud' })
+    const crud = layout.items.find(item => item.blockType === 'AiCrudPage')
+    expect(crud.fieldRefs).toContain('customerName')
+    expect(crud.fieldRefs).toContain('amount')
+    expect(crud.fieldRefs).toContain('id')
+    expect(crud.fieldRefs).not.toContain('createBy')
+    expect(crud.fieldRefs).not.toContain('createTime')
+    expect(crud.fieldRefs).not.toContain('createDept')
+    expect(crud.fieldRefs).not.toContain('updateBy')
+    expect(crud.fieldRefs).not.toContain('updateTime')
+  })
+})
 
 describe('page grid field synchronization', () => {
   it('keeps current component fields when the stable page model has no fields', () => {

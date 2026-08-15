@@ -41,6 +41,7 @@ export function normalizeInAppBuilder(rawOptions, _application = {}, objects = [
     nodes,
     pages,
     formAssets: normalizeFormAssets(saved.formAssets),
+    flowInteraction: normalizeFlowInteraction(saved.flowInteraction),
   }
 
   // 页面是应用设计的显式产物。空应用保持为空，不能为了运行壳自动造出一个“首页”。
@@ -59,7 +60,40 @@ export function mergeInAppBuilderOptions(applicationOptions, schema) {
       nodes: schema.nodes,
       pages: schema.pages,
       formAssets: schema.formAssets,
+      flowInteraction: normalizeFlowInteraction(schema.flowInteraction),
     }),
+  }
+}
+
+export function normalizeFlowInteraction(source = {}) {
+  const flow = source && typeof source === 'object' ? clone(source) : {}
+  return {
+    ...flow,
+    approvalActions: (Array.isArray(flow.approvalActions) ? flow.approvalActions : [])
+      .filter(action => action && typeof action === 'object')
+      .map((action, index) => ({
+        ...action,
+        actionId: String(action.actionId || `flow_action_${index + 1}`).trim(),
+        operation: ['approve', 'reject', 'return', 'delegate'].includes(action.operation) ? action.operation : 'approve',
+        label: String(action.label || '').trim(),
+        permissionKey: String(action.permissionKey || action.permissionCode || '').trim(),
+        permissionStrategy: action.permissionStrategy === 'disable' ? 'disable' : 'hide',
+        enabled: action.enabled !== false,
+      })),
+    timeline: {
+      ...(flow.timeline && typeof flow.timeline === 'object' ? flow.timeline : {}),
+      enabled: flow.timeline?.enabled === true,
+      title: String(flow.timeline?.title || '审批记录').trim() || '审批记录',
+    },
+    nodePermissions: (Array.isArray(flow.nodePermissions) ? flow.nodePermissions : [])
+      .filter(item => item && typeof item === 'object')
+      .map(item => ({
+        ...item,
+        nodeKey: String(item.nodeKey || '').trim(),
+        visibleSectionIds: uniqueStrings(item.visibleSectionIds),
+        readonlySectionIds: uniqueStrings(item.readonlySectionIds),
+      })),
+    callbacks: flow.callbacks && typeof flow.callbacks === 'object' ? flow.callbacks : {},
   }
 }
 
@@ -504,6 +538,12 @@ function slugify(value) {
 
 function sortNodes(a, b) {
   return Number(a.sort || 0) - Number(b.sort || 0) || String(a.title).localeCompare(String(b.title), 'zh-CN')
+}
+
+function uniqueStrings(values) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean))]
 }
 
 function clone(value) {

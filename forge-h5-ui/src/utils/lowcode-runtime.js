@@ -16,29 +16,165 @@ export function parseJson(value, fallback = {}) {
   }
 }
 
+export function normalizeRuntimePageSchema(value = {}) {
+  const source = parseJson(value, {})
+  if (!source || typeof source !== 'object' || Array.isArray(source))
+    return { zones: [] }
+  const zones = Array.isArray(source.zones)
+    ? source.zones.filter(zone => zone && typeof zone === 'object').map((zone, index) => normalizeRuntimeZone(zone, index))
+    : []
+  return { ...source, zones }
+}
+
+export function resolveRuntimePageZones(config = {}, mode = '') {
+  const pageSchema = normalizeRuntimePageSchema(config.pageSchema)
+  return pageSchema.zones.filter(zone => isRuntimeZoneVisible(zone, mode))
+}
+
+export function resolveRuntimeFormZone(config = {}, mode = 'edit') {
+  const zones = resolveRuntimePageZones(config, mode).filter(zone => zone.zoneType === 'form')
+  const preferred = zones.find(zone => matchesLegacyFormZone(zone, mode)) || zones[0]
+  if (!preferred)
+    return null
+  const schema = resolveRuntimeZoneFormDesignerSchema(preferred)
+  return schema ? { zone: preferred, schema } : null
+}
+
+export function resolveRuntimeZoneFormDesignerSchema(zone = {}) {
+  return extractRuntimeFormSchema(zone)
+}
+
+export function resolveRuntimeFormDesignerSchema(config = {}, mode = 'edit') {
+  const zone = resolveRuntimeFormZone(config, mode)
+  if (zone?.schema)
+    return zone.schema
+  return parseJson(config.options?.formDesignerSchema || config.options?.formDesignerSchemaJson, {})
+}
+
+export function hasComposedRuntimePageSchema(config = {}) {
+  const pageSchema = normalizeRuntimePageSchema(config.pageSchema)
+  return pageSchema.zones.some(zone => Boolean(zone.zoneTypeExplicit || zone.zoneIdExplicit))
+}
+
 export function parseRuntimeConfig(data = {}) {
-  const source = data?.data && typeof data.data === 'object' ? data.data : data
+  const candidate = data?.data && typeof data.data === 'object' ? data.data : data
+  const source = candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? candidate : {}
+  const options = parseJson(source.options, {})
+  const pageSchemaCandidate = hasRuntimeZones(options.pageSchema)
+    ? options.pageSchema
+    : source.pageSchema
+  const pageSchema = normalizeRuntimePageSchema(pageSchemaCandidate)
+  const fallbackFormSchema = parseJson(options.formDesignerSchema || options.formDesignerSchemaJson, {})
+  const formZone = resolveRuntimeFormZone({ pageSchema, options: { formDesignerSchema: fallbackFormSchema } }, 'edit')
+  const normalizedOptions = {
+    ...options,
+    formDesignerSchema: formZone?.schema || fallbackFormSchema,
+    flowInteraction: normalizeRuntimeFlowInteraction(
+      options.flowInteraction || options.inAppBuilder?.flowInteraction || source.flowInteraction,
+    ),
+  }
+  const masterDetailConfig = formZone?.zone?.props?.masterDetailConfig
+    || formZone?.zone?.masterDetailConfig
+  if (!normalizedOptions.masterDetailConfig && masterDetailConfig)
+    normalizedOptions.masterDetailConfig = masterDetailConfig
   return {
     ...source,
     searchSchema: parseJson(source.searchSchema, []),
     columnsSchema: parseJson(source.columnsSchema, []),
     editSchema: parseJson(source.editSchema, []),
     apiConfig: parseJson(source.apiConfig, {}),
-    options: parseJson(source.options, {}),
+    options: normalizedOptions,
     modelSchema: parseJson(source.modelSchema, {}),
-    pageSchema: parseJson(source.pageSchema, {}),
+    pageSchema,
   }
 }
 
-export function normalizeMainFields(config = {}) {
+export function normalizeMainFields(config = {}, formDesignerSchema) {
   const stored = Array.isArray(config.editSchema) ? config.editSchema : []
-  const designer = Array.isArray(config.options?.formDesignerSchema?.components)
-    ? config.options.formDesignerSchema.components
+  const schema = formDesignerSchema || config.options?.formDesignerSchema
+  const designer = Array.isArray(schema?.components)
+    ? schema.components
     : []
   const designerFields = designer.map(normalizeDesignerField).filter(Boolean)
   const byField = new Map(designerFields.map(field => [field.field, field]))
   return stored.map(field => mergeField(field, byField.get(field?.field))).filter(isRenderableField)
     .concat(designerFields.filter(field => !stored.some(item => item?.field === field.field)))
+}
+
+function hasRuntimeZones(value) {
+  const pageSchema = parseJson(value, {})
+  return Array.isArray(pageSchema?.zones) && pageSchema.zones.length > 0
+}
+
+function normalizeRuntimeZone(zone = {}, index = 0) {
+  const props = zone.props && typeof zone.props === 'object' && !Array.isArray(zone.props) ? zone.props : {}
+  // Preserve explicitness across repeated normalization. Generated legacy ids
+  // must not turn an old zoneKey-only page into the composed page protocol.
+  const zoneTypeExplicit = typeof zone.zoneTypeExplicit === 'boolean'
+    ? zone.zoneTypeExplicit
+    : Boolean(zone.zoneType)
+  const zoneIdExplicit = typeof zone.zoneIdExplicit === 'boolean'
+    ? zone.zoneIdExplicit
+    : Boolean(zone.zoneId)
+  return {
+    ...zone,
+    props,
+    zoneId: String(zone.zoneId || zone.zoneKey || `zone_${index}`),
+    zoneType: resolveRuntimeZoneType(zone),
+    zoneTypeExplicit,
+    zoneIdExplicit,
+  }
+}
+
+function resolveRuntimeZoneType(zone = {}) {
+  const explicit = String(zone.zoneType || '').trim().toLowerCase()
+  if (explicit)
+    return explicit
+  const key = String(zone.zoneKey || zone.componentKey || '').trim().toLowerCase()
+  if (['form', 'edit', 'detail', 'edit-form', 'detail-panel', 'form-panel'].includes(key))
+    return 'form'
+  if (['actions', 'action', 'action-bar', 'toolbar', 'button-bar'].includes(key))
+    return 'actions'
+  if (['list', 'table', 'data-table', 'crud'].includes(key))
+    return 'list'
+  if (['chart', 'chart-panel'].includes(key))
+    return 'chart'
+  return key || 'unknown'
+}
+
+function isRuntimeZoneVisible(zone = {}, mode = '') {
+  if (zone.enabled === false || zone.visible === false)
+    return false
+  const visibleModes = Array.isArray(zone.visibleInModes)
+    ? zone.visibleInModes
+    : Array.isArray(zone.props?.visibleInModes) ? zone.props.visibleInModes : []
+  return !visibleModes.length || visibleModes.map(String).includes(String(mode))
+}
+
+function matchesLegacyFormZone(zone = {}, mode = '') {
+  const key = String(zone.zoneKey || '').toLowerCase()
+  if (key === 'detail')
+    return String(mode).toLowerCase() === 'detail'
+  if (key === 'edit')
+    return ['create', 'edit'].includes(String(mode).toLowerCase())
+  return true
+}
+
+function extractRuntimeFormSchema(zone = {}) {
+  const candidate = zone.props?.formDesignerSchema
+    || zone.formDesignerSchema
+    || zone.props?.formSchema
+    || zone.formSchema
+  const parsed = parseJson(candidate, null)
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+    return parsed
+  const inline = { ...zone.props }
+  delete inline.masterDetailConfig
+  delete inline.actions
+  delete inline.list
+  return ['components', 'pageSections', 'bottomBar', 'settings'].some(key => inline[key] !== undefined)
+    ? inline
+    : null
 }
 
 export function normalizeChildFields(child = {}) {
@@ -57,7 +193,210 @@ export function normalizeChildrenConfig(config = {}) {
       relationKey: String(child?.relationKey || child?.key || child?.modelCode || `children_${index}`),
       fields: normalizeChildFields(child),
       rowActions: Array.isArray(child?.rowActions) ? child.rowActions : [],
+      toolbarActions: Array.isArray(child?.toolbarActions) ? child.toolbarActions : [],
     }))
+}
+
+export function resolveVisiblePageSections(sections = [], mode = '', flowInteraction = {}, nodeKey = '') {
+  const policy = resolveNodeSectionPolicy(flowInteraction, nodeKey)
+  const visibleSectionIds = new Set(policy?.visibleSectionIds || [])
+  return (Array.isArray(sections) ? sections : []).filter((section) => {
+    if (!section || typeof section !== 'object')
+      return false
+    const visibleModes = Array.isArray(section.visibleInModes) ? section.visibleInModes.map(String) : []
+    const modeVisible = !visibleModes.length || visibleModes.includes(String(mode))
+    return modeVisible && (!visibleSectionIds.size || visibleSectionIds.has(String(section.sectionId || '')))
+  })
+}
+
+export function isPageSectionReadonly(section = {}, flowInteraction = {}, nodeKey = '') {
+  const policy = resolveNodeSectionPolicy(flowInteraction, nodeKey)
+  return Boolean(policy?.readonlySectionIds?.map(String).includes(String(section.sectionId || '')))
+}
+
+export function normalizeRuntimeFlowInteraction(source = {}) {
+  const flow = parseJson(source, {})
+  if (!flow || typeof flow !== 'object' || Array.isArray(flow))
+    return { approvalActions: [], timeline: { enabled: false }, nodePermissions: [], callbacks: {} }
+  return {
+    ...flow,
+    approvalActions: (Array.isArray(flow.approvalActions) ? flow.approvalActions : [])
+      .filter(action => action && typeof action === 'object' && action.enabled !== false)
+      .map((action, index) => ({
+        ...action,
+        actionId: String(action.actionId || `flow_action_${index + 1}`),
+        type: 'flow_action',
+        operation: ['approve', 'reject', 'return', 'delegate'].includes(action.operation) ? action.operation : 'approve',
+        label: String(action.label || flowOperationLabel(action.operation)),
+        visibleInModes: Array.isArray(action.visibleInModes) ? action.visibleInModes : ['detail'],
+      })),
+    timeline: {
+      ...(flow.timeline && typeof flow.timeline === 'object' ? flow.timeline : {}),
+      enabled: flow.timeline?.enabled === true,
+      title: String(flow.timeline?.title || '审批记录'),
+    },
+    nodePermissions: Array.isArray(flow.nodePermissions) ? flow.nodePermissions : [],
+    callbacks: flow.callbacks && typeof flow.callbacks === 'object' ? flow.callbacks : {},
+  }
+}
+
+export function mergeFlowActionsIntoBottomBar(bottomBar = {}, flowInteraction = {}) {
+  const flow = normalizeRuntimeFlowInteraction(flowInteraction)
+  const actions = Array.isArray(bottomBar?.actions) ? bottomBar.actions : []
+  if (!flow.approvalActions.length)
+    return bottomBar
+  const actionIds = new Set(actions.map(action => String(action?.actionId || '')))
+  return {
+    ...(bottomBar || {}),
+    actions: [...actions, ...flow.approvalActions.filter(action => !actionIds.has(action.actionId))],
+  }
+}
+
+function resolveNodeSectionPolicy(flowInteraction = {}, nodeKey = '') {
+  const key = String(nodeKey || '').trim()
+  if (!key)
+    return null
+  return normalizeRuntimeFlowInteraction(flowInteraction).nodePermissions
+    .find(item => String(item?.nodeKey || '') === key) || null
+}
+
+function flowOperationLabel(operation) {
+  return { approve: '同意', reject: '拒绝', return: '退回', delegate: '委派' }[operation] || '同意'
+}
+
+export function resolvePageSectionFields(section = {}, fields = []) {
+  const byField = new Map((Array.isArray(fields) ? fields : [])
+    .filter(field => field?.field)
+    .map(field => [String(field.field), field]))
+  return (Array.isArray(section.fields) ? section.fields : [])
+    .map((fieldCode) => {
+      const field = byField.get(String(fieldCode))
+      if (!field)
+        return null
+      const override = section.fieldOverrides?.[fieldCode]
+      if (!override || typeof override !== 'object')
+        return field
+      return {
+        ...field,
+        type: override.componentKey === 'pillSelect' ? 'pillSelect' : field.type,
+        props: { ...(field.props || {}), ...(override.props || {}) },
+      }
+    })
+    .filter(Boolean)
+}
+
+export function resolvePageSectionChild(section = {}, children = []) {
+  const relationKey = String(section.relationKey || '').trim()
+  if (!relationKey)
+    return null
+  return (Array.isArray(children) ? children : [])
+    .find(child => String(child?.relationKey || '') === relationKey) || null
+}
+
+export function resolveFieldLinkages(formSchema = {}, config = {}) {
+  const governed = formSchema?.settings?.governance?.fieldLinkages
+  if (Array.isArray(governed))
+    return governed.filter(rule => rule && typeof rule === 'object')
+  const legacy = parseJson(config?.options?.linkageSchema, {})
+  return Array.isArray(legacy?.rules) ? legacy.rules.filter(rule => rule && typeof rule === 'object') : []
+}
+
+export function applyFieldLinkageChange(rules = [], sourceField = '', formData = {}) {
+  const patch = {}
+  ;(Array.isArray(rules) ? rules : []).forEach((rule) => {
+    if (rule?.enabled === false || String(rule?.sourceField || '') !== String(sourceField || ''))
+      return
+    const targetField = String(rule?.targetField || '').trim()
+    if (targetField && targetField !== sourceField && rule.clearOnSourceChange !== false)
+      patch[targetField] = ''
+  })
+  Object.assign(formData, patch)
+  return patch
+}
+
+export function resolveFieldLinkageContext(rules = [], targetField = '', formData = {}) {
+  const rule = (Array.isArray(rules) ? rules : []).find(item => item?.enabled !== false
+    && String(item?.targetField || '') === String(targetField || ''))
+  if (!rule)
+    return null
+  return {
+    ruleId: String(rule.ruleId || ''),
+    type: String(rule.type || ''),
+    sourceField: String(rule.sourceField || ''),
+    sourceValue: readPath(formData, rule.sourceField),
+    paramName: String(rule.remoteConfig?.paramName || rule.orgConfig?.paramName || rule.sourceField || ''),
+    emptyStrategy: String(rule.emptyStrategy || 'empty'),
+    remoteConfig: { ...(rule.remoteConfig || {}) },
+    dictConfig: { ...(rule.dictConfig || {}) },
+    objectConfig: { ...(rule.objectConfig || {}) },
+  }
+}
+
+export function filterFieldOptionsByLinkage(options = [], linkageContext = null) {
+  const source = Array.isArray(options) ? options : []
+  if (!linkageContext)
+    return source
+  const sourceValue = linkageContext.sourceValue
+  if (sourceValue === undefined || sourceValue === null || sourceValue === '')
+    return linkageContext.emptyStrategy === 'all' ? source : []
+  if (!['linkedDict', 'parentDictCode'].includes(linkageContext.type))
+    return source
+  const metadataKeys = ['parentValue', 'parentCode', 'parentDictCode', 'linkedDictValue', 'linked_dict_value']
+  const hasMetadata = source.some(option => metadataKeys.some(key => option?.[key] !== undefined))
+  if (!hasMetadata)
+    return source
+  return source.filter(option => metadataKeys.some(key => option?.[key] !== undefined
+    && String(option[key]) === String(sourceValue)))
+}
+
+export function resolveBottomBarActions(bottomBar = {}, data = {}, mode = '', permissions = []) {
+  const supportedTypes = new Set(['save', 'reset', 'action', 'cancel', 'flow_action'])
+  return (Array.isArray(bottomBar?.actions) ? bottomBar.actions : [])
+    .filter(action => action && supportedTypes.has(String(action.type || '').toLowerCase()))
+    .filter((action) => {
+      const type = String(action.type || '').toLowerCase()
+      const visibleModes = Array.isArray(action.visibleInModes) ? action.visibleInModes.map(String) : []
+      if (visibleModes.length && !visibleModes.includes(String(mode)))
+        return false
+      if (mode && type === 'reset' && mode !== 'create')
+        return false
+      return !(mode === 'detail' && type === 'save')
+    })
+    .filter(action => actionVisible(action, data))
+    .map(action => resolveActionPermission(action, permissions))
+    .filter(Boolean)
+}
+
+export function resolveActionPermissionKey(action = {}) {
+  return String(action.permissionKey || action.permissionCode || action.permission || '').trim()
+}
+
+export function hasActionPermission(action = {}, permissions = []) {
+  const required = resolveActionPermissionKey(action)
+  if (!required)
+    return true
+  return (Array.isArray(permissions) ? permissions : [])
+    .map(permission => String(permission || '').trim())
+    .filter(Boolean)
+    .some(permission => permissionPatternMatches(permission, required))
+}
+
+export function resolveActionPermission(action = {}, permissions = []) {
+  if (hasActionPermission(action, permissions))
+    return { ...action, disabled: action.disabled === true, permissionDenied: false }
+  if (action.permissionStrategy === 'disable')
+    return { ...action, disabled: true, permissionDenied: true }
+  return null
+}
+
+function permissionPatternMatches(granted, required) {
+  if (granted === '**' || granted === '*:*:*' || granted === required)
+    return true
+  if (!granted.includes('*'))
+    return false
+  const escaped = granted.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = escaped.replace(/\*\*/g, '.*').replace(/\*/g, '[^:]*')
+  return new RegExp(`^${pattern}$`).test(required)
 }
 
 export function childDataKeys(child = {}) {
@@ -328,6 +667,7 @@ function containsDangerousKey(value, seen = new Set()) {
 export function normalizeDictOptions(data) {
   const rows = Array.isArray(data) ? data : data?.records || data?.list || data?.rows || []
   return rows.map(item => ({
+    ...item,
     label: item.dictLabel || item.label || item.name || item.value,
     value: item.dictValue ?? item.value ?? item.code,
   })).filter(item => item.value !== undefined && item.value !== null)

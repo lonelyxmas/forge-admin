@@ -11,6 +11,8 @@ export const LOCAL_TRANSACTION_STEP_TYPES = Object.freeze([
   'ASSERT_RECORD',
 ])
 
+export { createCallApiBusinessActionStep } from './call-api-step-config'
+
 const LOCAL_STEP_LABELS = Object.freeze({
   CREATE_RECORD: '创建记录',
   UPDATE_FIELD: '更新字段',
@@ -28,14 +30,15 @@ export function canUseBusinessActionStep(executionMode, stepType) {
 
 export function resolveBusinessActionExecutionMode(actionConfig = {}) {
   const configured = String(actionConfig.executionMode || '').trim().toUpperCase()
-  if (Object.values(BUSINESS_ACTION_EXECUTION_MODE).includes(configured))
-    return configured
-  return collectBusinessActionSteps(actionConfig).some(step => !canUseBusinessActionStep(
+  const hasNonLocalStep = collectBusinessActionSteps(actionConfig).some(step => !canUseBusinessActionStep(
     BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION,
     step?.stepType,
   ))
-    ? BUSINESS_ACTION_EXECUTION_MODE.ORCHESTRATION
-    : BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION
+  if (hasNonLocalStep)
+    return BUSINESS_ACTION_EXECUTION_MODE.ORCHESTRATION
+  if (Object.values(BUSINESS_ACTION_EXECUTION_MODE).includes(configured))
+    return configured
+  return BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION
 }
 
 export function createDefaultBusinessActionConfig(overrides = {}) {

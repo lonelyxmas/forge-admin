@@ -1,5 +1,7 @@
 <template>
   <BusinessObjectDesignerShell
+    :embedded="embedded"
+    :compact-embedded="embedded && activePanel === 'flow-app'"
     :active-panel="activePanel"
     :designer="designer"
     :loading="loading"
@@ -29,7 +31,7 @@
       v-if="objectId && !isCodeAppDesigner"
       ref="tableMappingSummaryRef"
       :object-id="objectId"
-      :expanded="activePanel === 'fields'"
+      :expanded="activePanel === 'fields' || activePanel === 'data-model'"
       :model-schema="draft.modelSchema"
       @loaded="tableMapping = $event"
       @open-structure="handlePanelSwitch('fields')"
@@ -98,43 +100,103 @@
       @add-to-form="handleAddFieldToForm"
     />
 
-    <section v-else-if="activePanel === 'form'" class="form-detail-panel">
-      <n-tabs v-model:value="formDetailTab" type="line">
-        <n-tab-pane name="form" tab="表单设计">
-          <BusinessFormDesigner
-            ref="formDesignerRef"
-            v-model="draft.pageSchema"
-            v-model:form-designer-schema="draft.formDesignerSchema"
+    <section v-else-if="activePanel === 'data-model'" class="grouped-designer-panel">
+      <n-tabs v-model:value="dataModelTab" type="line">
+        <n-tab-pane name="relations" tab="对象关系">
+          <BusinessRelationDesigner
+            ref="relationDesignerRef"
+            v-model:linkage-schema="draft.linkageSchema"
             :object-id="objectId"
+            :suite-code="draft.suiteCode"
             :object-code="draft.objectCode"
             :object-name="draft.objectName"
-            :model-schema="draft.modelSchema"
             :fields="draft.fields"
-            :relations="draft.relations"
-            @saved="handleLayoutSaved"
+            :designer-options="draft.designerOptions"
+            :designer-actions="draft.designerOptions?.actions || []"
+            model-only
+            @updated="handleRelationsUpdated"
+            @update:designer-actions="handleActionsUpdated"
             @fields-updated="handleFieldsUpdated"
             @dirty-change="handleDirtyChange"
-            @create-field="handlePanelSwitch('fields')"
-            @open-relations="handlePanelSwitch('relations')"
           />
         </n-tab-pane>
-        <n-tab-pane name="detail" tab="详情设置">
-          <BusinessDetailDesigner
-            ref="detailDesignerRef"
-            v-model="draft.pageSchema"
-            v-model:view-schema="draft.viewSchema"
+        <n-tab-pane name="flow-app" tab="流程绑定">
+          <BusinessFlowAppConfigPanel
+            ref="flowAppConfigRef"
             :object-id="objectId"
-            :model-schema="draft.modelSchema"
+            :suite-code="draft.suiteCode"
+            :object-code="draft.objectCode"
+            :object-name="draft.objectName"
             :fields="draft.fields"
-            :relations="draft.relations"
-            @saved="handleLayoutSaved"
+            :initial-config="draft.documentConfig"
+            :initial-section="embedded ? 'flow' : route.query.section"
+            :code-app="isCodeAppDesigner"
+            :compact="embedded"
+            @saved="handleFlowAppSaved"
+            @flow-context-change="emit('flowContextChange', $event)"
             @dirty-change="handleDirtyChange"
-            @open-form="formDetailTab = 'form'"
-            @open-relations="handlePanelSwitch('relations')"
+            @open-trigger="openTriggerConfig"
+            @open-publish="handlePanelSwitch('publish')"
+            @update-field-generation="handleFieldGenerationUpdate"
+          />
+        </n-tab-pane>
+        <n-tab-pane name="permission" tab="数据权限">
+          <BusinessPermissionFlowPanel
+            ref="permissionFlowRef"
+            v-model:model-schema="draft.modelSchema"
+            v-model:page-schema="draft.pageSchema"
+            :fields="draft.fields"
+            :object-name="draft.objectName"
+            @dirty-change="handleDirtyChange"
           />
         </n-tab-pane>
       </n-tabs>
     </section>
+
+    <section v-else-if="activePanel === 'default-view'" class="grouped-designer-panel">
+      <n-tabs v-model:value="defaultViewTab" type="line">
+        <n-tab-pane name="list" tab="列表模板">
+          <BusinessListDesigner
+            ref="listDesignerRef"
+            v-model="draft.pageSchema"
+            v-model:view-schema="draft.viewSchema"
+            default-view-only
+            :object-id="objectId"
+            :model-schema="draft.modelSchema"
+            :fields="draft.fields"
+            :form-options="runtimeFormOptions"
+            :designer-options="draft.designerOptions"
+            :designer-actions="draft.designerOptions?.actions || []"
+            @update:designer-actions="handleActionsUpdated"
+            @saved="handleLayoutSaved"
+            @dirty-change="handleDirtyChange"
+          />
+        </n-tab-pane>
+      </n-tabs>
+    </section>
+
+    <BusinessFormDesigner
+      v-else-if="activePanel === 'form'"
+      ref="formDesignerRef"
+      v-model="draft.pageSchema"
+      v-model:form-designer-schema="draft.formDesignerSchema"
+      v-model:view-schema="draft.viewSchema"
+      v-model:linkage-schema="draft.linkageSchema"
+      :object-id="objectId"
+      :object-code="draft.objectCode"
+      :object-name="draft.objectName"
+      :model-schema="draft.modelSchema"
+      :fields="draft.fields"
+      :relations="draft.relations"
+      :actions="draft.designerOptions?.actions || []"
+      :initial-property-tab="initialFormPropertyTab"
+      :initial-canvas-view="initialFormCanvasView"
+      @saved="handleLayoutSaved"
+      @fields-updated="handleFieldsUpdated"
+      @dirty-change="handleDirtyChange"
+      @create-field="handlePanelSwitch('fields')"
+      @open-relations="handlePanelSwitch('relations')"
+    />
 
     <BusinessListDesigner
       v-else-if="activePanel === 'list'"
@@ -177,6 +239,7 @@
       :fields="draft.fields"
       :designer-options="draft.designerOptions"
       :designer-actions="draft.designerOptions?.actions || []"
+      model-only
       @updated="handleRelationsUpdated"
       @update:designer-actions="handleActionsUpdated"
       @fields-updated="handleFieldsUpdated"
@@ -192,9 +255,11 @@
       :object-name="draft.objectName"
       :fields="draft.fields"
       :initial-config="draft.documentConfig"
-      :initial-section="route.query.section"
+      :initial-section="embedded ? 'flow' : route.query.section"
       :code-app="isCodeAppDesigner"
+      :compact="embedded"
       @saved="handleFlowAppSaved"
+      @flow-context-change="emit('flowContextChange', $event)"
       @dirty-change="handleDirtyChange"
       @open-trigger="openTriggerConfig"
       @open-publish="handlePanelSwitch('publish')"
@@ -267,6 +332,12 @@ import DesignerAsyncLoader from './components/designer/DesignerAsyncLoader.vue'
 import { renameFormDesignerFieldRefs } from './components/designer/form-first/fieldReferenceUtils'
 import { createDefaultFormDesignerSchema, normalizeMultiFormDesignerSchema } from './components/designer/form-first/formDesignerSchema'
 import { createDefaultViewSchema, renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import {
+  resolveDataModelTab,
+  resolveDefaultViewTab,
+  resolveStandaloneObjectDesignerSection,
+} from './components/designer/object-designer-navigation'
+import { buildSeedTakeoverSummary, markSeedTakeoverAccepted, requiresSeedTakeoverConfirmation } from './components/designer/seed-takeover'
 
 const props = defineProps({
   embedded: {
@@ -293,13 +364,20 @@ const props = defineProps({
     type: String,
     default: 'form',
   },
+  initialFormPropertyTab: {
+    type: String,
+    default: 'basic',
+  },
+  embeddedNavPanels: {
+    type: Array,
+    default: () => [],
+  },
 })
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'saved', 'dirtyChange', 'flowContextChange'])
 
 const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
 const BusinessActionDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessActionDesigner.vue'))
-const BusinessDetailDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDetailDesigner.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
 const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
@@ -334,7 +412,9 @@ const designerDraftDirty = ref(false)
 const fieldDraftDirty = ref(false)
 const ready = ref(false)
 const activePanel = ref(resolveInitialPanel())
-const formDetailTab = ref(resolveInitialDetailTab())
+const initialFormCanvasView = resolveInitialFormCanvasView()
+const dataModelTab = ref(resolveDataModelTab(props.embedded ? props.initialPanel : route.query.modelTab || route.query.panel))
+const defaultViewTab = ref(resolveDefaultViewTab(props.embedded ? props.initialPanel : route.query.viewTab || route.query.panel))
 const developerMode = ref(false)
 const designer = ref(null)
 const runtimeInfo = ref(null)
@@ -345,7 +425,6 @@ const tableMappingSummaryRef = ref(null)
 const tableMapping = ref(null)
 const formDesignerRef = ref(null)
 const listDesignerRef = ref(null)
-const detailDesignerRef = ref(null)
 const relationDesignerRef = ref(null)
 const flowAppConfigRef = ref(null)
 const permissionFlowRef = ref(null)
@@ -367,6 +446,14 @@ const isCodeAppDesigner = computed(() => {
     || designer.value?.options?.codeApp === true
     || (!objectId.value && (route.query.codeApp === '1' || route.query.appType === 'code'))
 })
+const usesLegacyObjectPanels = computed(() => props.embedded || isCodeAppDesigner.value)
+const effectiveDesignerPanel = computed(() => {
+  if (activePanel.value === 'data-model')
+    return dataModelTab.value
+  if (activePanel.value === 'default-view')
+    return defaultViewTab.value
+  return activePanel.value
+})
 const publishDisabled = computed(() => {
   if (isCodeAppDesigner.value)
     return true
@@ -374,7 +461,11 @@ const publishDisabled = computed(() => {
     return true
   return publishCheckState.value?.publishable === false
 })
-const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'list', 'actions', 'flow-app'] : []))
+const designerNavPanels = computed(() => {
+  if (props.embedded && props.embeddedNavPanels.length)
+    return props.embeddedNavPanels
+  return isCodeAppDesigner.value ? ['form', 'list', 'actions', 'flow-app'] : []
+})
 const closureSteps = computed(() => {
   if (isCodeAppDesigner.value)
     return []
@@ -413,7 +504,9 @@ const runtimeFormOptions = computed(() => {
 
 function resolveInitialPanel() {
   const panel = props.embedded ? props.initialPanel : route.query.panel
-  return normalizePanel(panel) || 'fields'
+  const normalized = normalizePanel(panel) || 'fields'
+  const codeAppRoute = route.query.codeApp === '1' || route.query.appType === 'code'
+  return props.embedded || codeAppRoute ? normalized : resolveStandaloneObjectDesignerSection(normalized)
 }
 
 function normalizePanel(panel) {
@@ -424,10 +517,15 @@ function normalizePanel(panel) {
   return panel === 'detail' ? 'form' : panel
 }
 
-function resolveInitialDetailTab() {
-  if (!props.embedded && route.query.panel === 'detail')
+function resolveInitialFormCanvasView() {
+  const legacyView = props.embedded
+    ? props.initialDetailTab
+    : route.query.panel === 'detail' ? 'detail' : route.query.detailTab
+  if (legacyView === 'detail')
     return 'detail'
-  return props.embedded ? props.initialDetailTab || 'form' : route.query.detailTab || 'form'
+  if (legacyView === 'sections')
+    return 'sections'
+  return 'layout'
 }
 
 function normalizeStartMode(value) {
@@ -459,7 +557,9 @@ onBeforeRouteLeave(() => {
 })
 
 watch(dirty, (value) => {
-  if (!props.embedded)
+  if (props.embedded)
+    emit('dirtyChange', value)
+  else
     tabStore.setTabDirty(route.fullPath, value, '当前业务对象设计存在未保存的更改')
 }, { immediate: true })
 
@@ -481,24 +581,22 @@ watch(activePanel, (panel) => {
     query: {
       ...route.query,
       panel,
-      ...(panel === 'form' ? { detailTab: formDetailTab.value } : {}),
+      ...(panel === 'data-model' ? { modelTab: dataModelTab.value } : {}),
+      ...(panel === 'default-view' ? { viewTab: defaultViewTab.value } : {}),
     },
   })
 })
 
-watch(formDetailTab, (tab) => {
-  if (props.embedded)
+watch(dataModelTab, (tab) => {
+  if (props.embedded || activePanel.value !== 'data-model')
     return
-  if (activePanel.value !== 'form')
+  router.replace({ path: route.path, query: { ...route.query, panel: 'data-model', modelTab: tab } })
+})
+
+watch(defaultViewTab, (tab) => {
+  if (props.embedded || activePanel.value !== 'default-view')
     return
-  router.replace({
-    path: route.path,
-    query: {
-      ...route.query,
-      panel: 'form',
-      detailTab: tab,
-    },
-  })
+  router.replace({ path: route.path, query: { ...route.query, panel: 'default-view', viewTab: tab } })
 })
 
 watch(canAdvanced, (value) => {
@@ -669,50 +767,45 @@ async function loadRuntimeInfo(id = objectId.value) {
 
 async function handleSave() {
   if (saving.value)
-    return
+    return false
   saving.value = true
   await waitForSaveLoadingPaint()
   try {
-    if (activePanel.value === 'fields') {
+    const currentPanel = effectiveDesignerPanel.value
+    if (!await confirmSeedConfigurationTakeover())
+      return false
+    if (currentPanel === 'fields') {
       const saved = await fieldManagerRef.value?.saveSelectedField?.()
       if (saved === true)
         fieldDraftDirty.value = false
-      return
+      return saved === true
     }
-    if (isCodeAppDesigner.value && activePanel.value === 'form') {
+    if (isCodeAppDesigner.value && currentPanel === 'form') {
       await syncActiveFormDraft()
       await saveCodeAppDesignerDraft(true)
-      return
+      return true
     }
-    if (isCodeAppDesigner.value && activePanel.value === 'list') {
+    if (isCodeAppDesigner.value && currentPanel === 'list') {
       await syncActiveListDraft()
       await saveCodeAppDesignerDraft(true)
-      return
+      return true
     }
-    if (activePanel.value === 'form') {
-      if (formDetailTab.value === 'detail')
-        await detailDesignerRef.value?.saveLayout?.()
-      else
-        await formDesignerRef.value?.saveLayout?.()
+    if (currentPanel === 'form') {
+      await formDesignerRef.value?.saveLayout?.()
       await loadDesigner()
-      return
+      return true
     }
-    if (activePanel.value === 'list') {
+    if (currentPanel === 'list') {
       await listDesignerRef.value?.saveLayout?.()
       await loadDesigner()
-      return
+      return true
     }
-    if (activePanel.value === 'detail') {
-      await detailDesignerRef.value?.saveLayout?.()
-      await loadDesigner()
-      return
-    }
-    if (activePanel.value === 'relations') {
+    if (currentPanel === 'relations') {
       await relationDesignerRef.value?.saveRelations?.()
       await loadDesigner()
-      return
+      return true
     }
-    if (activePanel.value === 'flow-app') {
+    if (currentPanel === 'flow-app') {
       const codeAppMetadata = isCodeAppDesigner.value && designerDraftDirty.value
         ? buildCodeAppMetadataPayload()
         : null
@@ -720,16 +813,55 @@ async function handleSave() {
         await persistPendingDesignerDraft()
       await flowAppConfigRef.value?.saveConfig?.({ codeAppMetadata })
       await loadDesigner()
-      return
+      return true
     }
-    if (activePanel.value === 'permission') {
+    if (currentPanel === 'permission') {
       permissionFlowRef.value?.saveConfig?.()
     }
     await saveDesignerDraft(true, { manageSaving: false })
+    return true
   }
   finally {
     saving.value = false
   }
+}
+
+async function confirmSeedConfigurationTakeover() {
+  if (!requiresSeedTakeoverConfirmation(designer.value || {}))
+    return true
+  const summary = buildSeedTakeoverSummary(designer.value || {}, draft)
+  const confirmed = await requestSeedTakeoverConfirmation(summary)
+  if (!confirmed)
+    return false
+
+  draft.designerOptions = markSeedTakeoverAccepted(draft.designerOptions || {})
+  if (effectiveDesignerPanel.value === 'form')
+    await syncActiveFormDraft()
+  if (effectiveDesignerPanel.value === 'list')
+    await syncActiveListDraft()
+  await saveBusinessObjectDesigner(objectId.value, buildDesignerPayload())
+  designer.value = {
+    ...(designer.value || {}),
+    designerOptions: cloneSchema(draft.designerOptions),
+  }
+  return true
+}
+
+function requestSeedTakeoverConfirmation(summary) {
+  const content = `此配置由系统种子初始化。确认后，后续修改由设计器草稿接管；已发布版本保持不变，只有正式发布才会生成新快照。\n本次变化：${summary}`
+  if (!window.$dialog)
+    return Promise.resolve(false)
+  return new Promise((resolve) => {
+    window.$dialog.warning({
+      title: '接管内置配置',
+      content,
+      positiveText: '确认接管并保存',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
 }
 
 async function saveDesignerDraft(showMessage = true, options = {}) {
@@ -761,7 +893,20 @@ async function waitForSaveLoadingPaint() {
 }
 
 async function handlePanelSwitch(panel) {
-  const nextPanel = normalizePanel(panel)
+  const rawPanel = String(panel || '').trim()
+  const normalizedPanel = !usesLegacyObjectPanels.value && rawPanel === 'detail'
+    ? 'detail'
+    : normalizePanel(panel)
+  if (!usesLegacyObjectPanels.value) {
+    if (['relations', 'flow-app', 'permission'].includes(normalizedPanel))
+      dataModelTab.value = normalizedPanel
+    if (['list', 'detail'].includes(normalizedPanel))
+      defaultViewTab.value = normalizedPanel
+  }
+  const compatibilityPanel = ['publish', 'advanced'].includes(normalizedPanel)
+  const nextPanel = usesLegacyObjectPanels.value || compatibilityPanel
+    ? normalizedPanel
+    : resolveStandaloneObjectDesignerSection(normalizedPanel)
   if (!nextPanel || nextPanel === activePanel.value)
     return
   if (!await saveFieldDraftBeforePanelSwitch())
@@ -791,12 +936,11 @@ async function saveFieldDraftBeforePanelSwitch() {
 }
 
 async function syncActiveFormDraft() {
-  if (activePanel.value !== 'form')
+  const panel = effectiveDesignerPanel.value
+  if (!['form', 'detail'].includes(panel))
     return
   await nextTick()
-  const result = formDetailTab.value === 'detail'
-    ? detailDesignerRef.value?.syncDesignerDraft?.()
-    : formDesignerRef.value?.syncDesignerDraft?.()
+  const result = formDesignerRef.value?.syncDesignerDraft?.()
   const changed = applyDesignerDraftSyncResult(result)
   if (result?.dirty || changed) {
     dirty.value = true
@@ -806,7 +950,7 @@ async function syncActiveFormDraft() {
 }
 
 async function syncActiveListDraft() {
-  if (activePanel.value !== 'list')
+  if (effectiveDesignerPanel.value !== 'list')
     return
   await nextTick()
   const result = listDesignerRef.value?.syncDesignerDraft?.()
@@ -893,11 +1037,11 @@ async function persistPendingDesignerDraft() {
 }
 
 function handlePreview() {
-  if (activePanel.value === 'form') {
+  if (effectiveDesignerPanel.value === 'form') {
     window.dispatchEvent(new CustomEvent('forge-form-designer:preview-current-form'))
     return
   }
-  if (activePanel.value === 'list') {
+  if (effectiveDesignerPanel.value === 'list') {
     window.dispatchEvent(new CustomEvent('forge-list-designer:preview-current-list'))
     return
   }
@@ -972,11 +1116,15 @@ function formatPublishBlockMessage(check = {}) {
   if (!blocks.length)
     return '发布检查存在阻断项，请先修复'
   const summary = blocks
-    .slice(0, 3)
-    .map(item => item?.zoneKey || item?.fieldCode ? `${item?.title || item?.itemCode}（${item.zoneKey || item.fieldCode}）` : (item?.title || item?.itemCode))
+    .slice(0, 5)
+    .map((item) => {
+      const title = item?.title || item?.itemCode || ''
+      const detail = item?.message || ''
+      return detail ? `${title}：${detail}` : title
+    })
     .filter(Boolean)
     .join('；')
-  const remain = blocks.length > 3 ? `；另有 ${blocks.length - 3} 项` : ''
+  const remain = blocks.length > 5 ? `；另有 ${blocks.length - 5} 项` : ''
   return `发布检查存在 ${blocks.length} 个阻断项：${summary}${remain}`
 }
 
@@ -1047,7 +1195,6 @@ async function handleAddFieldToForm(field) {
   if (!field)
     return
   activePanel.value = 'form'
-  formDetailTab.value = 'form'
   await nextTick()
   formDesignerRef.value?.appendFieldToForm?.(toPageField(field))
 }
@@ -1094,8 +1241,10 @@ async function handleFlowAppSaved() {
     return
   }
   const mainFlow = draft.documentConfig?.mainFlowSummary || {}
-  if (draft.documentConfig?.documentEnabled && !mainFlow.configured)
-    activePanel.value = 'flow-app'
+  if (draft.documentConfig?.documentEnabled && !mainFlow.configured) {
+    activePanel.value = usesLegacyObjectPanels.value ? 'flow-app' : 'data-model'
+    dataModelTab.value = 'flow-app'
+  }
   const startMode = String(mainFlow.startMode || '').toUpperCase()
   if (startMode === 'TRIGGER' || startMode === 'BOTH') {
     activePanel.value = 'triggers'
@@ -1140,7 +1289,7 @@ function handleActionsUpdated(actions) {
     ...(draft.designerOptions || {}),
     actions: cloneSchema(actions || []),
   }
-  if (ready.value && ['list', 'relations', 'actions'].includes(activePanel.value)) {
+  if (ready.value && ['list', 'relations', 'actions'].includes(effectiveDesignerPanel.value)) {
     dirty.value = true
     designerDraftDirty.value = true
   }
@@ -1183,7 +1332,6 @@ async function handleFixTarget(panel) {
   }
   if (panel === 'detail') {
     await handlePanelSwitch('form')
-    formDetailTab.value = 'detail'
     return
   }
   await handlePanelSwitch(targetPanel || 'form')
@@ -1199,11 +1347,10 @@ function handleDirtyChange(value) {
   if (!ready.value)
     return
   dirty.value = !!value
-  if (value && activePanel.value === 'form' && formDetailTab.value === 'form')
+  const panel = effectiveDesignerPanel.value
+  if (value && ['form', 'detail'].includes(panel))
     designerDraftDirty.value = true
-  if (value && activePanel.value === 'form' && formDetailTab.value === 'detail')
-    designerDraftDirty.value = true
-  if (value && ['list', 'relations', 'actions'].includes(activePanel.value))
+  if (value && ['list', 'relations', 'actions'].includes(panel))
     designerDraftDirty.value = true
 }
 
@@ -2239,6 +2386,10 @@ function hasPermission(source, permission) {
     return false
   return source.includes(permission) || source.includes('**') || source.includes('*:*:*')
 }
+
+defineExpose({
+  save: handleSave,
+})
 </script>
 
 <style scoped>

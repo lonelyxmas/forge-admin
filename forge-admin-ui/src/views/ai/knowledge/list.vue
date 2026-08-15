@@ -30,8 +30,12 @@
             </template>
           </n-input>
           <div class="kb-list-filters__actions">
-            <NButton type="primary" size="small" @click="handleSearch">查询</NButton>
-            <NButton size="small" @click="handleReset">重置</NButton>
+            <NButton type="primary" size="small" @click="handleSearch">
+              查询
+            </NButton>
+            <NButton size="small" @click="handleReset">
+              重置
+            </NButton>
           </div>
         </div>
         <n-spin :show="loading">
@@ -89,15 +93,23 @@
                   <h2>{{ selectedKb.knowledgeName }}</h2>
                   <DictTag dict-type="ai_status" :value="selectedKb.status" size="small" />
                 </div>
-                <p class="kb-detail-header__desc">{{ selectedKb.description || '暂无描述' }}</p>
+                <p class="kb-detail-header__desc">
+                  {{ selectedKb.description || '暂无描述' }}
+                </p>
               </div>
             </div>
             <div class="kb-detail-header__actions">
-              <NButton secondary @click="handleEdit(selectedKb)">编辑</NButton>
-              <NButton secondary @click="searchModal.show = true">检索调试</NButton>
+              <NButton secondary @click="handleEdit(selectedKb)">
+                编辑
+              </NButton>
+              <NButton secondary @click="searchModal.show = true">
+                检索调试
+              </NButton>
               <NPopconfirm @positive-click="handleDelete(selectedKb.id)">
                 <template #trigger>
-                  <NButton text class="text-error">删除</NButton>
+                  <NButton text class="text-error">
+                    删除
+                  </NButton>
                 </template>
                 确定删除知识库“{{ selectedKb.knowledgeName }}”吗？该操作将删除其下所有文档。
               </NPopconfirm>
@@ -226,7 +238,9 @@
                 <i class="ai-icon:copy" aria-hidden="true" />
                 <span>上传去重</span>
               </div>
-              <p class="section-desc">控制同一知识库内重复文档的判定与处理方式。</p>
+              <p class="section-desc">
+                控制同一知识库内重复文档的判定与处理方式。
+              </p>
               <n-form-item label="去重策略" path="dedupStrategy">
                 <n-select
                   v-model:value="kbModal.form.dedupStrategy"
@@ -241,7 +255,9 @@
                 <i class="ai-icon:cut" aria-hidden="true" />
                 <span>切片策略</span>
               </div>
-              <p class="section-desc">选择文档入库时的分块方式。</p>
+              <p class="section-desc">
+                选择文档入库时的分块方式。
+              </p>
               <div class="chunk-mode-seg" role="tablist" aria-label="切片策略">
                 <button
                   v-for="opt in chunkStrategyOptions"
@@ -302,8 +318,12 @@
         </div>
         <template #footer>
           <div class="kb-drawer-footer">
-            <NButton @click="kbModal.show = false">取消</NButton>
-            <NButton type="primary" :loading="kbModal.saving" @click="handleSave">确定</NButton>
+            <NButton @click="kbModal.show = false">
+              取消
+            </NButton>
+            <NButton type="primary" :loading="kbModal.saving" @click="handleSave">
+              确定
+            </NButton>
           </div>
         </template>
       </n-drawer-content>
@@ -333,7 +353,9 @@
       <div v-if="searchModal.results.length" class="search-results">
         <div v-for="(r, i) in searchModal.results" :key="i" class="search-result-item">
           <div class="search-result-item__meta">
-            <NTag size="small" :bordered="false">{{ r.score?.toFixed?.(3) ?? '—' }}</NTag>
+            <NTag size="small" :bordered="false">
+              {{ r.score?.toFixed?.(3) ?? '—' }}
+            </NTag>
             <code>{{ r.docName || `文档 #${r.documentId}` }}</code>
           </div>
           <p>{{ r.content }}</p>
@@ -341,7 +363,9 @@
       </div>
       <template #action>
         <div class="modal-footer-actions">
-          <NButton @click="searchModal.show = false">关闭</NButton>
+          <NButton @click="searchModal.show = false">
+            关闭
+          </NButton>
         </div>
       </template>
     </n-modal>
@@ -352,17 +376,17 @@
 import { NButton, NPopconfirm, NTag } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
+  knowledgeDocumentPage as fetchDocPage,
   knowledgePage as fetchKbPage,
+  modelPage as fetchModelPage,
+  storeInstancePage as fetchStorePage,
   knowledgeCreate,
   knowledgeDelete,
-  knowledgeDocumentPage as fetchDocPage,
-  knowledgeDocumentUpload,
   knowledgeDocumentDelete,
   knowledgeDocumentProgressSSE,
+  knowledgeDocumentUpload,
   knowledgeSearch,
   knowledgeUpdate,
-  storeInstancePage as fetchStorePage,
-  modelPage as fetchModelPage,
 } from '@/api/ai'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
@@ -1168,7 +1192,10 @@ onMounted(() => {
   cursor: pointer;
   font-size: 13px;
   color: var(--text-muted);
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
 }
 
 .chunk-mode-seg__item:hover {

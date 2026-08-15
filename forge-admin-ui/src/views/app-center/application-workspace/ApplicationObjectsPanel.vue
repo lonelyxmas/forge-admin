@@ -73,10 +73,17 @@
             {{ Number(item.sharedApplicationCount || 0) > 1 ? `${item.sharedApplicationCount} 个应用共用` : '仅当前应用' }}
           </span>
           <div class="object-actions">
-            <a class="cursor-pointer text-primary" @click="openDesigner(item)">数据结构</a>
-            <a class="cursor-pointer text-info" @click="openForm(item)">设计表单</a>
-            <a class="cursor-pointer text-info" @click="openDesignerPanel(item, 'actions')">业务动作</a>
-            <a class="cursor-pointer text-error" @click="removeObject(item)">移除</a>
+            <a class="cursor-pointer text-primary" @click="openDesigner(item)">编辑字段</a>
+            <n-dropdown
+              trigger="click"
+              placement="bottom-end"
+              :options="objectRowMoreOptions"
+              @select="key => handleObjectMoreSelect(key, item)"
+            >
+              <n-button size="small" quaternary aria-label="更多操作" title="更多操作">
+                ⋯
+              </n-button>
+            </n-dropdown>
           </div>
         </div>
       </div>
@@ -292,8 +299,13 @@ function openDesigner(item) {
   openDesignerPanel(item, 'fields')
 }
 
-function openForm(item) {
-  openDesignerPanel(item, 'form')
+const objectRowMoreOptions = [
+  { label: '移除出应用', key: 'remove', props: { style: { color: '#d03050' } } },
+]
+
+function handleObjectMoreSelect(key, item) {
+  if (key === 'remove')
+    removeObject(item)
 }
 
 function openDesignerPanel(item, panel) {
@@ -366,10 +378,10 @@ function syncTone(status) {
 
 .object-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.2fr) 132px minmax(190px, 1.15fr) 130px 120px 190px;
+  grid-template-columns: minmax(190px, 1.2fr) 132px minmax(190px, 1.15fr) 130px 120px 120px;
   gap: 14px;
   align-items: center;
-  min-width: 1020px;
+  min-width: 960px;
   min-height: 64px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-light, #e5e6eb);

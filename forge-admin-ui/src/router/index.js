@@ -95,7 +95,7 @@ export const manualRoutes = [
     name: 'AiLowcodeBuilderDynamic',
     path: '/ai/lowcode-builder/:id?',
     component: () => import('@/views/ai/lowcode-builder.vue'),
-    meta: { title: '业务页面设计器' },
+    meta: { title: '业务页面设计器（存量）', deprecated: true },
   },
   {
     name: 'BusinessObjectDesigner',

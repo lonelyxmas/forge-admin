@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { createForgeFieldTemplateComponent } from '../../forge-form-designer/designerLayoutFactory'
 import { buildAutoFieldAssets } from '../autoFieldRegistry'
 import {
-  createDefaultFormDesignerSchema,
   appendDesignerLayoutChild,
+  createDefaultFormDesignerSchema,
   getDesignerComponent,
   insertDesignerComponent,
   normalizeFormDesignerSchema,
+  normalizeFormDesignerSchemaForSave,
   updateDesignerComponent,
 } from '../formDesignerSchema'
 
@@ -138,6 +139,86 @@ describe('formDesignerSchema', () => {
       replayActionCode: 'submit_presale',
       recordVersionField: 'updateTime',
     })
+  })
+
+  it('preserves the presale page sections and bottom bar without mutating the source', () => {
+    const source = {
+      formKey: 'ps_presale_order_form',
+      components: [
+        { id: 'pay_method', componentKey: 'dictSelect', label: '收款方式', fieldBinding: { fieldCode: 'payMethod' } },
+      ],
+      pageSections: [
+        {
+          sectionId: 'payment',
+          sectionType: 'card',
+          title: '收款信息',
+          fields: ['payMethod', 'cashAmount'],
+          fieldOverrides: {
+            payMethod: { componentKey: 'pillSelect', props: { clearable: false } },
+          },
+          collapsible: false,
+          visibleInModes: ['create', 'edit', 'detail'],
+        },
+        {
+          sectionId: 'presale_items',
+          sectionType: 'child_table',
+          relationKey: 'presale_items',
+          title: '商品明细',
+          displayMode: 'inline_grid',
+          visibleInModes: ['create', 'edit', 'detail'],
+        },
+      ],
+      bottomBar: {
+        sticky: true,
+        actions: [
+          { type: 'reset', label: '清空', variant: 'secondary' },
+          {
+            type: 'action',
+            actionCode: 'submit_presale',
+            label: '提交',
+            variant: 'primary',
+            displayCondition: 'status == DRAFT',
+            confirmText: '确认提交当前预售单？',
+            successMessage: '预售单已提交',
+          },
+        ],
+      },
+    }
+    const snapshot = structuredClone(source)
+
+    const schema = normalizeFormDesignerSchema(source)
+
+    expect(source).toEqual(snapshot)
+    expect(schema.pageSections).toEqual(snapshot.pageSections)
+    expect(schema.bottomBar).toEqual(snapshot.bottomBar)
+  })
+
+  it('keeps section protocol in every form when normalizing for save', () => {
+    const saved = normalizeFormDesignerSchemaForSave({
+      formKey: 'main_form',
+      defaultFormKey: 'main_form',
+      components: [],
+      pageSections: [{ sectionId: 'main', sectionType: 'card', title: '主表', fields: ['code'] }],
+      bottomBar: { actions: [{ type: 'save', label: '保存' }] },
+      settings: {
+        formAssets: [{
+          formKey: 'detail_form',
+          formName: '明细表单',
+          schema: {
+            formKey: 'detail_form',
+            components: [],
+            pageSections: [{ sectionId: 'detail', sectionType: 'card', title: '明细', fields: ['name'] }],
+            bottomBar: { actions: [{ type: 'cancel', label: '返回' }] },
+          },
+        }],
+      },
+    })
+
+    expect(saved.pageSections[0]).toMatchObject({ sectionId: 'main', fields: ['code'] })
+    expect(saved.bottomBar.actions[0]).toMatchObject({ type: 'save', label: '保存' })
+    const detail = saved.forms.find(form => form.formKey === 'detail_form')
+    expect(detail.schema.pageSections[0]).toMatchObject({ sectionId: 'detail', fields: ['name'] })
+    expect(detail.schema.bottomBar.actions[0]).toMatchObject({ type: 'cancel', label: '返回' })
   })
 
   it('migrates legacy show-hide interactions to target runtime rules', () => {

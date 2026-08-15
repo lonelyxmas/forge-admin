@@ -22,20 +22,58 @@
               <span class="runtime-brand-status">{{ editing ? (dirty ? '未保存修改' : '已保存到草稿') : isDraftPreview ? '草稿预览' : currentNode?.title || '首页' }}</span>
             </div>
           </div>
-          <n-space v-if="!formDesignerMode" size="small">
-            <n-button v-if="editing" circle secondary :disabled="!canUndo" title="撤销" aria-label="撤销" @click="undoBuilder">
+          <nav v-if="!formDesignerMode" class="runtime-designer-sections" aria-label="设计分区">
+            <button
+              v-for="section in applicationDesignerSections"
+              :key="section.key"
+              type="button"
+              class="runtime-designer-section"
+              :class="{ active: designerSection === section.key }"
+              @click="selectDesignerGroup(section.key)"
+            >
+              {{ section.label }}
+            </button>
+          </nav>
+          <div v-if="!formDesignerMode" class="runtime-header-actions">
+            <n-button
+              v-if="editing"
+              circle
+              secondary
+              :disabled="!canUndo || !pageBuilderResourceActive"
+              :title="!pageBuilderResourceActive ? '撤销（仅自由编排页面可用）' : '撤销'"
+              aria-label="撤销"
+              @click="undoBuilder"
+            >
               <template #icon>
                 <NIcon><ArrowUndoOutline /></NIcon>
               </template>
             </n-button>
-            <n-button v-if="editing" circle secondary :disabled="!canRedo" title="重做" aria-label="重做" @click="redoBuilder">
+            <n-button
+              v-if="editing"
+              circle
+              secondary
+              :disabled="!canRedo || !pageBuilderResourceActive"
+              :title="!pageBuilderResourceActive ? '重做（仅自由编排页面可用）' : '重做'"
+              aria-label="重做"
+              @click="redoBuilder"
+            >
               <template #icon>
                 <NIcon><ArrowRedoOutline /></NIcon>
               </template>
             </n-button>
-            <n-popover v-if="editing" trigger="click" placement="bottom-end" :show-arrow="false">
+            <n-popover
+              v-if="editing"
+              trigger="click"
+              placement="bottom-end"
+              :show-arrow="false"
+              :disabled="!pageBuilderResourceActive"
+            >
               <template #trigger>
-                <n-button secondary>
+                <n-button
+                  secondary
+                  :disabled="!pageBuilderResourceActive"
+                  :title="!pageBuilderResourceActive ? '页面资源（仅自由编排页面可用）' : '页面表单资产'"
+                >
                   页面资源
                   <template #icon>
                     <NIcon><FolderOpenOutline /></NIcon>
@@ -68,13 +106,26 @@
                 <n-empty v-if="!formAssets.length" size="small" description="还没有页面表单，先创建一个" />
               </div>
             </n-popover>
-            <n-button v-if="editing" :disabled="!dirty" :loading="saving" secondary @click="saveDraft">
+            <n-button
+              v-if="editing"
+              :disabled="designerSection === 'settings' || (pageBuilderResourceActive ? !dirty : designerSection === 'flow' ? (!dirty && !embeddedDesignerDirty) : !embeddedDesignerDirty)"
+              :loading="pageBuilderResourceActive ? saving : designerSection === 'flow' ? (saving || embeddedDesignerSaving) : embeddedDesignerSaving"
+              :title="designerSection === 'settings' ? '设置页无需保存草稿' : '保存当前设计草稿'"
+              secondary
+              @click="saveCurrentDesignerSection"
+            >
               <template #icon>
                 <NIcon><SaveOutline /></NIcon>
               </template>
               保存草稿
             </n-button>
-            <n-button v-if="editing" secondary @click="openDraftPreview">
+            <n-button
+              v-if="editing"
+              secondary
+              :disabled="!previewableResourceActive"
+              :title="!previewableResourceActive ? '预览草稿（请选择页面或已配置的业务对象）' : '预览草稿'"
+              @click="openDraftPreview"
+            >
               <template #icon>
                 <NIcon><EyeOutline /></NIcon>
               </template>
@@ -87,16 +138,126 @@
               发布应用
             </n-button>
             <n-dropdown v-if="editing" trigger="click" placement="bottom-end" :options="runtimeHeaderMoreOptions" @select="handleRuntimeHeaderMoreSelect">
-              <n-button secondary circle title="更多操作" aria-label="更多操作">
+              <n-button
+                secondary
+                circle
+                :disabled="!pageBuilderResourceActive"
+                :title="!pageBuilderResourceActive ? '更多操作（仅自由编排页面可用）' : '更多操作'"
+                aria-label="更多操作"
+              >
                 <template #icon>
                   <NIcon><EllipsisHorizontalOutline /></NIcon>
                 </template>
               </n-button>
             </n-dropdown>
-          </n-space>
+          </div>
         </header>
 
-        <section v-if="formDesignerMode" class="application-form-asset-workbench">
+        <ApplicationDesignerResourceTree
+          v-if="editing && !formDesignerMode"
+          :groups="designerResourceGroups"
+          :active-group-key="designerSection"
+          :active-key="activeDesignerResource?.key || ''"
+          :application-name="application.applicationName"
+          :node-menu-options="resolveResourceNodeMenuOptions"
+          @select="selectDesignerResource"
+          @create-page="createQuickNode('page')"
+          @node-action="handleResourceNodeAction"
+        />
+
+        <section
+          v-if="editing && !formDesignerMode && !pageBuilderResourceActive"
+          class="application-design-section"
+          :class="{ 'settings-section': designerSection === 'settings' }"
+        >
+          <template v-if="designerSection === 'settings'">
+            <header class="application-settings-toolbar">
+              <n-space size="small">
+                <n-button secondary @click="openWorkspaceSection('permissions')">
+                  访问权限
+                </n-button>
+                <n-button secondary @click="openWorkspaceSection('entries')">
+                  页面入口
+                </n-button>
+                <n-button secondary @click="router.push('/system/dictType')">
+                  数据字典
+                </n-button>
+              </n-space>
+            </header>
+            <div class="application-settings-content">
+              <ApplicationPublishPanel
+                :application="application"
+                show-publish-action
+                @changed="handleApplicationPublished"
+                @navigate="handlePublishIssueNavigate"
+              />
+            </div>
+          </template>
+          <template v-else-if="activeDesignerResource?.kind === 'automation-enhancements'">
+            <div class="application-extensions-workbench">
+              <ApplicationExtensionsPanel
+                embedded
+                :application="application"
+                :initial-extensions="workspaceExtensions"
+                :initial-objects="objects"
+                :initial-entries="workspaceEntries"
+                @changed="handleExtensionsChanged"
+                @open-designer="openEmbeddedObjectActions"
+              />
+            </div>
+          </template>
+          <template v-else-if="designerSection === 'flow' && activeDesignerObject && embeddedDesignerConfig">
+            <div class="application-flow-workbench">
+              <BusinessObjectDesignerPage
+                :key="embeddedDesignerKey"
+                ref="embeddedDesignerRef"
+                embedded
+                :embedded-object-code="activeDesignerObject.objectCode"
+                :embedded-object-id="activeDesignerObject.objectId"
+                :embedded-suite-code="application.suiteCode"
+                :initial-panel="embeddedDesignerConfig.initialPanel"
+                :embedded-nav-panels="embeddedDesignerConfig.navPanels"
+                @dirty-change="embeddedDesignerDirty = $event"
+                @flow-context-change="handleFlowContextChange"
+                @saved="handleEmbeddedDesignerSaved"
+              />
+              <ApplicationFlowInteractionPanel
+                :model-value="builder.flowInteraction"
+                :actions="activeDesignerSummary?.designerOptions?.actions || []"
+                :flow-model-key="activeFlowContext.flowModelKey || ''"
+                :user-tasks="activeFlowContext.userTasks || []"
+                :tasks-loading="activeFlowContext.loading === true"
+                :tasks-error="activeFlowContext.error || ''"
+                :page-sections="activeDesignerPageSections"
+                @update:model-value="updateFlowInteraction"
+              />
+            </div>
+          </template>
+          <template v-else-if="activeDesignerObject && embeddedDesignerConfig">
+            <BusinessObjectDesignerPage
+              :key="embeddedDesignerKey"
+              ref="embeddedDesignerRef"
+              embedded
+              :embedded-object-code="activeDesignerObject.objectCode"
+              :embedded-object-id="activeDesignerObject.objectId"
+              :embedded-suite-code="application.suiteCode"
+              :initial-panel="embeddedDesignerConfig.initialPanel"
+              :initial-form-property-tab="embeddedDesignerConfig.initialFormPropertyTab"
+              :embedded-nav-panels="embeddedDesignerConfig.navPanels"
+              @dirty-change="embeddedDesignerDirty = $event"
+              @saved="handleEmbeddedDesignerSaved"
+            />
+          </template>
+          <n-empty v-else description="当前应用尚未关联可设计的数据对象">
+            <template #extra>
+              <n-button type="primary" @click="openObjectSetup">
+                配置数据对象
+              </n-button>
+            </template>
+          </n-empty>
+        </section>
+
+        <section v-else-if="formDesignerMode" class="application-form-asset-workbench">
           <header class="application-form-asset-head">
             <div>
               <span class="application-form-asset-crumb">{{ application.applicationName }} / 页面资源 / 表单资产</span>
@@ -125,8 +286,8 @@
           <n-empty v-else description="表单不存在或已被删除" />
         </section>
 
-        <div v-else class="runtime-body" :class="{ 'configuring': editing && configPanelVisible, 'sidebar-collapsed': sidebarCollapsed, 'headerless': !editing }">
-          <aside class="runtime-navigation base-app-sidebar__vertical no-page-group" :class="{ collapsed: sidebarCollapsed }">
+        <div v-else class="runtime-body" :class="{ 'configuring': editing && configPanelVisible, 'sidebar-collapsed': sidebarCollapsed, 'headerless': !editing, 'designer-resource-active': editing }">
+          <aside v-if="!editing" class="runtime-navigation base-app-sidebar__vertical no-page-group" :class="{ collapsed: sidebarCollapsed }">
             <div class="title_wrapper">
               <div class="application-sidebar-title base-app-sidebar__title_bar">
                 <div class="base-app-title-wrapper">
@@ -797,7 +958,7 @@ import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted
 import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { crudConfigRender } from '@/api/ai'
-import { businessObjectDesigner, businessObjectRuntimeInfo } from '@/api/business-app'
+import { businessObjectDesigner, businessObjectRuntimeInfo, businessTriggerPage } from '@/api/business-app'
 import { businessApplicationRuntimeByCode, businessApplicationWorkspaceByCode, provisionBusinessApplicationFormData, updateBusinessApplication } from '@/api/business-application'
 import defaultLogo from '@/assets/images/logo.png'
 import AuthImage from '@/components/common/AuthImage.vue'
@@ -808,10 +969,20 @@ import ListPageGridDesigner from '@/components/lowcode-builder/page/ListPageGrid
 import { createGridBlock, listPageBlockCatalog, resolveListPageBlockMeta } from '@/components/lowcode-builder/page/page-schema'
 import { buildRuntimeCrudProps } from '@/components/lowcode-builder/shared/runtime-crud-props'
 import { useTenantStore, useUserStore } from '@/store'
+import ApplicationDesignerResourceTree from '@/views/app-center/components/ApplicationDesignerResourceTree.vue'
+import ApplicationFlowInteractionPanel from '@/views/app-center/components/ApplicationFlowInteractionPanel.vue'
 import DesignerAsyncLoader from '@/views/app-center/components/designer/DesignerAsyncLoader.vue'
 import ForgeFormDesigner from '@/views/app-center/components/designer/forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets, createFieldFromComponent } from '@/views/app-center/components/designer/form-first/autoFieldRegistry'
 import { createDefaultFormDesignerSchema, isFieldComponent, normalizeFormDesignerSchema } from '@/views/app-center/components/designer/form-first/formDesignerSchema'
+import {
+  applicationDesignerSections,
+  buildApplicationDesignerResourceGroups,
+  findApplicationDesignerResource,
+  normalizeApplicationDesignerSection,
+  resolveApplicationDesignerObject,
+  resolveObjectDesignerSectionConfig,
+} from './application-designer-navigation'
 import { createApplicationRuntimeLoadCoordinator, resolveApplicationRuntimeLoadKey } from './application-runtime-load'
 import {
   createInAppFormAsset,
@@ -891,7 +1062,9 @@ const formComponentIconFileByBlockType = {
 }
 const userStore = useUserStore()
 const ApplicationObjectsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationObjectsPanel.vue'))
+const ApplicationExtensionsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationExtensionsPanel.vue'))
 const ApplicationPublishPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationPublishPanel.vue'))
+const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
 const application = ref(null)
 const objects = ref([])
 const builder = ref(null)
@@ -944,6 +1117,14 @@ const formAssetSelectorKeyword = ref('')
 const formDataProvisioningByAssetId = ref({})
 const objectSetupVisible = ref(false)
 const publishDrawerVisible = ref(false)
+const selectedDesignerResourceKey = ref(String(route.query.designResource || ''))
+const objectDesignerSummaries = ref({})
+const workspaceExtensions = ref([])
+const workspaceEntries = ref([])
+const activeFlowContext = ref({})
+const embeddedDesignerRef = ref(null)
+const embeddedDesignerDirty = ref(false)
+const embeddedDesignerSaving = ref(false)
 const applicationRuntimeLoadCoordinator = createApplicationRuntimeLoadCoordinator(load)
 
 const componentPickerGroupOptions = [
@@ -958,6 +1139,41 @@ const runtimeHeaderMoreOptions = computed(() => [
   { type: 'divider', key: 'header-more-divider' },
   { label: '退出编辑', key: 'exit-editing', icon: () => renderNavigationMenuIcon(ArrowBackOutline) },
 ])
+const designerResourceGroups = computed(() => buildApplicationDesignerResourceGroups({
+  objects: objects.value,
+  designersByObjectId: objectDesignerSummaries.value,
+  pages: builder.value?.nodes || [],
+  extensions: workspaceExtensions.value,
+}))
+const activeDesignerResource = computed(() => {
+  const routeResourceKey = selectedDesignerResourceKey.value
+    || String(route.query.designResource || '')
+    || (route.query.pageId ? `page-custom:${String(route.query.pageId)}` : '')
+  return findApplicationDesignerResource(
+    designerResourceGroups.value,
+    routeResourceKey,
+    route.query.designSection,
+  )
+})
+const designerSection = computed(() => activeDesignerResource.value?.groupKey || normalizeApplicationDesignerSection(route.query.designSection))
+const pageBuilderResourceActive = computed(() => activeDesignerResource.value?.kind === 'page-custom')
+const activeDesignerObject = computed(() => resolveApplicationDesignerObject(objects.value, activeDesignerResource.value?.objectId))
+// 对象页面（表单页/列表页/数据结构）也应能预览，落到对象自身的 CRUD 运行页。
+const activeResourceConfigKey = computed(() => String(activeDesignerObject.value?.configKey || '').trim())
+const previewableResourceActive = computed(() => {
+  if (pageBuilderResourceActive.value)
+    return true
+  const kind = activeDesignerResource.value?.kind || ''
+  const objectBacked = kind.startsWith('page-') || kind.startsWith('data-')
+  return objectBacked && Boolean(activeResourceConfigKey.value)
+})
+const activeDesignerSummary = computed(() => objectDesignerSummaries.value[String(activeDesignerObject.value?.objectId ?? '')] || null)
+const activeDesignerPageSections = computed(() => resolveDesignerPageSections(activeDesignerSummary.value?.formDesignerSchema))
+const embeddedDesignerConfig = computed(() => resolveObjectDesignerSectionConfig(activeDesignerResource.value))
+const embeddedDesignerKey = computed(() => [
+  activeDesignerResource.value?.key || designerSection.value,
+  activeDesignerObject.value?.objectId || 'none',
+].join(':'))
 const legacyBlockTypeMap = { 'intro': 'page-title', 'metric-card': 'stats-strip', 'business-list': 'AiCrudPage', 'business-form': 'AiForm', 'todo': 'info-panel', 'chart': 'stats-strip', 'text': 'custom-html', 'image': 'info-panel', 'columns': 'grid-layout', 'divider': 'divider' }
 const pageBlockResizeAnchors = ['top-left', 'top', 'top-right', 'right', 'bottom-right', 'bottom', 'bottom-left', 'left']
 const pageBlockRecommendedColors = ['#3370ff', '#8b5cf6', '#14b8a6', '#f59e0b', '#f97316', '#ef4444', '#4e5969', '#edf4ff', '#f3efff', '#e6fffb', '#fff7e6', '#fff1f0', '#f2f3f5']
@@ -1143,6 +1359,24 @@ watch([
   editing.value = edit === '1'
   applicationRuntimeLoadCoordinator.run(resolveApplicationRuntimeLoadKey(route))
 }, { immediate: true })
+watch(() => route.query.designResource, (resourceKey) => {
+  selectedDesignerResourceKey.value = String(resourceKey || '')
+})
+watch(() => activeDesignerResource.value?.key, (activeKey) => {
+  activeFlowContext.value = {}
+  if (activeDesignerResource.value?.kind === 'page-custom' && activeDesignerResource.value.pageId)
+    selectNode(activeDesignerResource.value.pageId)
+  const requestedKey = String(route.query.designResource || '')
+  if (!editing.value || !activeKey || !requestedKey || requestedKey === activeKey)
+    return
+  selectedDesignerResourceKey.value = activeKey
+  router.replace({
+    query: {
+      ...route.query,
+      designResource: activeKey,
+    },
+  })
+})
 watch(() => route.query.pageId, (pageId) => {
   if (!builder.value)
     return
@@ -1211,7 +1445,10 @@ async function load() {
     const workspace = response.data || {}
     application.value = workspace.application || null
     objects.value = workspace.objects || []
+    workspaceExtensions.value = workspace.extensions || []
+    workspaceEntries.value = workspace.entries || []
     builder.value = ensurePageTitleComponents(normalizeInAppBuilder(application.value?.options, application.value, objects.value))
+    await loadObjectDesignerSummaries(objects.value)
     hydratePageCrudApiPlaceholders()
     bindSingleFormToCompatibleBlocks()
     savedSignature.value = JSON.stringify(builder.value)
@@ -1233,6 +1470,35 @@ async function load() {
     )
   }
   finally { loading.value = false }
+}
+
+async function loadObjectDesignerSummaries(sourceObjects = []) {
+  const targets = (Array.isArray(sourceObjects) ? sourceObjects : [])
+    .map(item => ({
+      objectId: String(item?.objectId ?? item?.id ?? ''),
+      objectCode: String(item?.objectCode || ''),
+    }))
+    .filter(item => item.objectId)
+  const results = await Promise.all(targets.map(async (target) => {
+    const [designerResult, triggerResult] = await Promise.allSettled([
+      businessObjectDesigner(target.objectId),
+      target.objectCode
+        ? businessTriggerPage({ pageNum: 1, pageSize: 1, objectCode: target.objectCode })
+        : Promise.resolve({ data: { total: 0 } }),
+    ])
+    if (designerResult.status !== 'fulfilled')
+      return null
+    const designer = designerResult.value?.data || {}
+    const triggerCount = triggerResult.status === 'fulfilled'
+      ? Number(triggerResult.value?.data?.total || triggerResult.value?.data?.records?.length || 0)
+      : Number(designer.triggerCount || 0)
+    return [target.objectId, {
+      ...designer,
+      triggerCount,
+      triggerConfigured: triggerCount > 0 || designer.triggerConfigured === true,
+    }]
+  }))
+  objectDesignerSummaries.value = Object.fromEntries(results.filter(Boolean))
 }
 
 function cloneBuilderSchema(schema) {
@@ -1437,11 +1703,29 @@ function createPageFromTemplate(templateKey = selectedPageTemplateKey.value, ini
   })
   const created = builder.value.nodes.find(item => !previousIds.has(item.id))
   if (created) {
-    selectNode(created.id)
+    selectCreatedDesignerPage(created.id)
     applyPageTemplate(created.id, template.key, initialBlockType)
     if (template.dataTemplate || initialBlockType === 'AiCrudPage')
       createFormAssetForPageCrud(created.id)
   }
+}
+
+function selectCreatedDesignerPage(pageId) {
+  const resourceKey = `page-custom:${pageId}`
+  selectedNodeId.value = pageId
+  selectedPageBlockId.value = ''
+  selectedDesignerResourceKey.value = resourceKey
+  formDesignerMode.value = false
+  newNodePopoverVisible.value = false
+  router.replace({
+    query: {
+      ...route.query,
+      edit: '1',
+      designResource: resourceKey,
+      designSection: undefined,
+      pageId,
+    },
+  })
 }
 
 function createFormAssetForPageCrud(pageId) {
@@ -1658,6 +1942,14 @@ function confirmNavigationAction() {
       builder.value = removeNavigationNode(builder.value, node.id, strategy)
       if (!builder.value.nodes.some(item => item.id === selectedNodeId.value))
         selectNode(builder.value.homePageId)
+      // 资源树选中项可能指向已删除页面，回落到首页节点，避免设计区停留在空资源。
+      if (String(activeDesignerResource.value?.pageId || '') === String(node.id)) {
+        applyDesignerResource({
+          key: `page-custom:${String(builder.value.homePageId)}`,
+          kind: 'page-custom',
+          pageId: String(builder.value.homePageId),
+        })
+      }
     }
     navigationActionVisible.value = false
   }
@@ -3515,11 +3807,161 @@ function setFormDataProvisionState(formAssetId, state) {
 }
 
 function requestExitEditing() {
-  if (dirty.value) {
+  if (currentDesignerDirty()) {
     exitEditingVisible.value = true
     return
   }
   editing.value = false
+}
+
+function currentDesignerDirty() {
+  if (pageBuilderResourceActive.value)
+    return dirty.value
+  if (designerSection.value === 'flow')
+    return dirty.value || embeddedDesignerDirty.value
+  return embeddedDesignerDirty.value
+}
+
+async function saveCurrentDesignerSection() {
+  if (pageBuilderResourceActive.value)
+    return saveDraft()
+  if (designerSection.value === 'settings')
+    return true
+  embeddedDesignerSaving.value = true
+  try {
+    const saved = await embeddedDesignerRef.value?.save?.()
+    if (saved !== false) {
+      embeddedDesignerDirty.value = false
+      if (designerSection.value === 'flow' && dirty.value)
+        return await saveDraft()
+    }
+    return saved !== false
+  }
+  finally {
+    embeddedDesignerSaving.value = false
+  }
+}
+
+function updateFlowInteraction(flowInteraction) {
+  builder.value = {
+    ...builder.value,
+    flowInteraction,
+  }
+}
+
+function applyDesignerResource(resource) {
+  if (!resource?.key)
+    return
+  selectedDesignerResourceKey.value = resource.key
+  formDesignerMode.value = false
+  embeddedDesignerDirty.value = false
+  activeFlowContext.value = {}
+  if (resource.kind === 'page-custom' && resource.pageId)
+    selectNode(resource.pageId)
+  router.replace({
+    query: {
+      ...route.query,
+      designResource: resource.key,
+      designSection: undefined,
+      pageId: resource.kind === 'page-custom' ? resource.pageId : undefined,
+      edit: '1',
+    },
+  })
+}
+
+function selectDesignerResource(resource) {
+  if (!resource?.key || (resource.key === activeDesignerResource.value?.key && !formDesignerMode.value))
+    return
+  if (!currentDesignerDirty()) {
+    applyDesignerResource(resource)
+    return
+  }
+  if (!window.$dialog) {
+    message.warning('请先保存当前设计，再切换功能')
+    return
+  }
+  window.$dialog.warning({
+    title: '保存当前设计',
+    content: '当前功能存在未保存修改。保存后再切换，避免丢失配置。',
+    positiveText: '保存并切换',
+    negativeText: '留在当前',
+    onPositiveClick: async () => {
+      if (await saveCurrentDesignerSection())
+        applyDesignerResource(resource)
+    },
+  })
+}
+
+function selectDesignerGroup(groupKey) {
+  if (designerSection.value === groupKey && !formDesignerMode.value)
+    return
+  const group = designerResourceGroups.value.find(item => item.key === groupKey)
+  const target = group?.nodes?.find(node => node.configured !== false) || group?.nodes?.[0]
+  if (!target) {
+    message.warning('该分区暂无可设计的资源')
+    return
+  }
+  selectDesignerResource(target)
+}
+
+function resolveResourceNodeBuilderNode(resource) {
+  if (!resource?.pageId)
+    return null
+  return (builder.value?.nodes || []).find(item => String(item.id) === String(resource.pageId)) || null
+}
+
+function resolveResourceNodeMenuOptions(resource) {
+  const node = resolveResourceNodeBuilderNode(resource)
+  return node ? resolveNavigationMoreOptions(node) : []
+}
+
+function handleResourceNodeAction({ key, node } = {}) {
+  const builderNode = resolveResourceNodeBuilderNode(node)
+  if (!builderNode) {
+    message.warning('该资源不支持结构编辑')
+    return
+  }
+  handleNavigationMoreSelect(key, builderNode)
+}
+
+function openEmbeddedObjectActions(payload = {}) {
+  const resource = designerResourceGroups.value
+    .flatMap(group => group.nodes || [])
+    .find(node => node.kind === 'automation-actions' && (
+      (payload.objectId && String(node.objectId) === String(payload.objectId))
+      || (payload.objectCode && node.objectCode === payload.objectCode)
+    ))
+  if (resource)
+    selectDesignerResource(resource)
+}
+
+async function handleExtensionsChanged() {
+  await refreshWorkspaceMetadata()
+}
+
+function openWorkspaceSection(section) {
+  if (!application.value?.applicationCode)
+    return
+  router.push({
+    name: 'BusinessApplicationWorkspace',
+    params: { applicationCode: application.value.applicationCode },
+    query: { section },
+  })
+}
+
+async function handleEmbeddedDesignerSaved() {
+  embeddedDesignerDirty.value = false
+  await refreshWorkspaceMetadata()
+}
+
+function handleFlowContextChange(context = {}) {
+  activeFlowContext.value = {
+    flowModelKey: String(context.flowModelKey || ''),
+    flowModelName: String(context.flowModelName || ''),
+    userTasks: Array.isArray(context.userTasks) ? context.userTasks : [],
+    loading: context.loading === true,
+    error: String(context.error || ''),
+  }
 }
 
 function handleRuntimeHeaderMoreSelect(key) {
@@ -3552,11 +3994,38 @@ function openWorkspace() {
 async function openDraftPreview() {
   if (dirty.value && !await saveDraft())
     return
+  // 自由编排页面走应用运行壳；对象页面/数据结构落到对象自身的 CRUD 运行页预览。
+  if (!pageBuilderResourceActive.value && previewableResourceActive.value) {
+    openObjectResourcePreview()
+    return
+  }
   const target = router.resolve({
     name: 'BusinessApplicationRuntime',
     params: { applicationCode: application.value.applicationCode },
     query: { pageId: selectedNodeId.value, draft: '1' },
   })
+  window.open(target.href, '_blank', 'noopener,noreferrer')
+}
+
+function openObjectResourcePreview() {
+  const configKey = activeResourceConfigKey.value
+  if (!configKey) {
+    message.warning('该业务对象还没有可用的运行配置')
+    return
+  }
+  const kind = activeDesignerResource.value?.kind || ''
+  const formMode = kind === 'page-form'
+  const query = { designPreview: '1' }
+  if (formMode) {
+    query.runtimeOpenMode = 'CREATE_FORM'
+    query.pageKey = 'create'
+    query.mode = 'create'
+  }
+  else {
+    query.runtimeOpenMode = 'LIST'
+    query.pageKey = 'list'
+  }
+  const target = router.resolve({ path: `/ai/crud-page/${configKey}`, query })
   window.open(target.href, '_blank', 'noopener,noreferrer')
 }
 
@@ -3623,6 +4092,9 @@ async function refreshWorkspaceMetadata() {
   const workspace = response.data || {}
   application.value = workspace.application || application.value
   objects.value = workspace.objects || []
+  workspaceExtensions.value = workspace.extensions || []
+  workspaceEntries.value = workspace.entries || []
+  await loadObjectDesignerSummaries(objects.value)
   runtimeCrudPropsByObjectId.value = {}
   runtimeCrudLoadingObjectIds.clear()
   runtimeCrudUnavailableObjectIds.clear()
@@ -3654,6 +4126,23 @@ function flattenNodes(nodes, parentId = null, depth = 0) {
   return nodes.filter(item => item.parentId === parentId).sort((a, b) => a.sort - b.sort).flatMap(item => [{ ...item, depth }, ...flattenNodes(nodes, item.id, depth + 1)])
 }
 
+function resolveDesignerPageSections(value) {
+  let schema = value && typeof value === 'object' ? value : {}
+  if (typeof value === 'string') {
+    try {
+      schema = JSON.parse(value)
+    }
+    catch {
+      schema = {}
+    }
+  }
+  if (Array.isArray(schema.pageSections))
+    return schema.pageSections
+  const forms = Array.isArray(schema.forms) ? schema.forms : []
+  const activeForm = forms.find(form => form?.formKey === schema.defaultFormKey) || forms[0]
+  return Array.isArray(activeForm?.schema?.pageSections) ? activeForm.schema.pageSections : []
+}
+
 function isNavigationVisible(node = {}) {
   return (node.navigationVisible ?? node.settings?.navigationVisible) !== false
 }
@@ -3674,13 +4163,56 @@ function hasPermission(source, permission) {
 }
 .runtime-header {
   height: 56px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto minmax(320px, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 0 14px;
   border-bottom: 1px solid #e5e6eb;
   background: #fff;
+}
+.runtime-designer-sections {
+  display: flex;
+  align-items: center;
+  justify-self: center;
+  gap: 2px;
+  border-radius: 8px;
+  background: #f2f3f5;
+  padding: 3px;
+}
+.runtime-designer-section {
+  cursor: pointer;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 14px;
+  color: #4e5969;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.runtime-designer-section:hover {
+  color: #1f2329;
+}
+.runtime-designer-section.active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(31 35 41 / 10%);
+  color: #245bdb;
+  font-weight: 600;
+}
+@media (max-width: 1180px) {
+  .runtime-designer-section {
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+}
+.runtime-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 320px;
+  gap: 8px;
 }
 .runtime-brand,
 .runtime-brand-copy {
@@ -3768,6 +4300,75 @@ function hasPermission(source, permission) {
 }
 .runtime-body.headerless {
   height: 100vh;
+}
+.application-design-section {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: calc(100% - 232px);
+  height: calc(100vh - 56px);
+  min-height: 620px;
+  margin-left: 232px;
+  background: #f7f8fa;
+}
+.application-design-section.settings-section {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.application-design-section > .n-empty {
+  align-self: center;
+  justify-self: center;
+}
+.application-settings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 18px;
+  border-bottom: 1px solid #e5e6eb;
+  background: #fff;
+}
+.application-flow-workbench {
+  display: grid;
+  min-height: 0;
+  grid-auto-rows: max-content;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  overflow: auto;
+  padding: 16px;
+}
+.application-extensions-workbench {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 24px;
+  background: #fff;
+}
+.application-flow-workbench > :first-child {
+  min-width: 0;
+  min-height: 0;
+}
+.application-flow-workbench > :last-child {
+  min-width: 0;
+  min-height: 0;
+}
+.runtime-body.designer-resource-active {
+  width: calc(100% - 232px);
+  grid-template-columns: minmax(0, 1fr);
+  margin-left: 232px;
+}
+.runtime-body.designer-resource-active.configuring {
+  grid-template-columns: minmax(0, 1fr) 408px;
+}
+.runtime-body.designer-resource-active > .runtime-navigation {
+  display: none;
+}
+.application-settings-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+.application-settings-content :deep(.publish-panel) {
+  max-width: 1440px;
+  margin: 0 auto;
 }
 .runtime-navigation {
   position: relative;
@@ -5608,6 +6209,11 @@ function hasPermission(source, permission) {
   line-height: 18px;
 }
 @media (max-width: 980px) {
+  .application-design-section,
+  .runtime-body.designer-resource-active {
+    width: calc(100% - 200px);
+    margin-left: 200px;
+  }
   .runtime-body {
     grid-template-columns: 200px minmax(0, 1fr);
   }
@@ -5624,9 +6230,14 @@ function hasPermission(source, permission) {
     box-shadow: -8px 0 20px rgba(31, 35, 41, 0.08);
   }
   .runtime-header {
+    grid-template-columns: 1fr;
     height: auto;
     min-height: 56px;
     padding-block: 8px;
+  }
+  .runtime-header-actions {
+    order: 2;
+    min-width: 0;
   }
   .canvas-component-anchor {
     left: 12px !important;

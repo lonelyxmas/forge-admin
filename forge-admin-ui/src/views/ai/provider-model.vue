@@ -568,18 +568,27 @@ const modelCapabilityOptions = computed(() => dict.value.ai_model_capability_typ
  * @returns {string} 推断的模型类型 code
  */
 function inferModelType(modelId) {
-  if (!modelId) return 'chat'
+  if (!modelId)
+    return 'chat'
   const lower = modelId.toLowerCase()
-  if (lower.includes('embedding') || lower.includes('embed')) return 'embedding'
-  if (lower.includes('rerank') || lower.includes('re-rank') || lower.includes('cross-encoder')) return 'rerank'
+  if (lower.includes('embedding') || lower.includes('embed'))
+    return 'embedding'
+  if (lower.includes('rerank') || lower.includes('re-rank') || lower.includes('cross-encoder'))
+    return 'rerank'
   if (lower.includes('dall-e') || lower.includes('dalle')
     || lower.includes('imagen') || lower.includes('flux')
     || lower.includes('midjourney') || lower.includes('stable-diffusion')
-    || lower.includes('sdxl') || lower.includes('cogview')) return 'image_generation'
+    || lower.includes('sdxl') || lower.includes('cogview')) {
+    return 'image_generation'
+  }
   if (lower.includes('whisper') || lower.includes('asr')
-    || lower.includes('speech-to-text') || lower.includes('paraformer')) return 'asr'
+    || lower.includes('speech-to-text') || lower.includes('paraformer')) {
+    return 'asr'
+  }
   if (lower.includes('tts') || lower.includes('speech-to-speech')
-    || lower.includes('cosyvoice') || lower.includes('sambert')) return 'tts'
+    || lower.includes('cosyvoice') || lower.includes('sambert')) {
+    return 'tts'
+  }
   return 'chat'
 }
 
@@ -822,7 +831,7 @@ const modelColumns = [
     width: 160,
     fixed: 'right',
     render(row) {
-      const rowLoading = (type) => isModelRowActionLoading(row.id, type)
+      const rowLoading = type => isModelRowActionLoading(row.id, type)
       const anyLoading = rowLoading('test') || rowLoading('edit') || rowLoading('delete')
       const actions = [
         h(NButton, { text: true, size: 'small', class: 'text-info', loading: rowLoading('test'), disabled: anyLoading, onClick: () => handleTestModel(row) }, { default: () => '测试' }),

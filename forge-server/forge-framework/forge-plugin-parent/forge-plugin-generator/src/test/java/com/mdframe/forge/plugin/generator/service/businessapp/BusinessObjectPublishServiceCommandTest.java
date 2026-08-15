@@ -126,6 +126,39 @@ class BusinessObjectPublishServiceCommandTest {
         assertTrue(items.get(0).getMessage().contains("仅支持 COMMAND"));
     }
 
+    @Test
+    @DisplayName("受管外部接口步骤通过发布检查，数据集调用被阻断")
+    void validatesCallApiStepDuringPublish() throws Exception {
+        Map<String, Object> validConfig = new LinkedHashMap<>();
+        validConfig.put("executionMode", "ORCHESTRATION");
+        validConfig.put("steps", List.of(Map.of(
+                "stepCode", "call_inventory",
+                "stepType", "CALL_API",
+                "rollbackOnFailure", true,
+                "stepConfig", Map.of(
+                        "sourceType", "EXTERNAL_API",
+                        "sourceKey", "inventory/deduct",
+                        "paramMappings", List.of(Map.of(
+                                "param", "sku",
+                                "sourceType", "record",
+                                "sourceField", "skuCode")),
+                        "resultMappings", List.of(),
+                        "failureStrategy", "THROW"))));
+        assertTrue(validate(command("deduct_inventory", validConfig)).isEmpty());
+
+        Map<String, Object> invalidConfig = new LinkedHashMap<>(validConfig);
+        invalidConfig.put("steps", List.of(Map.of(
+                "stepCode", "call_dataset",
+                "stepType", "CALL_API",
+                "rollbackOnFailure", true,
+                "stepConfig", Map.of(
+                        "sourceType", "DATASET",
+                        "sourceKey", "inventory_dataset"))));
+        List<BusinessPublishCheckItemVO> items = validate(command("call_dataset", invalidConfig));
+        assertEquals(1, items.size());
+        assertEquals("COMMAND_PROTOCOL_INVALID", items.get(0).getItemCode());
+    }
+
     private List<BusinessPublishCheckItemVO> validate(Map<String, Object> action) throws Exception {
         return validate(action, List.of());
     }

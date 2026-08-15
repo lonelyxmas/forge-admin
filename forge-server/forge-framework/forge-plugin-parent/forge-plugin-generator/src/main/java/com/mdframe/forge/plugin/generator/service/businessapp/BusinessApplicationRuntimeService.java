@@ -34,6 +34,17 @@ public class BusinessApplicationRuntimeService {
 
     public BusinessApplicationRuntimeVO runtimeByCode(String applicationCode) {
         BusinessApplicationVO current = applicationService.detailByCode(applicationCode);
+        return runtime(current);
+    }
+
+    /**
+     * 按应用主键读取正式运行快照，供带应用入口上下文的低代码运行配置叠加使用。
+     */
+    public BusinessApplicationRuntimeVO runtimeById(Long applicationId) {
+        return runtime(applicationService.detail(applicationId));
+    }
+
+    private BusinessApplicationRuntimeVO runtime(BusinessApplicationVO current) {
         if (!Integer.valueOf(1).equals(current.getStatus())) {
             throw new BusinessException("应用已停用，暂时无法访问");
         }

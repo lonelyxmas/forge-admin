@@ -614,9 +614,9 @@ function hydrateOptions() {
   }
   normalizeEntryModeForMount()
   form.appType = resolveAppType()
-  if (form.entryMode !== 'RUNTIME')
+  if (form.entryMode !== 'RUNTIME' && form.entryMode !== 'H5')
     form.runtimeOpenMode = 'LIST'
-  if (form.entryMode !== 'RUNTIME')
+  if (form.entryMode !== 'RUNTIME' && form.entryMode !== 'H5')
     form.appMode = 'DYNAMIC_RENDER'
   normalizeRuntimeTargets()
   if (isCodeDownloadMode.value)
@@ -667,7 +667,7 @@ function buildOptions() {
     delete options.suiteAsMenuParent
     delete options.menuSort
   }
-  if (form.entryMode === 'RUNTIME') {
+  if (form.entryMode === 'RUNTIME' || form.entryMode === 'H5') {
     options.runtimeOpenMode = normalizeRuntimeOpenMode(form.runtimeOpenMode)
     options.appMode = normalizeAppMode(form.appMode)
     if (normalizeAppMode(form.appMode) === 'DYNAMIC_RENDER') {
@@ -807,7 +807,7 @@ function normalizeRuntimeTargets() {
 
 function allowedEntryModesForTarget(target) {
   if (target === 'MOBILE')
-    return ['H5', 'ROUTE', 'EXTERNAL']
+    return ['RUNTIME', 'H5', 'ROUTE', 'EXTERNAL']
   if (target === 'API')
     return ['API']
   return ['RUNTIME', 'ROUTE', 'IFRAME', 'EXTERNAL']

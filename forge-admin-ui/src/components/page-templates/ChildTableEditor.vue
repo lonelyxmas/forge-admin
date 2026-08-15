@@ -12,11 +12,22 @@
             <div class="child-table-title">
               {{ child.tabTitle || child.relationName || child.modelName || child.modelCode || '子表明细' }}
             </div>
-            <n-space v-if="!props.readonly" size="small">
-              <n-button v-if="hasRecordSelector(child)" size="small" secondary @click="openRecordSelector(child)">
+            <n-space v-if="!props.readonly || visibleToolbarActions(child).length" size="small">
+              <n-button v-if="hasRecordSelector(child) && !props.readonly" size="small" secondary @click="openRecordSelector(child)">
                 {{ resolveSelectorButtonText(child) }}
               </n-button>
-              <n-button size="small" type="primary" secondary @click="addRow(child)">
+              <n-button
+                v-for="action in visibleToolbarActions(child)"
+                :key="action.key || action.actionCode || action.label"
+                size="small"
+                :type="resolveActionButtonType(action)"
+                :loading="isToolbarActionLoading(action, child)"
+                secondary
+                @click="executeToolbarAction(action, child)"
+              >
+                {{ action.label || action.actionName || action.actionCode }}
+              </n-button>
+              <n-button v-if="!props.readonly" size="small" type="primary" secondary @click="addRow(child)">
                 {{ resolveAddButtonText(child) }}
               </n-button>
             </n-space>
@@ -229,7 +240,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:value', 'rowAction'])
+const emit = defineEmits(['update:value', 'rowAction', 'toolbarAction'])
 
 const route = useRoute()
 const localValue = ref({})
@@ -301,6 +312,22 @@ function configuredRowActions(child = {}) {
 function visibleRowActions(child, row) {
   return configuredRowActions(child).filter(action => action?.visible !== false
     && props.rowActionVisible(action, child, row))
+}
+
+function configuredToolbarActions(child = {}) {
+  return Array.isArray(child.toolbarActions) ? child.toolbarActions : []
+}
+
+function visibleToolbarActions(child) {
+  return configuredToolbarActions(child).filter(action => action?.visible !== false)
+}
+
+function executeToolbarAction(action, child) {
+  emit('toolbarAction', { action, child })
+}
+
+function isToolbarActionLoading(action, child) {
+  return props.rowActionLoading(action, child, null)
 }
 
 function hasActionColumn(child) {

@@ -5,6 +5,7 @@ import {
   insertPageComponent,
   mergeInAppBuilderOptions,
   moveNavigationNode,
+  normalizeFlowInteraction,
   normalizeInAppBuilder,
   removeNavigationNode,
   updateInAppFormAsset,
@@ -16,6 +17,25 @@ const APPLICATION = {
 }
 
 describe('in-app builder schema', () => {
+  it('normalizes and persists application flow interaction without inventing runtime requests', () => {
+    const flowInteraction = normalizeFlowInteraction({
+      approvalActions: [{ actionId: 'approve', operation: 'approve', label: '同意', permissionCode: 'order:approve' }],
+      timeline: { enabled: true },
+      nodePermissions: [{ nodeKey: 'manager', visibleSectionIds: ['base', 'base'], readonlySectionIds: ['amount'] }],
+      callbacks: { approvedActionCode: 'sync_stock' },
+    })
+    const schema = normalizeInAppBuilder({ inAppBuilder: { flowInteraction } }, APPLICATION, [])
+    const options = mergeInAppBuilderOptions({ unrelated: true }, schema)
+
+    expect(schema.flowInteraction.approvalActions[0]).toMatchObject({
+      permissionKey: 'order:approve',
+      permissionStrategy: 'hide',
+    })
+    expect(schema.flowInteraction.nodePermissions[0].visibleSectionIds).toEqual(['base'])
+    expect(options.inAppBuilder.flowInteraction).toEqual(schema.flowInteraction)
+    expect(options.unrelated).toBe(true)
+  })
+
   it('keeps an application without saved pages empty', () => {
     const source = { unrelated: { enabled: true } }
     const schema = normalizeInAppBuilder(source, APPLICATION, [])
