@@ -438,4 +438,27 @@ describe('full-screen business process designer page', () => {
     await wrapper.find('[data-process-action="back"]').trigger('click')
     expect(routerMocks.push).toHaveBeenCalledWith(routeState.query.returnTo)
   })
+
+  it('adds a refresh token when returning to a page button designer', async () => {
+    const previousQuery = routeState.query
+    routeState.query = {
+      applicationCode: 'PURCHASE_APP',
+      from: 'button',
+      objectCode: 'sample_purchase_order',
+      returnTo: '/app-center/object/sample_purchase_order/designer?panel=form&detailTab=sections&applicationCode=PURCHASE_APP',
+    }
+    try {
+      const wrapper = mount(BusinessProcessPage, designerMountOptions())
+      await flushPromises()
+
+      await wrapper.find('[data-process-action="back"]').trigger('click')
+
+      expect(routerMocks.push).toHaveBeenCalledWith(
+        `/app-center/object/sample_purchase_order/designer?panel=form&detailTab=sections&applicationCode=PURCHASE_APP&processRefresh=${processRecord.id}`,
+      )
+    }
+    finally {
+      routeState.query = previousQuery
+    }
+  })
 })

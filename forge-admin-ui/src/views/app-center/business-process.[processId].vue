@@ -259,7 +259,7 @@ async function handleValidate(schema) {
 function returnToApplication() {
   const returnTo = String(route.query.returnTo || '')
   if (isLocalPath(returnTo)) {
-    router.push(returnTo)
+    router.push(resolveReturnTarget(returnTo))
     return
   }
   const applicationCode = String(route.query.applicationCode || '')
@@ -272,6 +272,14 @@ function returnToApplication() {
     return
   }
   router.push('/app-center')
+}
+
+function resolveReturnTarget(returnTo) {
+  if (route.query.from !== 'button')
+    return returnTo
+  const target = new URL(returnTo, window.location.origin)
+  target.searchParams.set('processRefresh', processId.value)
+  return `${target.pathname}${target.search}${target.hash}`
 }
 
 function confirmLeave() {

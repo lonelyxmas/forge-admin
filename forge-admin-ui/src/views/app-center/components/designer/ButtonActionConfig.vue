@@ -50,7 +50,13 @@
             @update:value="handleProcessChange"
           >
             <template #action>
-              <n-button text type="primary" @click="openProcessWorkspace">
+              <n-button
+                text
+                type="primary"
+                :loading="creatingProcess"
+                data-create-process
+                @click="createProcessAndOpenCanvas"
+              >
                 + 新建业务流程
               </n-button>
             </template>
@@ -90,9 +96,13 @@
 <script setup>
 import { useMessage } from 'naive-ui'
 import { computed, reactive, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { businessApplicationDetailByCode } from '@/api/business-application'
-import { businessProcessPage } from '@/api/business-process'
+import { useRoute, useRouter } from 'vue-router'
+import { businessApplicationDetailByCode, businessApplicationObjects } from '@/api/business-application'
+import {
+  businessProcessDetail,
+  businessProcessPage,
+  createBusinessProcess,
+} from '@/api/business-process'
 import {
   buildBottomActionConfig,
   normalizeButtonActionDraft,
@@ -123,15 +133,18 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'confirm', 'createProcess'])
 const message = useMessage()
+const route = useRoute()
 const router = useRouter()
 const draft = reactive(normalizeButtonActionDraft(props.modelValue))
 const processes = reactive([])
 const processState = reactive({
   loading: false,
+  creating: false,
   error: '',
   requestId: 0,
 })
 const loadingProcesses = computed(() => processState.loading)
+const creatingProcess = computed(() => processState.creating)
 const processLoadError = computed(() => processState.error)
 
 const behaviorTypeOptions = [
@@ -168,6 +181,10 @@ watch(() => props.show, (show) => {
   if (['process', 'custom'].includes(draft.behaviorType))
     loadProcesses()
 })
+watch(() => route.query.processRefresh, () => {
+  if (props.show && ['process', 'custom'].includes(draft.behaviorType))
+    loadProcesses()
+})
 
 function handleBehaviorTypeChange(value) {
   draft.behaviorType = value
@@ -195,9 +212,13 @@ async function loadProcesses() {
       status: 1,
       designStatus: 'PUBLISHED',
     })
+    const refreshedProcess = await loadRefreshedProcess(applicationId)
     if (requestId !== processState.requestId)
       return
-    processes.splice(0, processes.length, ...unwrapRecords(processRes?.data))
+    processes.splice(0, processes.length, ...mergeProcesses(
+      unwrapRecords(processRes?.data),
+      refreshedProcess ? [refreshedProcess] : [],
+    ))
   }
   catch (error) {
     if (requestId !== processState.requestId)
@@ -216,25 +237,59 @@ function handleProcessChange(processCode) {
   draft.processId = stringValue(processes.find(process => process.processCode === processCode)?.id)
 }
 
-function openProcessWorkspace() {
-  emit('createProcess', {
-    applicationCode: props.applicationCode,
-    objectCode: props.objectCode,
-  })
+async function createProcessAndOpenCanvas() {
+  if (processState.creating)
+    return
   if (!props.applicationCode) {
     message.warning('当前页面缺少应用上下文，请先返回应用工作台')
     return
   }
-  router.push({
-    name: 'BusinessApplicationWorkspace',
-    params: { applicationCode: props.applicationCode },
-    query: {
-      section: 'automation',
-      createProcess: '1',
-      from: 'button',
-      objectCode: props.objectCode || undefined,
-    },
-  })
+  processState.creating = true
+  try {
+    const applicationRes = await businessApplicationDetailByCode(props.applicationCode)
+    const applicationId = stringValue(applicationRes?.data?.id)
+    if (!applicationId)
+      throw new Error('未找到当前业务应用')
+    const objectsRes = await businessApplicationObjects(applicationId)
+    const applicationObject = resolveApplicationObject(unwrapRecords(objectsRes?.data), props.objectCode)
+    const subjectObjectId = stringValue(applicationObject?.objectId || applicationObject?.id)
+    if (!subjectObjectId)
+      throw new Error('当前页面对象尚未加入业务应用')
+    const buttonLabel = String(props.modelValue?.label || '').trim() || '页面按钮'
+    const processName = (buttonLabel.endsWith('流程') ? buttonLabel : `${buttonLabel}流程`).slice(0, 128)
+    const response = await createBusinessProcess({
+      applicationId,
+      processName,
+      processDescription: `由页面按钮“${buttonLabel}”创建`,
+      subjectObjectId,
+      status: 1,
+    })
+    const createdProcess = response?.data || {}
+    const processId = stringValue(createdProcess.id)
+    if (!processId)
+      throw new Error('业务流程已创建，但未返回流程 ID')
+    emit('createProcess', {
+      applicationCode: props.applicationCode,
+      objectCode: props.objectCode,
+      process: createdProcess,
+    })
+    await router.push({
+      name: 'BusinessProcessDesigner',
+      params: { processId },
+      query: {
+        applicationCode: props.applicationCode,
+        from: 'button',
+        objectCode: props.objectCode || undefined,
+        returnTo: route.fullPath,
+      },
+    })
+  }
+  catch (error) {
+    message.error(error?.response?.data?.message || error?.message || '业务流程创建失败')
+  }
+  finally {
+    processState.creating = false
+  }
 }
 
 function confirmConfig() {
@@ -274,6 +329,40 @@ function unwrapRecords(value) {
   if (Array.isArray(value?.records))
     return value.records
   return []
+}
+
+async function loadRefreshedProcess(applicationId) {
+  const processId = stringValue(route.query.processRefresh)
+  if (!processId)
+    return null
+  try {
+    const response = await businessProcessDetail(processId)
+    const process = response?.data || null
+    const sameApplication = stringValue(process?.applicationId) === applicationId
+    const sameObject = !props.objectCode || process?.subjectObjectCode === props.objectCode
+    return sameApplication && sameObject ? process : null
+  }
+  catch {
+    return null
+  }
+}
+
+function mergeProcesses(...groups) {
+  const records = new Map()
+  groups.flat().forEach((process) => {
+    const key = stringValue(process?.id || process?.processCode)
+    if (key)
+      records.set(key, process)
+  })
+  return [...records.values()]
+}
+
+function resolveApplicationObject(objects = [], objectCode = '') {
+  const normalizedCode = String(objectCode || '').trim()
+  if (normalizedCode) {
+    return objects.find(item => String(item?.objectCode || '').trim() === normalizedCode) || null
+  }
+  return objects.find(item => String(item?.objectRole || '').toUpperCase() === 'PRIMARY') || objects[0] || null
 }
 
 function stringValue(value) {
