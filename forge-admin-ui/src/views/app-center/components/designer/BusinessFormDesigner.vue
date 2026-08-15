@@ -107,6 +107,7 @@
             @update:linkage-schema="emit('update:linkageSchema', $event)"
             @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
+            @configure-bottom-action="handleConfigureBottomAction"
           >
             <template #detail-settings>
               <BusinessDetailDesigner
@@ -284,6 +285,14 @@
       :model-refs="pageModelRefs"
       @confirm="handleChildTableSectionConfirm"
     />
+    <ButtonActionConfig
+      v-model:show="buttonActionConfigVisible"
+      :model-value="buttonActionValue"
+      :application-code="applicationCode"
+      :object-code="objectCode"
+      :pages="buttonTargetPages"
+      @confirm="handleButtonActionConfirm"
+    />
   </div>
 </template>
 
@@ -303,6 +312,7 @@ import {
 import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/runtime-rules'
 import BusinessDetailDesigner from './BusinessDetailDesigner.vue'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
+import ButtonActionConfig from './ButtonActionConfig.vue'
 import { upsertChildTableSectionConfig } from './child-table-section-config'
 import ChildTableSectionWizard from './ChildTableSectionWizard.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
@@ -320,6 +330,10 @@ const props = defineProps({
     default: '',
   },
   objectName: {
+    type: String,
+    default: '',
+  },
+  applicationCode: {
     type: String,
     default: '',
   },
@@ -438,6 +452,9 @@ const activeObjectKey = ref('primary')
 const formCreateDesignerRef = ref(null)
 const forgeFormDesignerRef = ref(null)
 const childTableWizardVisible = ref(false)
+const buttonActionConfigVisible = ref(false)
+const buttonActionIndex = ref(-1)
+const buttonActionValue = ref({})
 const useLegacyFormCreateDesigner = ref(false)
 const activeFormDesignerRef = computed(() => useLegacyFormCreateDesigner.value ? formCreateDesignerRef.value : forgeFormDesignerRef.value)
 
@@ -457,6 +474,7 @@ const effectiveModelSchema = computed(() => resolveDesignModelSchema(localSchema
 const designFields = computed(() => effectiveModelSchema.value.fields || [])
 const editZone = computed(() => localSchema.value.zones?.find(zone => zone.zoneKey === 'edit') || null)
 const pageModelRefs = computed(() => effectiveModelSchema.value.pageModelRefs || [])
+const buttonTargetPages = computed(() => Array.isArray(localSchema.value?.pages) ? localSchema.value.pages : [])
 const primaryModelCode = computed(() => pageModelRefs.value.find(ref => ref?.primary)?.modelCode || '')
 const primaryDesignFields = computed(() => designFields.value.filter(field => !isRelationField(field)))
 const relationFields = computed(() => designFields.value.filter(field => isRelationField(field)))
@@ -1088,6 +1106,33 @@ function handleChildTableSectionConfirm(config) {
   }, config)
   assignLocalSchema(result.pageSchema)
   localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+  emit('dirtyChange', true)
+  nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
+}
+
+function handleConfigureBottomAction(payload = {}) {
+  const index = Number(payload.index)
+  if (!Number.isInteger(index) || index < 0)
+    return
+  const { __editorKey: _editorKey, ...action } = payload.action || {}
+  buttonActionIndex.value = index
+  buttonActionValue.value = cloneSchema(action)
+  buttonActionConfigVisible.value = true
+}
+
+function handleButtonActionConfirm(action) {
+  const index = buttonActionIndex.value
+  const currentSchema = normalizeFormDesignerSchema(localFormDesignerSchema.value || {})
+  const actions = Array.isArray(currentSchema.bottomBar?.actions) ? currentSchema.bottomBar.actions : []
+  if (index < 0 || index >= actions.length)
+    return
+  localFormDesignerSchema.value = normalizeFormDesignerSchema({
+    ...currentSchema,
+    bottomBar: {
+      ...(currentSchema.bottomBar || {}),
+      actions: actions.map((item, actionIndex) => actionIndex === index ? { ...item, ...action } : item),
+    },
+  })
   emit('dirtyChange', true)
   nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
 }

@@ -209,6 +209,7 @@
         :relations="relations"
         :actions="actions"
         @update:model-value="updatePageSectionProtocol"
+        @configure-bottom-action="emit('configureBottomAction', $event)"
       />
       <div v-else class="inline-detail-settings">
         <slot name="detail-settings" />
@@ -517,7 +518,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'update:linkageSchema', 'dirtyChange', 'moreSelect', 'fieldAssetUpdated'])
+const emit = defineEmits(['update:modelValue', 'update:linkageSchema', 'dirtyChange', 'moreSelect', 'fieldAssetUpdated', 'configureBottomAction'])
 const slots = useSlots()
 
 const selectedId = ref('')

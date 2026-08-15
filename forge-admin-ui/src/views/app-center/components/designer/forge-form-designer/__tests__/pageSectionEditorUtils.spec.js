@@ -33,10 +33,30 @@ describe('pageSectionEditorUtils', () => {
   it('creates every supported bottom action type', () => {
     const save = createBottomAction('save')
     const action = createBottomAction('action', [save])
+    const navigate = createBottomAction('navigate', [save, action])
+    const process = createBottomAction('process', [save, action, navigate])
 
     expect(save).toMatchObject({ type: 'save', label: '保存', variant: 'primary' })
     expect(action).toMatchObject({ type: 'action', label: '执行动作', actionCode: '' })
     expect(action.actionId).toBe('bottom_action_2')
+    expect(navigate).toMatchObject({ type: 'navigate', label: '跳转', actionCode: '' })
+    expect(process).toMatchObject({ type: 'process', label: '发起流程', actionCode: '' })
+  })
+
+  it('validates process-backed button actions without treating process codes as legacy actions', () => {
+    const warnings = collectPageSectionWarnings({
+      bottomBar: {
+        actions: [
+          { type: 'process', label: '提交审批', actionCode: 'order_submit' },
+          { type: 'action', actionType: 'BUSINESS_PROCESS_ACTION', label: '执行自动化', actionCode: 'order_auto' },
+          { type: 'process', label: '未配置流程', actionCode: '' },
+        ],
+      },
+      actions: [],
+    })
+
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0].message).toContain('尚未选择业务流程')
   })
 
   it('round-trips controlled display conditions used by the H5 runtime', () => {

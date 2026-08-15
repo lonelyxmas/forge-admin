@@ -159,6 +159,7 @@
       :object-id="objectId"
       :object-code="draft.objectCode"
       :object-name="draft.objectName"
+      :application-code="applicationCode"
       :model-schema="draft.modelSchema"
       :fields="draft.fields"
       :relations="draft.relations"

@@ -1,5 +1,5 @@
 const PAGE_MODES = ['create', 'edit', 'detail']
-const BOTTOM_ACTION_TYPES = ['save', 'reset', 'action', 'cancel']
+const BOTTOM_ACTION_TYPES = ['save', 'navigate', 'process', 'action', 'reset', 'cancel']
 const DISPLAY_CONDITION_PATTERN = /^([\w.]+)\s*(==|!=|=)\s*(\S(?:.*\S)?)$/
 
 export function createPageSection(sectionType = 'card', sections = []) {
@@ -34,6 +34,8 @@ export function createBottomAction(type = 'save', actions = []) {
   const normalizedType = BOTTOM_ACTION_TYPES.includes(type) ? type : 'save'
   const presets = {
     save: { label: '保存', variant: 'primary' },
+    navigate: { label: '跳转', variant: 'secondary', actionCode: '' },
+    process: { label: '发起流程', variant: 'primary', actionCode: '' },
     reset: { label: '重置', variant: 'secondary' },
     action: { label: '执行动作', variant: 'primary', actionCode: '' },
     cancel: { label: '取消', variant: 'secondary' },
@@ -136,7 +138,15 @@ export function collectPageSectionWarnings({ pageSections = [], bottomBar = {}, 
   })
 
   ;(Array.isArray(bottomBar?.actions) ? bottomBar.actions : []).forEach((action, actionIndex) => {
-    if (action?.type === 'action') {
+    const processBackedAction = action?.type === 'process'
+      || action?.actionType === 'START_PROCESS'
+      || action?.actionType === 'BUSINESS_PROCESS_ACTION'
+    if (processBackedAction) {
+      const actionCode = String(action.actionCode || '').trim()
+      if (!actionCode)
+        warnings.push({ key: `action:${actionIndex}:process`, message: `底部按钮“${action.label || actionIndex + 1}”尚未选择业务流程` })
+    }
+    else if (action?.type === 'action') {
       const actionCode = String(action.actionCode || '').trim()
       if (!actionCode)
         warnings.push({ key: `action:${actionIndex}:empty`, message: `底部按钮“${action.label || actionIndex + 1}”尚未绑定业务动作` })

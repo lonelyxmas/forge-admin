@@ -403,15 +403,16 @@
                   @update:value="patchBottomAction(index, { label: $event })"
                 />
               </n-form-item>
-              <n-form-item v-if="element.type === 'action'" label="业务动作">
-                <n-select
-                  :value="element.actionCode || ''"
-                  :options="actionOptions(element.actionCode)"
-                  filterable
-                  clearable
-                  placeholder="选择已定义动作"
-                  @update:value="patchBottomAction(index, { actionCode: $event || '' })"
-                />
+              <n-form-item label="按钮行为">
+                <n-button
+                  v-if="isConfigurableBottomAction(element)"
+                  secondary
+                  block
+                  @click="configureBottomAction(index, element)"
+                >
+                  {{ bottomActionBehaviorSummary(element) }}
+                </n-button>
+                <span v-else class="builtin-action-summary">{{ bottomActionBehaviorSummary(element) }}</span>
               </n-form-item>
               <n-form-item label="按钮样式">
                 <n-select
@@ -566,7 +567,7 @@ const props = defineProps({
     default: () => [],
   },
 })
-const emit = defineEmits(['update:modelValue', 'dirtyChange'])
+const emit = defineEmits(['update:modelValue', 'dirtyChange', 'configureBottomAction'])
 
 const modeOptions = [
   { label: '新增', value: 'create' },
@@ -583,9 +584,11 @@ const displayModeOptions = [
   { label: '底部抽屉', value: 'bottom_sheet' },
 ]
 const bottomActionTypeOptions = [
-  { label: '保存', value: 'save' },
+  { label: '提交保存', value: 'save' },
+  { label: '跳转页面', value: 'navigate' },
+  { label: '启动业务流程', value: 'process' },
+  { label: '执行自定义动作', value: 'action' },
   { label: '重置', value: 'reset' },
-  { label: '业务动作', value: 'action' },
   { label: '取消', value: 'cancel' },
 ]
 const bottomActionAddOptions = bottomActionTypeOptions.map(item => ({ label: item.label, key: item.value }))
@@ -645,7 +648,6 @@ const selectorObjectOptions = computed(() => appendMissingOptions(
   [selectedSection.value?.selectorObjectCode],
   '已有配置',
 ))
-const baseActionOptions = computed(() => props.actions.map(normalizeActionOption).filter(Boolean))
 const warnings = computed(() => collectPageSectionWarnings({
   pageSections: pageSections.value,
   bottomBar: draft.value.bottomBar,
@@ -844,8 +846,36 @@ function updateBottomActionType(index, type) {
     type,
     label: current.label || preset.label,
     variant: current.variant || preset.variant,
-    ...(type === 'action' ? { actionCode: current.actionCode || '' } : { actionCode: undefined }),
+    ...(['navigate', 'process', 'action'].includes(type)
+      ? { actionCode: current.actionCode || '' }
+      : { actionCode: undefined }),
+    actionType: undefined,
+    targetPageKey: undefined,
+    processCode: undefined,
+    processId: undefined,
   })
+}
+
+function configureBottomAction(index, action) {
+  emit('configureBottomAction', { index, action: { ...action } })
+}
+
+function bottomActionBehaviorSummary(action = {}) {
+  if (action.type === 'navigate')
+    return action.actionCode ? `跳转：${action.actionCode}` : '配置目标页面'
+  if (action.type === 'process')
+    return action.actionCode ? `启动：${action.actionCode}` : '配置业务流程'
+  if (action.type === 'action')
+    return action.actionCode ? `执行：${action.actionCode}` : '配置自定义动作'
+  if (action.type === 'reset')
+    return '重置当前表单'
+  if (action.type === 'cancel')
+    return '取消并返回'
+  return '提交并保存'
+}
+
+function isConfigurableBottomAction(action = {}) {
+  return ['save', 'navigate', 'process', 'action'].includes(action.type)
 }
 
 function removeBottomAction(index) {
@@ -863,10 +893,6 @@ function updateBottomActionCondition(index, patch = {}) {
 
 function conditionFieldOptions(action) {
   return appendMissingOptions(baseFieldOptions.value, [conditionValue(action).field], '字段已失效')
-}
-
-function actionOptions(currentCode = '') {
-  return appendMissingOptions(baseActionOptions.value, [currentCode], '动作已失效')
 }
 
 function visibleModes(item = {}) {
@@ -902,13 +928,6 @@ function normalizeSelectorObjectOption(relation = {}) {
     return null
   const label = relation.targetObjectName || relation.modelName || relation.relationName || value
   return { label: `${label}（${value}）`, value }
-}
-
-function normalizeActionOption(action = {}) {
-  const value = String(action.actionCode || action.key || '').trim()
-  if (!value)
-    return null
-  return { label: `${action.actionName || action.label || value}（${value}）`, value }
 }
 
 function appendMissingOptions(options = [], values = [], suffix = '已失效') {
@@ -1294,6 +1313,14 @@ defineExpose({ getValue })
 
 .action-main-fields {
   grid-template-columns: 140px minmax(140px, 1fr) minmax(180px, 1.3fr) 130px;
+}
+
+.builtin-action-summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .action-condition-fields {
