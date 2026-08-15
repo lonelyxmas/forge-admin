@@ -47,4 +47,14 @@ describe('standalone object designer navigation', () => {
     expect(listDesigner).toContain('if (!props.defaultViewOnly)\n      await saveBusinessObjectActions')
     expect(gridDesigner).toContain('customActionsEditable')
   })
+
+  it('shows only relation and permission tabs with a read-only process summary', () => {
+    const objectDesigner = readSource('src/views/app-center/object-designer.[objectCode].vue')
+    const processPanel = readSource('src/views/app-center/components/designer/ObjectProcessReadOnlyPanel.vue')
+
+    expect(objectDesigner).not.toContain('<n-tab-pane name="flow-app"')
+    expect(objectDesigner).toContain('<ObjectProcessReadOnlyPanel')
+    expect(processPanel).toContain('businessObjectProcesses(props.objectCode)')
+    expect(processPanel).toContain('去应用工作台配置')
+  })
 })

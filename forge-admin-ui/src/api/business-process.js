@@ -10,6 +10,10 @@ export function businessProcessPage(params) {
   return request.get('/ai/business/process/page', encryptedParams(params))
 }
 
+export function businessObjectProcesses(objectCode) {
+  return request.get(`/ai/business/object/${encodeURIComponent(objectCode)}/processes`, ENCRYPTED_REQUEST)
+}
+
 export function businessProcessDetail(id) {
   return request.get(`/ai/business/process/${id}`, ENCRYPTED_REQUEST)
 }

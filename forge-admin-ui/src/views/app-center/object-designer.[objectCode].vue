@@ -118,25 +118,6 @@
             @dirty-change="handleDirtyChange"
           />
         </n-tab-pane>
-        <n-tab-pane name="flow-app" tab="流程绑定">
-          <BusinessFlowAppConfigPanel
-            ref="flowAppConfigRef"
-            :object-id="objectId"
-            :suite-code="draft.suiteCode"
-            :object-code="draft.objectCode"
-            :object-name="draft.objectName"
-            :fields="draft.fields"
-            :initial-config="draft.documentConfig"
-            :initial-section="embedded ? 'flow' : route.query.section"
-            :code-app="isCodeAppDesigner"
-            :compact="embedded"
-            @saved="handleFlowAppSaved"
-            @flow-context-change="emit('flowContextChange', $event)"
-            @dirty-change="handleDirtyChange"
-            @open-publish="handlePanelSwitch('publish')"
-            @update-field-generation="handleFieldGenerationUpdate"
-          />
-        </n-tab-pane>
         <n-tab-pane name="permission" tab="数据权限">
           <BusinessPermissionFlowPanel
             ref="permissionFlowRef"
@@ -148,6 +129,10 @@
           />
         </n-tab-pane>
       </n-tabs>
+      <ObjectProcessReadOnlyPanel
+        :object-code="draft.objectCode || objectCode"
+        :application-code="applicationCode"
+      />
     </section>
 
     <BusinessFormDesigner
@@ -347,6 +332,7 @@ const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./compon
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
 const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
 const BusinessListDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessListDesigner.vue'))
+const ObjectProcessReadOnlyPanel = defineDesignerAsyncComponent(() => import('./components/designer/ObjectProcessReadOnlyPanel.vue'))
 const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPermissionFlowPanel.vue'))
 const BusinessPublishChecklist = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPublishChecklist.vue'))
 const BusinessRelationDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessRelationDesigner.vue'))
@@ -397,6 +383,7 @@ const draft = reactive(createEmptyDraft())
 const objectCode = computed(() => props.embedded ? props.embeddedObjectCode : route.params.objectCode)
 const suiteCode = computed(() => (props.embedded ? props.embeddedSuiteCode : route.query.suiteCode) || draft.suiteCode)
 const objectId = computed(() => designer.value?.objectId || draft.objectId)
+const applicationCode = computed(() => resolveApplicationCode())
 const pageTitle = computed(() => `${draft.objectName || objectCode.value || '业务单元'}设计`)
 const canAdvanced = computed(() => {
   return userStore.isAdmin
@@ -452,6 +439,17 @@ function resolveInitialPanel() {
   const normalized = normalizePanel(panel) || 'fields'
   const codeAppRoute = route.query.codeApp === '1' || route.query.appType === 'code'
   return props.embedded || codeAppRoute ? normalized : resolveStandaloneObjectDesignerSection(normalized)
+}
+
+function resolveApplicationCode() {
+  const directCode = route.query.applicationCode
+    || route.query.appCode
+    || designer.value?.applicationCode
+    || draft.designerOptions?.applicationCode
+  if (directCode)
+    return String(directCode)
+  const returnTo = String(route.query.returnTo || '')
+  return decodeURIComponent(returnTo.match(/\/app-center\/application\/([^/?]+)/)?.[1] || '')
 }
 
 function normalizePanel(panel) {
