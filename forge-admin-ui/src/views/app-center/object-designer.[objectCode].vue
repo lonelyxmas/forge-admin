@@ -12,7 +12,6 @@
     :publish-disabled="publishDisabled"
     :preview-disabled="!objectId"
     :show-advanced="canAdvanced"
-    :closure-steps="closureSteps"
     :nav-panels="designerNavPanels"
     :show-preview="!isCodeAppDesigner"
     :show-publish="!isCodeAppDesigner"
@@ -428,22 +427,6 @@ const designerNavPanels = computed(() => {
     return props.embeddedNavPanels
   return isCodeAppDesigner.value ? ['form', 'list', 'actions', 'flow-app'] : []
 })
-const closureSteps = computed(() => {
-  if (isCodeAppDesigner.value)
-    return []
-  const documentConfig = draft.documentConfig || {}
-  const mainFlow = documentConfig.mainFlowSummary || {}
-  const startMode = normalizeStartMode(mainFlow.startMode)
-  const triggerRequired = startMode === 'TRIGGER' || startMode === 'BOTH'
-  const hasTriggerGap = hasPublishItem('DOCUMENT_TRIGGER_MISSING')
-  return [
-    step('flow-app', '单据流程', 'flow-app', Boolean(documentConfig.documentEnabled && documentConfig.statusField && mainFlow.configured)),
-    step('start', '发起方式', 'flow-app', Boolean(startMode), !startMode && Boolean(mainFlow.configured)),
-    step('trigger', '自动化触发器', 'triggers', triggerRequired && !hasTriggerGap, triggerRequired && hasTriggerGap),
-    step('publish', '发布检查', 'publish', publishCheckState.value?.publishable === true, publishCheckState.value?.publishable === false),
-    step('runtime', '试运行', 'runtime', Boolean(runtimeInfo.value?.canOpen), Boolean(runtimeInfo.value && !runtimeInfo.value.canOpen)),
-  ]
-})
 const fieldOptions = computed(() => {
   const modelFields = draft.modelSchema?.fields || []
   const source = modelFields.length ? modelFields : draft.fields.map(toPageField)
@@ -488,15 +471,6 @@ function resolveInitialFormCanvasView() {
   if (legacyView === 'sections')
     return 'sections'
   return 'layout'
-}
-
-function normalizeStartMode(value) {
-  const normalized = String(value || '').toUpperCase()
-  if (['MANUAL_AND_TRIGGER', 'MANUAL_TRIGGER'].includes(normalized))
-    return 'BOTH'
-  if (['AUTO', 'AUTOMATIC'].includes(normalized))
-    return 'TRIGGER'
-  return normalized
 }
 
 onMounted(() => {
@@ -1235,27 +1209,6 @@ function handleActionsUpdated(actions) {
 
 function handlePublishCheckUpdated(check) {
   publishCheckState.value = check || null
-}
-
-function hasPublishItem(itemCode) {
-  const items = Array.isArray(publishCheckState.value?.items) ? publishCheckState.value.items : []
-  return items.some(item => item?.itemCode === itemCode && item?.level !== 'PASS')
-}
-
-function step(key, label, panel, done, warn = false) {
-  const status = done ? 'done' : warn ? 'warn' : 'todo'
-  const labels = {
-    done: '完成',
-    warn: '待处理',
-    todo: '未完成',
-  }
-  return {
-    key,
-    label,
-    panel,
-    status,
-    statusLabel: labels[status],
-  }
 }
 
 async function handleFixTarget(panel) {

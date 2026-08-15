@@ -12,7 +12,8 @@ describe('application designer phase E layout contract', () => {
 
     expect(source).toContain('\'nav-hidden\': !showDesignerNavigation')
     expect(source).toContain('v-if="showDesignerNavigation" class="designer-nav"')
-    expect(source).toContain('v-if="!embedded && closureSteps.length"')
+    expect(source).not.toContain('closureSteps')
+    expect(source).not.toContain('closure-steps')
     expect(source).toContain('.designer-shell.embedded.nav-hidden .designer-workbench')
   })
 
