@@ -22,7 +22,6 @@
     @back="handleBack"
     @refresh="loadDesigner"
     @open-runtime="openRuntime"
-    @open-trigger="openTriggerConfig"
     @open-fields="handlePanelSwitch('fields')"
     @open-function-market="functionMarketVisible = true"
     @update:active-panel="handlePanelSwitch"
@@ -135,7 +134,6 @@
             @saved="handleFlowAppSaved"
             @flow-context-change="emit('flowContextChange', $event)"
             @dirty-change="handleDirtyChange"
-            @open-trigger="openTriggerConfig"
             @open-publish="handlePanelSwitch('publish')"
             @update-field-generation="handleFieldGenerationUpdate"
           />
@@ -147,28 +145,6 @@
             v-model:page-schema="draft.pageSchema"
             :fields="draft.fields"
             :object-name="draft.objectName"
-            @dirty-change="handleDirtyChange"
-          />
-        </n-tab-pane>
-      </n-tabs>
-    </section>
-
-    <section v-else-if="activePanel === 'default-view'" class="grouped-designer-panel">
-      <n-tabs v-model:value="defaultViewTab" type="line">
-        <n-tab-pane name="list" tab="列表模板">
-          <BusinessListDesigner
-            ref="listDesignerRef"
-            v-model="draft.pageSchema"
-            v-model:view-schema="draft.viewSchema"
-            default-view-only
-            :object-id="objectId"
-            :model-schema="draft.modelSchema"
-            :fields="draft.fields"
-            :form-options="runtimeFormOptions"
-            :designer-options="draft.designerOptions"
-            :designer-actions="draft.designerOptions?.actions || []"
-            @update:designer-actions="handleActionsUpdated"
-            @saved="handleLayoutSaved"
             @dirty-change="handleDirtyChange"
           />
         </n-tab-pane>
@@ -261,17 +237,8 @@
       @saved="handleFlowAppSaved"
       @flow-context-change="emit('flowContextChange', $event)"
       @dirty-change="handleDirtyChange"
-      @open-trigger="openTriggerConfig"
       @open-publish="handlePanelSwitch('publish')"
       @update-field-generation="handleFieldGenerationUpdate"
-    />
-
-    <BusinessTriggerConfigPanel
-      v-else-if="activePanel === 'triggers'"
-      embedded
-      lock-object
-      :object-code="draft.objectCode || objectCode"
-      :object-name="draft.objectName"
     />
 
     <BusinessPermissionFlowPanel
@@ -334,7 +301,6 @@ import { createDefaultFormDesignerSchema, normalizeMultiFormDesignerSchema } fro
 import { createDefaultViewSchema, renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
 import {
   resolveDataModelTab,
-  resolveDefaultViewTab,
   resolveStandaloneObjectDesignerSection,
 } from './components/designer/object-designer-navigation'
 import { buildSeedTakeoverSummary, markSeedTakeoverAccepted, requiresSeedTakeoverConfirmation } from './components/designer/seed-takeover'
@@ -386,7 +352,6 @@ const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('.
 const BusinessPublishChecklist = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPublishChecklist.vue'))
 const BusinessRelationDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessRelationDesigner.vue'))
 const BusinessTableMappingSummary = defineDesignerAsyncComponent(() => import('./components/designer/BusinessTableMappingSummary.vue'))
-const BusinessTriggerConfigPanel = defineDesignerAsyncComponent(() => import('./trigger.vue'))
 const FormulaFunctionMarket = defineDesignerAsyncComponent(() => import('./components/designer/formula/FormulaFunctionMarket.vue'))
 
 function defineDesignerAsyncComponent(loader) {
@@ -414,7 +379,6 @@ const ready = ref(false)
 const activePanel = ref(resolveInitialPanel())
 const initialFormCanvasView = resolveInitialFormCanvasView()
 const dataModelTab = ref(resolveDataModelTab(props.embedded ? props.initialPanel : route.query.modelTab || route.query.panel))
-const defaultViewTab = ref(resolveDefaultViewTab(props.embedded ? props.initialPanel : route.query.viewTab || route.query.panel))
 const developerMode = ref(false)
 const designer = ref(null)
 const runtimeInfo = ref(null)
@@ -450,8 +414,6 @@ const usesLegacyObjectPanels = computed(() => props.embedded || isCodeAppDesigne
 const effectiveDesignerPanel = computed(() => {
   if (activePanel.value === 'data-model')
     return dataModelTab.value
-  if (activePanel.value === 'default-view')
-    return defaultViewTab.value
   return activePanel.value
 })
 const publishDisabled = computed(() => {
@@ -511,7 +473,7 @@ function resolveInitialPanel() {
 
 function normalizePanel(panel) {
   if (['trigger', 'automation-trigger', 'triggers'].includes(panel))
-    return 'triggers'
+    return 'fields'
   if (['flow', 'document', 'automation', 'flow-app'].includes(panel))
     return 'flow-app'
   return panel === 'detail' ? 'form' : panel
@@ -582,7 +544,6 @@ watch(activePanel, (panel) => {
       ...route.query,
       panel,
       ...(panel === 'data-model' ? { modelTab: dataModelTab.value } : {}),
-      ...(panel === 'default-view' ? { viewTab: defaultViewTab.value } : {}),
     },
   })
 })
@@ -591,12 +552,6 @@ watch(dataModelTab, (tab) => {
   if (props.embedded || activePanel.value !== 'data-model')
     return
   router.replace({ path: route.path, query: { ...route.query, panel: 'data-model', modelTab: tab } })
-})
-
-watch(defaultViewTab, (tab) => {
-  if (props.embedded || activePanel.value !== 'default-view')
-    return
-  router.replace({ path: route.path, query: { ...route.query, panel: 'default-view', viewTab: tab } })
 })
 
 watch(canAdvanced, (value) => {
@@ -900,8 +855,6 @@ async function handlePanelSwitch(panel) {
   if (!usesLegacyObjectPanels.value) {
     if (['relations', 'flow-app', 'permission'].includes(normalizedPanel))
       dataModelTab.value = normalizedPanel
-    if (['list', 'detail'].includes(normalizedPanel))
-      defaultViewTab.value = normalizedPanel
   }
   const compatibilityPanel = ['publish', 'advanced'].includes(normalizedPanel)
   const nextPanel = usesLegacyObjectPanels.value || compatibilityPanel
@@ -1156,19 +1109,6 @@ function openRuntime() {
   router.push(runtimeInfo.value.routePath)
 }
 
-function openTriggerConfig() {
-  const code = draft.objectCode || objectCode.value
-  if (!code) {
-    message.warning('缺少业务单元编码，无法打开触发器配置')
-    return
-  }
-  if (props.embedded) {
-    activePanel.value = 'triggers'
-    return
-  }
-  activePanel.value = 'triggers'
-}
-
 async function handleFieldsUpdated(fields, options = {}) {
   draft.fields = cloneSchema(fields || [])
   syncDraftModelFields(draft.fields)
@@ -1246,10 +1186,8 @@ async function handleFlowAppSaved() {
     dataModelTab.value = 'flow-app'
   }
   const startMode = String(mainFlow.startMode || '').toUpperCase()
-  if (startMode === 'TRIGGER' || startMode === 'BOTH') {
-    activePanel.value = 'triggers'
-    return
-  }
+  if (startMode === 'TRIGGER' || startMode === 'BOTH')
+    message.info('自动化触发配置请前往应用工作台的业务流程画布维护')
   activePanel.value = 'publish'
 }
 
@@ -1322,10 +1260,6 @@ function step(key, label, panel, done, warn = false) {
 
 async function handleFixTarget(panel) {
   const targetPanel = normalizePanel(panel)
-  if (targetPanel === 'trigger') {
-    openTriggerConfig()
-    return
-  }
   if (panel === 'advanced' && !canAdvanced.value) {
     message.warning('该修复入口需要高级配置权限')
     return

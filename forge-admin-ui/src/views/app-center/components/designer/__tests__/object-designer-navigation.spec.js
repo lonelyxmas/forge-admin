@@ -3,7 +3,6 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   resolveDataModelTab,
-  resolveDefaultViewTab,
   resolveStandaloneObjectDesignerSection,
   standaloneObjectDesignerSections,
 } from '../object-designer-navigation'
@@ -13,39 +12,35 @@ function readSource(relativePath) {
 }
 
 describe('standalone object designer navigation', () => {
-  it('exposes only the five object-owned configuration dimensions', () => {
+  it('exposes only the three object-owned configuration dimensions', () => {
     expect(standaloneObjectDesignerSections.map(item => item.key)).toEqual([
       'basic',
       'fields',
       'data-model',
-      'default-view',
-      'triggers',
     ])
   })
 
-  it('maps legacy deep links into the grouped sections', () => {
-    expect(resolveStandaloneObjectDesignerSection('list')).toBe('default-view')
-    expect(resolveStandaloneObjectDesignerSection('detail')).toBe('default-view')
+  it('maps only data-owned legacy deep links into the grouped sections', () => {
     expect(resolveStandaloneObjectDesignerSection('relations')).toBe('data-model')
-    expect(resolveStandaloneObjectDesignerSection('flow-app')).toBe('data-model')
     expect(resolveStandaloneObjectDesignerSection('permission')).toBe('data-model')
-    expect(resolveStandaloneObjectDesignerSection('form')).toBe('default-view')
-    expect(resolveStandaloneObjectDesignerSection('actions')).toBe('default-view')
+    expect(resolveStandaloneObjectDesignerSection('flow-app')).toBe('fields')
+    expect(resolveStandaloneObjectDesignerSection('list')).toBe('fields')
+    expect(resolveStandaloneObjectDesignerSection('triggers')).toBe('fields')
   })
 
-  it('preserves the legacy target as the grouped sub-tab', () => {
-    expect(resolveDataModelTab('flow-app')).toBe('flow-app')
+  it('preserves only relation and permission targets as data-model sub-tabs', () => {
     expect(resolveDataModelTab('permission')).toBe('permission')
-    expect(resolveDefaultViewTab('detail')).toBe('detail')
-    expect(resolveDefaultViewTab('form')).toBe('list')
+    expect(resolveDataModelTab('flow-app')).toBe('relations')
   })
 
-  it('keeps application-owned actions out of the standalone default view', () => {
+  it('keeps application-owned designers out of the standalone object designer', () => {
     const objectDesigner = readSource('src/views/app-center/object-designer.[objectCode].vue')
     const listDesigner = readSource('src/views/app-center/components/designer/BusinessListDesigner.vue')
     const gridDesigner = readSource('src/components/lowcode-builder/page/ListPageGridDesigner.vue')
 
-    expect(objectDesigner).toContain('default-view-only')
+    expect(objectDesigner).not.toContain('activePanel === \'default-view\'')
+    expect(objectDesigner).not.toContain('activePanel === \'triggers\'')
+    expect(objectDesigner).not.toContain('BusinessTriggerConfigPanel')
     expect(objectDesigner).toContain('const compatibilityPanel = [\'publish\', \'advanced\'].includes(normalizedPanel)')
     expect(listDesigner).toContain('v-if="!defaultViewOnly" class="list-custom-actions-entry"')
     expect(listDesigner).toContain('const visibleListCustomActions = computed(() => props.defaultViewOnly ? [] : listCustomActions.value)')

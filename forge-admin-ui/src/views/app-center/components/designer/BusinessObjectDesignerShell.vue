@@ -157,7 +157,6 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline,
   CubeOutline,
-  FlashOutline,
   GitBranchOutline,
   GitNetworkOutline,
   KeyOutline,
@@ -247,7 +246,6 @@ const emit = defineEmits([
   'back',
   'refresh',
   'openRuntime',
-  'openTrigger',
   'openFields',
   'openFunctionMarket',
 ])
@@ -258,7 +256,6 @@ const legacyNavItems = [
   { key: 'form', label: '表单设计', icon: ReaderOutline },
   { key: 'list', label: '列表设计', icon: ListOutline },
   { key: 'actions', label: '业务处理', icon: GitBranchOutline },
-  { key: 'triggers', label: '自动化触发器', icon: FlashOutline },
   { key: 'relations', label: '关系与级联', icon: GitNetworkOutline },
   { key: 'flow-app', label: '业务流程配置', icon: GitBranchOutline },
   { key: 'permission', label: '数据权限', icon: KeyOutline },
@@ -271,8 +268,6 @@ const standaloneIconMap = {
   'basic': OptionsOutline,
   'fields': TextOutline,
   'data-model': GitNetworkOutline,
-  'default-view': ListOutline,
-  'triggers': FlashOutline,
 }
 
 const standaloneNavItems = standaloneObjectDesignerSections.map(item => ({
@@ -308,7 +303,6 @@ const moreOptions = computed(() => {
     { label: '函数市场', key: 'openFunctionMarket' },
     { label: '刷新设计器', key: 'refresh' },
     { label: '打开运行应用', key: 'openRuntime' },
-    { label: '配置触发器', key: 'openTrigger' },
   ]
   if (props.showAdvanced) {
     options.splice(1, 0, {
