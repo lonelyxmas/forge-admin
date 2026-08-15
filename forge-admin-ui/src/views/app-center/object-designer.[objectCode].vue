@@ -129,6 +129,20 @@
           />
         </n-tab-pane>
       </n-tabs>
+      <n-alert
+        v-if="!embedded"
+        class="process-migration-alert"
+        type="info"
+        title="流程与自动化配置已移至应用工作台"
+        :bordered="false"
+      >
+        触发器、流程绑定和业务动作已统一为业务流程画布，请在应用工作台 → 业务流程中配置。
+        <template #action>
+          <n-button text type="primary" @click="openProcessWorkspace">
+            前往应用工作台
+          </n-button>
+        </template>
+      </n-alert>
       <ObjectProcessReadOnlyPanel
         :object-code="draft.objectCode || objectCode"
         :application-code="applicationCode"
@@ -435,6 +449,18 @@ function resolveApplicationCode() {
     return String(directCode)
   const returnTo = String(route.query.returnTo || '')
   return decodeURIComponent(returnTo.match(/\/app-center\/application\/([^/?]+)/)?.[1] || '')
+}
+
+function openProcessWorkspace() {
+  if (!applicationCode.value) {
+    router.push('/app-center')
+    return
+  }
+  router.push({
+    name: 'BusinessApplicationWorkspace',
+    params: { applicationCode: applicationCode.value },
+    query: { section: 'automation' },
+  })
 }
 
 function normalizePanel(panel) {
@@ -2305,6 +2331,10 @@ defineExpose({
 
 .basic-form {
   max-width: 920px;
+}
+
+.process-migration-alert {
+  margin-top: 18px;
 }
 
 .advanced-grid {

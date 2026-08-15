@@ -25,7 +25,7 @@
             </n-tag>
           </div>
           <p>
-            <span class="object-workbench-description">维护字段、数据模型、默认视图和触发器</span>
+            <span class="object-workbench-description">维护对象字段、数据关系和数据权限</span>
             {{ designer?.suiteName || designer?.suiteCode || '未关联业务域' }}
             <span v-if="designer?.updateTime">最近保存 {{ designer.updateTime }}</span>
             <span v-if="designer?.lastPublishTime">最后发布 {{ designer.lastPublishTime }}</span>

@@ -58,4 +58,12 @@ describe('standalone object designer navigation', () => {
     expect(processPanel).toContain('businessObjectProcesses(props.objectCode)')
     expect(processPanel).toContain('去应用工作台配置')
   })
+
+  it('guides standalone users to the application process workspace', () => {
+    const objectDesigner = readSource('src/views/app-center/object-designer.[objectCode].vue')
+
+    expect(objectDesigner).toContain('流程与自动化配置已移至应用工作台')
+    expect(objectDesigner).toContain('触发器、流程绑定和业务动作已统一为业务流程画布')
+    expect(objectDesigner).toContain('@click="openProcessWorkspace"')
+  })
 })
