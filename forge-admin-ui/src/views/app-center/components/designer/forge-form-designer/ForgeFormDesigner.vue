@@ -910,6 +910,10 @@ function flushDesigner() {
   })
 }
 
+function openPageSections() {
+  canvasView.value = 'sections'
+}
+
 function countComponents(components = []) {
   return (Array.isArray(components) ? components : []).reduce((total, component) => {
     return total + 1 + countComponents(component.children || [])
@@ -918,6 +922,7 @@ function countComponents(components = []) {
 
 defineExpose({
   flushDesigner,
+  openPageSections,
   resetFromFields,
   repairRefs,
   appendField,

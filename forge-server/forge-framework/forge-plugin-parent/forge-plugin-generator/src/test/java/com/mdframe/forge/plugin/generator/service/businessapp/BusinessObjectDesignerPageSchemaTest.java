@@ -164,6 +164,26 @@ class BusinessObjectDesignerPageSchemaTest {
     }
 
     @Test
+    @DisplayName("preserves designer-authored master-detail options")
+    void preservesDesignerAuthoredMasterDetailOptions() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        LowcodePageSchema schema = mapper.readValue("""
+                {
+                  "options": {
+                    "masterDetailConfig": {
+                      "children": [{"relationKey":"order_items","saveMode":"CASCADE"}]
+                    }
+                  }
+                }
+                """, LowcodePageSchema.class);
+
+        Map<?, ?> masterDetailConfig = (Map<?, ?>) schema.getOptions().get("masterDetailConfig");
+        List<?> children = (List<?>) masterDetailConfig.get("children");
+        assertEquals("order_items", ((Map<?, ?>) children.get(0)).get("relationKey"));
+        assertTrue(mapper.writeValueAsString(schema).contains("masterDetailConfig"));
+    }
+
+    @Test
     @DisplayName("preserves H5 page sections and bottom bar in form designer payload")
     void preservesH5PageSectionsAndBottomBar() throws Exception {
         ObjectMapper mapper = new ObjectMapper();

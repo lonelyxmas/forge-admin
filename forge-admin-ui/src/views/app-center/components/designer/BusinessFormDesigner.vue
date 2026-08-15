@@ -72,9 +72,14 @@
                 {{ row.title }} · {{ row.selectedCount || 0 }}/{{ row.fieldCount || 0 }} 字段
               </n-tag>
             </div>
-            <n-button size="small" type="primary" secondary @click="$emit('openRelations')">
-              配置关系与级联
-            </n-button>
+            <n-space size="small">
+              <n-button size="small" secondary @click="$emit('openRelations')">
+                配置关系与级联
+              </n-button>
+              <n-button size="small" type="primary" @click="openChildTableSectionWizard">
+                添加子表分区
+              </n-button>
+            </n-space>
           </section>
           <BusinessFormCreateDesigner
             v-if="useLegacyFormCreateDesigner"
@@ -272,13 +277,20 @@
         <n-empty v-if="!visibleShelfFields.length" description="当前分组没有字段" />
       </div>
     </aside>
+
+    <ChildTableSectionWizard
+      v-model:show="childTableWizardVisible"
+      :relations="relations"
+      :model-refs="pageModelRefs"
+      @confirm="handleChildTableSectionConfirm"
+    />
   </div>
 </template>
 
 <script setup>
 import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { saveBusinessObjectDesigner, saveBusinessObjectFormLayout } from '@/api/business-app'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import {
@@ -291,6 +303,8 @@ import {
 import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/runtime-rules'
 import BusinessDetailDesigner from './BusinessDetailDesigner.vue'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
+import { upsertChildTableSectionConfig } from './child-table-section-config'
+import ChildTableSectionWizard from './ChildTableSectionWizard.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets } from './form-first/autoFieldRegistry'
 import { extractForgeSchemaFieldRefs, forgeSchemaToFormCreate } from './form-first/forgeToFormCreate'
@@ -423,6 +437,7 @@ const shelfTab = ref('unused')
 const activeObjectKey = ref('primary')
 const formCreateDesignerRef = ref(null)
 const forgeFormDesignerRef = ref(null)
+const childTableWizardVisible = ref(false)
 const useLegacyFormCreateDesigner = ref(false)
 const activeFormDesignerRef = computed(() => useLegacyFormCreateDesigner.value ? formCreateDesignerRef.value : forgeFormDesignerRef.value)
 
@@ -1060,6 +1075,21 @@ function handleFormDesignerMoreSelect(key = '') {
   }
   if (key === 'toggleDesignerVersion')
     useLegacyFormCreateDesigner.value = !useLegacyFormCreateDesigner.value
+}
+
+function openChildTableSectionWizard() {
+  childTableWizardVisible.value = true
+}
+
+function handleChildTableSectionConfirm(config) {
+  const result = upsertChildTableSectionConfig({
+    pageSchema: localSchema.value,
+    formDesignerSchema: localFormDesignerSchema.value,
+  }, config)
+  assignLocalSchema(result.pageSchema)
+  localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+  emit('dirtyChange', true)
+  nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
 }
 
 function updateEditZoneProps(patch = {}) {
