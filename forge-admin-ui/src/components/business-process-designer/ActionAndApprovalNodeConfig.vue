@@ -1,6 +1,7 @@
 <script setup>
 import { NModal } from 'naive-ui'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { ACTION_NODE_TEMPLATES, createActionTemplateConfig } from './node-templates.js'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -22,6 +23,7 @@ const FlowDesignPage = defineAsyncComponent(() => import('@/views/flow/design.vu
 
 const localConfig = ref(clone(props.node.config))
 const flowDesignerVisible = ref(false)
+const selectedTemplate = ref('')
 
 const publishedFlowModels = computed(() => props.flowModels.filter((item) => {
   const published = item.status === 1 || item.published === true
@@ -45,7 +47,17 @@ const fieldOptions = computed(() => props.fields.map(item => ({
 
 watch(() => props.node, (value) => {
   localConfig.value = clone(value?.config)
+  selectedTemplate.value = ''
 }, { deep: true })
+
+function applyActionTemplate(value) {
+  const config = createActionTemplateConfig(value, { objectCode: props.objectCode })
+  if (!config)
+    return
+  selectedTemplate.value = value
+  localConfig.value = config
+  emit('update:config', clone(localConfig.value))
+}
 
 function patchConfig(patch) {
   localConfig.value = { ...localConfig.value, ...clone(patch) }
@@ -55,6 +67,7 @@ function patchConfig(patch) {
 function handleActionType(event) {
   const actionType = event.target.value
   const keep = { actionType }
+  selectedTemplate.value = ''
   if (['UPDATE_RECORD', 'CREATE_RECORD'].includes(actionType))
     keep.objectCode = props.objectCode
   localConfig.value = keep
@@ -150,6 +163,27 @@ function clone(value) {
 <template>
   <div class="execution-node-config">
     <template v-if="node.type === 'ACTION'">
+      <section class="template-section" aria-label="动作节点场景模板">
+        <div class="template-section-head">
+          <strong>场景模板</strong>
+          <span>选择后仍可继续调整</span>
+        </div>
+        <div class="template-grid">
+          <button
+            v-for="item in ACTION_NODE_TEMPLATES"
+            :key="item.value"
+            type="button"
+            class="template-card"
+            :class="{ 'is-selected': selectedTemplate === item.value }"
+            :data-action-template="item.value"
+            @click="applyActionTemplate(item.value)"
+          >
+            <strong>{{ item.label }}</strong>
+            <span>{{ item.description }}</span>
+          </button>
+        </div>
+      </section>
+
       <label class="config-field">
         <span>执行动作</span>
         <select :value="localConfig.actionType || 'UPDATE_RECORD'" @change="handleActionType">
@@ -313,6 +347,68 @@ function clone(value) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.template-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.template-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-section-head strong {
+  color: var(--text-color-1, #0f172a);
+  font-size: 13px;
+}
+
+.template-section-head span {
+  color: var(--text-color-3, #64748b);
+  font-size: 12px;
+}
+
+.template-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.template-card {
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 7px;
+  background: var(--card-color, #fff);
+  padding: 10px;
+  text-align: left;
+}
+
+.template-card:hover,
+.template-card.is-selected {
+  border-color: var(--primary-color, #2563eb);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.template-card strong,
+.template-card span {
+  display: block;
+}
+
+.template-card strong {
+  color: var(--text-color-1, #0f172a);
+  font-size: 13px;
+}
+
+.template-card span {
+  margin-top: 5px;
+  color: var(--text-color-3, #64748b);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .config-field {
