@@ -16,18 +16,15 @@ describe('application designer navigation', () => {
   it('maps legacy section keys to resource groups', () => {
     expect(normalizeApplicationDesignerSection('page')).toBe('pages')
     expect(normalizeApplicationDesignerSection('events')).toBe('pages')
-    expect(normalizeApplicationDesignerSection('actions')).toBe('flow')
-    expect(normalizeApplicationDesignerSection('business-flow')).toBe('flow')
+    expect(normalizeApplicationDesignerSection('actions')).toBe('automation')
+    expect(normalizeApplicationDesignerSection('business-flow')).toBe('automation')
     expect(normalizeApplicationDesignerSection('data-model')).toBe('data')
     expect(normalizeApplicationDesignerSection('unknown')).toBe('pages')
     expect(resolveObjectDesignerSectionConfig('data-model')).toEqual({
       initialPanel: 'fields',
-      navPanels: ['fields', 'relations', 'flow-app', 'triggers'],
+      navPanels: ['fields', 'relations'],
     })
-    expect(resolveObjectDesignerSectionConfig('business-flow')).toEqual({
-      initialPanel: 'flow-app',
-      navPanels: ['flow-app'],
-    })
+    expect(resolveObjectDesignerSectionConfig('business-flow')).toBe(null)
   })
 
   it('builds explicit form, list, custom page and object resource nodes', () => {
@@ -45,7 +42,7 @@ describe('application designer navigation', () => {
       pages: [{ id: 'home', title: '工作台首页', type: 'page' }],
     })
 
-    expect(groups.map(group => group.key)).toEqual(['pages', 'data', 'automation', 'flow', 'settings'])
+    expect(groups.map(group => group.key)).toEqual(['pages', 'data', 'automation', 'settings'])
     expect(groups[0].nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'page-form:1910000000000000001', label: '订单（表单页）', configured: true }),
       expect.objectContaining({ key: 'page-list:1910000000000000001', label: '订单（列表页）', configured: true }),
@@ -57,12 +54,16 @@ describe('application designer navigation', () => {
     })
     expect(findApplicationDesignerResource(groups, '', 'page')).toMatchObject({ key: 'page-custom:home' })
     expect(findApplicationDesignerResource(groups, '', 'business-flow')).toMatchObject({
-      key: 'flow:1910000000000000001',
-      objectCode: 'ORDER',
+      key: 'automation-processes',
+      kind: 'automation-processes',
     })
     expect(findApplicationDesignerResource(groups, '', 'actions')).toMatchObject({
-      key: 'flow:1910000000000000001',
-      objectCode: 'ORDER',
+      key: 'automation-processes',
+      kind: 'automation-processes',
+    })
+    // 拆分前的 business-actions:<objectId> 旧书签落到业务流程列表。
+    expect(findApplicationDesignerResource(groups, 'business-actions:1910000000000000001')).toMatchObject({
+      key: 'automation-processes',
     })
     expect(findApplicationDesignerResource(groups, '', 'data-model')).toMatchObject({
       key: 'data-fields:1910000000000000001',
@@ -95,7 +96,7 @@ describe('application designer navigation', () => {
     })
   })
 
-  it('derives automation and flow configuration state from real summaries', () => {
+  it('keeps the automation group as process list plus enhancements', () => {
     const groups = buildApplicationDesignerResourceGroups({
       objects: [
         { objectId: '1', objectCode: 'ORDER', objectName: '订单' },
@@ -115,15 +116,11 @@ describe('application designer navigation', () => {
       },
     })
     const automation = groups.find(group => group.key === 'automation')
-    const flow = groups.find(group => group.key === 'flow')
 
-    expect(automation.nodes.find(node => node.key === 'automation-triggers:1')?.configured).toBe(true)
-    expect(automation.nodes.find(node => node.key === 'automation-triggers:2')?.configured).toBe(false)
-    expect(automation.nodes.some(node => node.kind === 'automation-actions')).toBe(false)
-    expect(automation).toMatchObject({ configuredCount: 1, totalCount: 3 })
-    expect(flow.nodes.find(node => node.key === 'flow:1')?.configured).toBe(true)
-    expect(flow.nodes.find(node => node.key === 'flow:2')?.configured).toBe(false)
-    expect(flow).toMatchObject({ configuredCount: 1, totalCount: 2 })
+    // 对象级动作面板已并入业务流程画布，automation 组只保留流程列表与动作增强。
+    expect(automation.nodes.map(node => node.kind)).toEqual(['automation-processes', 'automation-enhancements'])
+    expect(automation.nodes.some(node => node.kind === 'business-actions')).toBe(false)
+    expect(automation).toMatchObject({ configuredCount: 1, totalCount: 2 })
   })
 
   it('uses an explicit object, then the primary object, then the first object', () => {

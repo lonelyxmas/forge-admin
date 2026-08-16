@@ -2,8 +2,40 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGridSyncModelSchema,
   createDefaultListGridLayout,
+  DATA_FIELD_BLOCK_TYPES,
+  listPageBlockCatalog,
+  resolveListPageBlockMeta,
   syncGridLayoutWithModel,
 } from '../page-schema'
+
+describe('page builder data component catalog', () => {
+  it('uses business-facing names while retaining technical names as secondary metadata', () => {
+    expect(DATA_FIELD_BLOCK_TYPES).toEqual([
+      'AiCrudPage',
+      'AiForm',
+      'AiTable',
+      'data-table',
+      'search-form',
+      'detail-info',
+    ])
+
+    expect(resolveListPageBlockMeta('AiCrudPage')).toMatchObject({
+      title: '数据列表',
+      techTitle: 'AiCrudPage',
+    })
+    expect(resolveListPageBlockMeta('AiForm')).toMatchObject({
+      title: '数据表单',
+      techTitle: 'AiForm',
+    })
+    expect(resolveListPageBlockMeta('AiTable')).toMatchObject({
+      title: '数据表格',
+      techTitle: 'AiTable',
+    })
+
+    const visibleTitles = listPageBlockCatalog.map(item => item.title)
+    expect(new Set(visibleTitles).size).toBe(visibleTitles.length)
+  })
+})
 
 describe('default list columns', () => {
   it('excludes audit/system fields from the default CRUD list columns', () => {

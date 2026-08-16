@@ -40,6 +40,8 @@ describe('page section editor', () => {
         },
         stubs: {
           draggable: DraggableStub,
+          // 底栏编辑已抽取为子组件，这里渲染真实组件以覆盖按钮拖拽排序链路。
+          BottomBarEditor: false,
         },
       },
     })

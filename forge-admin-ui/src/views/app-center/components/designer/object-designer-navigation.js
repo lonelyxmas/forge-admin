@@ -4,7 +4,7 @@ export const standaloneObjectDesignerSections = [
   { key: 'data-model', label: '数据关系' },
 ]
 
-const DATA_MODEL_PANELS = new Set(['data-model', 'relations', 'permission'])
+const DATA_MODEL_PANELS = new Set(['data-model', 'relations', 'tree-model', 'permission'])
 
 export function resolveStandaloneObjectDesignerSection(value) {
   const panel = String(value || '').trim()
@@ -17,5 +17,7 @@ export function resolveStandaloneObjectDesignerSection(value) {
 
 export function resolveDataModelTab(value) {
   const panel = String(value || '').trim()
-  return ['relations', 'permission'].includes(panel) ? panel : 'relations'
+  if (['tree-model', 'permission'].includes(panel))
+    return 'tree-model'
+  return panel === 'relations' ? panel : 'relations'
 }

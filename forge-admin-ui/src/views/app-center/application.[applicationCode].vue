@@ -100,10 +100,9 @@ import { normalizeInAppBuilder } from './in-app-builder/in-app-builder-schema'
 
 const ApplicationObjectsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationObjectsPanel.vue'))
 const ApplicationEntriesPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationEntriesPanel.vue'))
-const ApplicationProcessPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationProcessPanel.vue'))
 const ApplicationExtensionsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationExtensionsPanel.vue'))
 const ApplicationPublishPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationPublishPanel.vue'))
-const ApplicationCapabilityPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationCapabilityPanel.vue'))
+const ApplicationPermissionsPanel = defineAsyncComponent(() => import('./application-workspace/ApplicationPermissionsPanel.vue'))
 const AppCodePanel = defineAsyncComponent(() => import('./components/AppCodePanel.vue'))
 const route = useRoute()
 const router = useRouter()
@@ -129,8 +128,8 @@ const validSections = new Set([
 const designerOwnedSectionMeta = {
   automation: {
     title: '业务流程已移入应用设计器',
-    description: '流程绑定、节点分区策略和审批交互统一在应用设计器的「业务流程」中配置，此处不再维护第二份入口。',
-    designerSection: 'business-flow',
+    description: '业务流程的新建、编排、校验与发布统一在应用设计器的「业务流程」中管理，此处不再维护第二份入口。',
+    designerSection: 'automation',
   },
   enhancements: {
     title: '动作增强已移入应用设计器',
@@ -149,38 +148,12 @@ const visibleSections = computed(() => (workspace.value?.sections || [])
 
 const designerOwnedGuide = computed(() => designerOwnedSectionMeta[activeSection.value] || null)
 
-const capabilityPanel = computed(() => {
-  const configs = {
-    permissions: {
-      title: '权限',
-      description: '汇总入口可见范围、对象动作权限、字段权限和数据权限。',
-      assetCount: application.value?.objectCount || 0,
-      items: [
-        {
-          title: '对象与字段权限',
-          description: '对象动作权限和字段权限随对象设计在应用设计器中配置。',
-          action: 'designer',
-          actionLabel: '打开设计器',
-        },
-        {
-          title: '页面入口可见范围',
-          description: '入口级角色、菜单资源和打开权限在页面入口中维护。',
-          action: 'entries',
-          actionLabel: '查看页面入口',
-        },
-      ],
-    },
-  }
-  return configs[activeSection.value] || configs.permissions
-})
-
 const panelComponents = {
   overview: ApplicationOverviewPanel,
   objects: ApplicationObjectsPanel,
   entries: ApplicationEntriesPanel,
-  automation: ApplicationProcessPanel,
   enhancements: ApplicationExtensionsPanel,
-  permissions: ApplicationCapabilityPanel,
+  permissions: ApplicationPermissionsPanel,
   releases: ApplicationPublishPanel,
 }
 
@@ -207,12 +180,6 @@ const activePanelProps = computed(() => {
       applicationObjects: workspace.value?.objects || [],
     }
   }
-  if (activeSection.value === 'automation') {
-    return {
-      application: application.value,
-      initialObjects: workspace.value?.objects || [],
-    }
-  }
   if (activeSection.value === 'enhancements') {
     return {
       application: application.value,
@@ -227,7 +194,13 @@ const activePanelProps = computed(() => {
       publishRequestToken: publishRequestToken.value,
     }
   }
-  return capabilityPanel.value
+  if (activeSection.value === 'permissions') {
+    return {
+      application: application.value,
+      initialObjects: workspace.value?.objects || [],
+    }
+  }
+  return {}
 })
 
 watch(() => route.params.applicationCode, loadWorkspace)
@@ -279,6 +252,17 @@ function selectSection(section) {
 }
 
 function openFullScreenDesigner(payload = {}) {
+  if (payload.type === 'DATA_SCOPE_ADAPTER' || payload.panel === 'permission') {
+    router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        section: 'permissions',
+        dataScopeObjectId: payload.objectId || undefined,
+      },
+    })
+    return
+  }
   if (payload.processId) {
     router.push({
       name: 'BusinessProcessDesigner',
@@ -527,14 +511,20 @@ function clearCreateHint() {
   }
 
   .workspace-sidebar {
-    overflow-x: auto;
+    overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--border-light, #e5e6eb);
   }
 
   .workspace-sidebar :deep(.workspace-nav) {
-    min-width: 920px;
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .workspace-sidebar :deep(.nav-item) {
+    min-width: 0;
   }
 
   .workspace-content {

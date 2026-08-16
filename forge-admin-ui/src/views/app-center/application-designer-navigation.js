@@ -1,8 +1,7 @@
 export const applicationDesignerSections = [
   { key: 'pages', label: '页面' },
   { key: 'data', label: '数据' },
-  { key: 'automation', label: '自动化' },
-  { key: 'flow', label: '流程' },
+  { key: 'automation', label: '业务流程' },
   { key: 'settings', label: '设置' },
 ]
 
@@ -10,11 +9,12 @@ const legacySectionMap = {
   'page': 'pages',
   'pages': 'pages',
   'events': 'pages',
-  'actions': 'flow',
+  'actions': 'automation',
   'automation': 'automation',
   'automation-enhancements': 'automation',
-  'business-flow': 'flow',
-  'flow': 'flow',
+  'business-flow': 'automation',
+  'flow': 'automation',
+  'flow-object': 'automation',
   'data-model': 'data',
   'data': 'data',
   'settings': 'settings',
@@ -26,13 +26,9 @@ const objectDesignerSectionConfig = {
     initialFormPropertyTab: 'events',
     navPanels: ['form'],
   },
-  'business-flow': {
-    initialPanel: 'flow-app',
-    navPanels: ['flow-app'],
-  },
   'data-model': {
     initialPanel: 'fields',
-    navPanels: ['fields', 'relations', 'flow-app', 'triggers'],
+    navPanels: ['fields', 'relations'],
   },
   'page-form': {
     initialPanel: 'form',
@@ -54,14 +50,6 @@ const objectDesignerSectionConfig = {
   'data-relations': {
     initialPanel: 'relations',
     navPanels: ['relations'],
-  },
-  'automation-triggers': {
-    initialPanel: 'triggers',
-    navPanels: ['triggers'],
-  },
-  'flow-object': {
-    initialPanel: 'flow-app',
-    navPanels: ['flow-app'],
   },
 }
 
@@ -107,8 +95,15 @@ export function buildApplicationDesignerResourceGroups(options = {}) {
     },
     {
       key: 'automation',
-      label: '自动化',
+      label: '业务流程',
       nodes: [
+        {
+          key: 'automation-processes',
+          groupKey: 'automation',
+          kind: 'automation-processes',
+          label: '业务流程列表',
+          configured: true,
+        },
         {
           key: 'automation-enhancements',
           groupKey: 'automation',
@@ -116,18 +111,7 @@ export function buildApplicationDesignerResourceGroups(options = {}) {
           label: '动作增强（JS / CSS / Java）',
           configured: hasItems(options.extensions),
         },
-        ...objectNodes.map(item => createObjectNode(
-          item,
-          'automation-triggers',
-          `${item.objectName} · 触发器`,
-          item.triggerConfigured,
-        )),
       ],
-    },
-    {
-      key: 'flow',
-      label: '流程',
-      nodes: objectNodes.map(item => createObjectNode(item, 'flow-object', `${item.objectName}审批`, item.flowConfigured)),
     },
     {
       key: 'settings',
@@ -162,6 +146,9 @@ export function findApplicationDesignerResource(groups = [], resourceKey = '', l
       if (fallback)
         return fallback
     }
+    // 兼容拆分前的 business-actions:<objectId> 旧链接，动作编辑已并入业务流程画布。
+    if (requested.startsWith('business-actions:'))
+      return nodes.find(node => node.kind === 'automation-processes') || null
   }
 
   const legacy = String(legacySection || '').trim()
@@ -169,12 +156,10 @@ export function findApplicationDesignerResource(groups = [], resourceKey = '', l
     return nodes.find(node => node.kind === 'page-form') || nodes[0] || null
   if (legacy === 'page')
     return nodes.find(node => node.kind === 'page-custom') || nodes.find(node => node.groupKey === 'pages') || nodes[0] || null
-  if (legacy === 'actions')
-    return nodes.find(node => node.kind === 'flow-object') || nodes[0] || null
+  if (['actions', 'business-flow', 'flow-object', 'automation-triggers'].includes(legacy))
+    return nodes.find(node => node.kind === 'automation-processes') || nodes[0] || null
   if (legacy === 'automation-enhancements')
     return nodes.find(node => node.kind === 'automation-enhancements') || nodes[0] || null
-  if (legacy === 'business-flow')
-    return nodes.find(node => node.kind === 'flow-object') || nodes[0] || null
   if (legacy === 'data-model')
     return nodes.find(node => node.kind === 'data-fields') || nodes.find(node => node.kind === 'data-object') || nodes[0] || null
   if (legacy === 'settings')
@@ -206,23 +191,13 @@ function normalizeObjectResource(object = {}, designersByObjectId = {}) {
   if (!objectId)
     return null
   const designer = designersByObjectId[objectId] || designersByObjectId[object.objectId] || {}
-  const designerOptions = parseObject(designer.designerOptions)
-  const documentConfig = parseObject(designer.documentConfig)
-  const mainFlowSummary = parseObject(documentConfig.mainFlowSummary)
   return {
     objectId,
     objectCode: object.objectCode || '',
     objectName: object.objectName || object.objectCode || '未命名对象',
     formConfigured: hasFormConfiguration(designer.formDesignerSchema),
     listConfigured: hasListConfiguration(designer.viewSchema),
-    triggerConfigured: designer.triggerConfigured === true || Number(designer.triggerCount || 0) > 0,
-    actionConfigured: hasItems(designerOptions.actions),
     relationConfigured: hasRelationConfiguration(designer.relationSchema),
-    flowConfigured: Boolean(
-      mainFlowSummary.configured
-      || mainFlowSummary.flowModelKey
-      || documentConfig.defaultFlowKey,
-    ),
   }
 }
 
@@ -241,7 +216,7 @@ function createObjectNode(object, kind, label, configured) {
 function resolveNodeGroup(kind) {
   if (kind.startsWith('page-'))
     return 'pages'
-  if (kind.startsWith('automation-'))
+  if (kind.startsWith('automation-') || kind === 'business-actions')
     return 'automation'
   if (kind.startsWith('flow-'))
     return 'flow'

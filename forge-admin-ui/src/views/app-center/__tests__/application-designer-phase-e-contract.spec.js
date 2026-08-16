@@ -24,8 +24,6 @@ describe('application designer phase E layout contract', () => {
     expect(runtimeSource).toContain('@create-page="createQuickNode(\'page\')"')
     expect(runtimeSource).toContain('<aside v-if="!editing" class="runtime-navigation')
     expect(treeSource).toContain('emit(\'createPage\')')
-    expect(treeSource).toContain('group.configuredCount }}/{{ group.totalCount')
-    expect(treeSource).toContain('group.totalCount > 0 && group.configuredCount === 0')
   })
 
   it('renders the real application extension panel for the enhancement resource', () => {

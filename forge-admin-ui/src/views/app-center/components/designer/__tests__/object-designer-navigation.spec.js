@@ -23,13 +23,15 @@ describe('standalone object designer navigation', () => {
   it('maps only data-owned legacy deep links into the grouped sections', () => {
     expect(resolveStandaloneObjectDesignerSection('relations')).toBe('data-model')
     expect(resolveStandaloneObjectDesignerSection('permission')).toBe('data-model')
+    expect(resolveStandaloneObjectDesignerSection('tree-model')).toBe('data-model')
     expect(resolveStandaloneObjectDesignerSection('flow-app')).toBe('fields')
     expect(resolveStandaloneObjectDesignerSection('list')).toBe('fields')
     expect(resolveStandaloneObjectDesignerSection('triggers')).toBe('fields')
   })
 
-  it('preserves only relation and permission targets as data-model sub-tabs', () => {
-    expect(resolveDataModelTab('permission')).toBe('permission')
+  it('maps the legacy permission target to the tree-model sub-tab', () => {
+    expect(resolveDataModelTab('permission')).toBe('tree-model')
+    expect(resolveDataModelTab('tree-model')).toBe('tree-model')
     expect(resolveDataModelTab('flow-app')).toBe('relations')
   })
 
@@ -49,11 +51,18 @@ describe('standalone object designer navigation', () => {
     expect(gridDesigner).toContain('customActionsEditable')
   })
 
-  it('shows only relation and permission tabs with a read-only process summary', () => {
+  it('shows relation and tree-model tabs with a read-only process summary', () => {
     const objectDesigner = readSource('src/views/app-center/object-designer.[objectCode].vue')
+    const designerShell = readSource('src/views/app-center/components/designer/BusinessObjectDesignerShell.vue')
+    const treeModelPanel = readSource('src/views/app-center/components/designer/BusinessPermissionFlowPanel.vue')
     const processPanel = readSource('src/views/app-center/components/designer/ObjectProcessReadOnlyPanel.vue')
 
     expect(objectDesigner).not.toContain('<n-tab-pane name="flow-app"')
+    expect(objectDesigner).not.toContain('<n-tab-pane name="permission"')
+    expect(objectDesigner).toContain('<n-tab-pane name="tree-model" tab="树形模型">')
+    expect(designerShell).not.toContain('key: \'permission\', label: \'数据范围适配\'')
+    expect(treeModelPanel).not.toContain('数据策略')
+    expect(treeModelPanel).not.toContain('updateDataScope')
     expect(objectDesigner).toContain('<ObjectProcessReadOnlyPanel')
     expect(processPanel).toContain('businessObjectProcesses(props.objectCode)')
     expect(processPanel).toContain('去应用工作台配置')

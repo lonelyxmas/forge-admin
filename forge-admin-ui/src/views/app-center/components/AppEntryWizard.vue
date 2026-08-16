@@ -145,7 +145,7 @@
 
             <template v-if="sceneKey === 'MOBILE'">
               <n-alert type="info" :bordered="false">
-                移动入口会在 H5 端打开本应用页面，请在上方「打开内容」选择要打开的页面和表单。
+                移动入口会在移动端打开本应用页面，实际内容以上方「打开内容」为准。
               </n-alert>
             </template>
 
@@ -167,15 +167,15 @@
               </n-form-item>
             </template>
 
-            <template v-if="showAdminMenuConfig">
+            <template v-if="showMenuConfig">
               <div class="section-title">
                 <span>菜单配置</span>
                 <small>可选</small>
               </div>
               <div class="menu-config-row">
                 <div>
-                  <strong>添加到管理端菜单</strong>
-                  <span>开启后自动放到“{{ selectedSuiteName }}”业务域目录，其他参数使用系统默认值。</span>
+                  <strong>{{ menuSyncTitle }}</strong>
+                  <span>{{ menuSyncDescription }}</span>
                 </div>
                 <n-switch v-model:value="form.adminMenuSyncEnabled" />
               </div>
@@ -190,13 +190,7 @@
                   <n-input v-model:value="form.description" type="textarea" placeholder="说明这个入口面向的业务场景" />
                 </n-form-item>
                 <template v-if="sceneKey === 'MOBILE'">
-                  <n-form-item label="移动场景">
-                    <n-select v-model:value="form.mobileScene" :options="mobileSceneOptions" />
-                  </n-form-item>
-                  <n-form-item label="可见范围">
-                    <n-select v-model:value="form.visibleScope" :options="visibleScopeOptions" />
-                  </n-form-item>
-                  <n-form-item label="移动端访问地址">
+                  <n-form-item label="移动端站点地址">
                     <n-input v-model:value="form.h5BaseUrl" placeholder="http://localhost:3001" />
                   </n-form-item>
                 </template>
@@ -309,8 +303,6 @@ const message = useMessage()
 const router = useRouter()
 const { dict } = useDict(
   'ai_business_app_entry_mode',
-  'ai_business_app_mobile_scene',
-  'ai_business_app_visible_scope',
   'ai_business_app_platform_type',
 )
 
@@ -396,7 +388,7 @@ const SCENE_TEMPLATES = {
     label: '移动入口',
     icon: PhonePortraitOutline,
     tone: 'violet',
-    description: 'H5、移动端业务和轻应用入口。',
+    description: '手机浏览器、企业微信和移动应用入口。',
     objectPlaceholder: '可选，关联后按业务单元归集',
     nameSuffix: '移动端',
     codeSuffix: 'MOBILE',
@@ -458,12 +450,16 @@ const showObjectSelect = computed(() => {
     return false
   return !(props.lockSuite && Array.isArray(props.objects) && objectOptions.value.length <= 1)
 })
-const showAdminMenuConfig = computed(() => form.mountTarget === 'ADMIN')
+const showMenuConfig = computed(() => ['ADMIN', 'MOBILE'].includes(form.mountTarget))
 const selectedObject = computed(() => objectOptions.value.find(item => item.value === form.objectCode) || null)
 const selectedSuiteName = computed(() => {
   const suite = props.suites.find(item => item.suiteCode === form.suiteCode)
   return suite?.suiteName || form.suiteCode || '-'
 })
+const menuSyncTitle = computed(() => form.mountTarget === 'MOBILE' ? '同步到移动端菜单' : '添加到管理端菜单')
+const menuSyncDescription = computed(() => form.mountTarget === 'MOBILE'
+  ? '开启后写入菜单管理的“移动端”客户端，完成角色授权后显示在移动端的全部应用中。'
+  : `开启后自动放到“${selectedSuiteName.value}”业务域目录，其他参数使用系统默认值。`)
 const selectedObjectName = computed(() => selectedObject.value?.label || form.objectCode || (isRuntimeScene.value ? '-' : '未关联'))
 const suiteOptions = computed(() => props.suites.map(item => ({
   label: item.suiteName || item.suiteCode,
@@ -515,7 +511,7 @@ const runtimeTargetFullUrl = computed(() => {
   const preview = runtimeTargetPreview.value
   const origin = typeof window === 'undefined' ? '' : window.location.origin
   if (preview.mobile) {
-    // 移动端预览走 H5 应用地址（用户可在「更多设置」配置），默认 http://localhost:3001
+    // 移动端预览走独立移动站点（用户可在「更多设置」配置），默认 http://localhost:3001
     const h5Origin = String(form.h5BaseUrl || '').trim() || 'http://localhost:3001'
     return `${h5Origin}${preview.value}`
   }
@@ -539,8 +535,6 @@ async function copyRuntimeTargetUrl() {
 
 const externalModeOptions = computed(() => (dict.value.ai_business_app_entry_mode || [])
   .filter(item => ['IFRAME', 'EXTERNAL'].includes(item.value)))
-const mobileSceneOptions = computed(() => dict.value.ai_business_app_mobile_scene || [])
-const visibleScopeOptions = computed(() => dict.value.ai_business_app_visible_scope || [])
 const platformTypeOptions = computed(() => dict.value.ai_business_app_platform_type || [])
 
 watch(() => props.show, (visible) => {
@@ -616,10 +610,6 @@ function selectScene(key) {
 function applySceneDefaults(key) {
   const defaults = SCENE_TEMPLATES[key]?.defaults || SCENE_TEMPLATES.DATA_MANAGE.defaults
   Object.assign(form, defaults)
-  if (key === 'MOBILE') {
-    form.mobileScene = form.mobileScene || 'h5'
-    form.visibleScope = form.visibleScope || 'all'
-  }
   if (key === 'INTEGRATION')
     form.platformType = form.platformType || 'api'
   if (key !== 'EXTERNAL_PAGE')
@@ -872,13 +862,21 @@ function buildOptions() {
   else
     delete options.permissionCode
 
-  if (form.mountTarget === 'ADMIN') {
+  if (['ADMIN', 'MOBILE'].includes(form.mountTarget)) {
+    const previousMenu = options.adminMenu || {}
+    const mobileMenu = form.mountTarget === 'MOBILE'
     options.adminMenu = {
-      parentId: form.adminMenuParentId || null,
-      originalParentId: form.adminMenuParentId || null,
+      ...previousMenu,
+      parentId: mobileMenu ? null : form.adminMenuParentId || null,
+      originalParentId: mobileMenu ? null : form.adminMenuParentId || null,
       syncEnabled: Boolean(form.adminMenuSyncEnabled),
-      suiteAsParent: Boolean(form.suiteAsMenuParent),
+      suiteAsParent: mobileMenu ? false : Boolean(form.suiteAsMenuParent),
       sort: Number(form.menuSort || 0),
+      clientCode: mobileMenu ? 'h5' : 'pc',
+    }
+    if (mobileMenu) {
+      delete options.adminMenu.actualParentId
+      delete options.adminMenu.suiteMenuResourceId
     }
   }
   else {
@@ -909,8 +907,6 @@ function buildOptions() {
     delete options.allowedDomains
 
   if (sceneKey.value === 'MOBILE') {
-    options.mobileScene = form.mobileScene || 'h5'
-    options.visibleScope = form.visibleScope || 'all'
     options.h5BaseUrl = String(form.h5BaseUrl || '').trim() || 'http://localhost:3001'
   }
   else {
@@ -959,8 +955,6 @@ function hydrateOptions() {
   form.suiteAsMenuParent = adminMenu.suiteAsParent !== false
   form.menuSort = Number(adminMenu.sort || form.sortOrder || 0)
   form.allowedDomains = Array.isArray(options.allowedDomains) ? options.allowedDomains.join('\n') : ''
-  form.mobileScene = options.mobileScene || 'h5'
-  form.visibleScope = options.visibleScope || 'all'
   form.h5BaseUrl = options.h5BaseUrl || 'http://localhost:3001'
   form.platformType = options.platformType || 'api'
   form.integrationResource = options.integrationResource || stripApiPrefix(form.entryUrl)
@@ -1062,8 +1056,6 @@ function defaultForm() {
     suiteAsMenuParent: true,
     menuSort: 0,
     allowedDomains: '',
-    mobileScene: 'h5',
-    visibleScope: 'all',
     platformType: 'api',
     integrationResource: '',
     integrationEvents: '',

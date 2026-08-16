@@ -103,13 +103,14 @@
             :initial-property-tab="initialPropertyTab"
             :initial-canvas-view="initialCanvasView"
             :extra-more-options="formDesignerMoreOptions"
+            :enable-sections-view="false"
+            :derive-sections-from-layout="true"
             @dirty-change="emit('dirtyChange', $event)"
             @update:linkage-schema="emit('update:linkageSchema', $event)"
             @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
             @configure-bottom-action="handleConfigureBottomAction"
-            @edit-child-table-section="handleEditChildTableSection"
-            @remove-child-table-section="handleRemoveChildTableSection"
+            @edit-sub-table-container="handleEditSubTableContainer"
           >
             <template #detail-settings>
               <BusinessDetailDesigner
@@ -319,6 +320,7 @@ import ButtonActionConfig from './ButtonActionConfig.vue'
 import {
   removeChildTableSectionConfig,
   resolveChildTableSectionEditConfig,
+  safeKey,
   upsertChildTableSectionConfig,
 } from './child-table-section-config'
 import ChildTableSectionWizard from './ChildTableSectionWizard.vue'
@@ -1123,29 +1125,78 @@ function handleChildTableSectionConfirm(config) {
     formDesignerSchema: localFormDesignerSchema.value,
   }, config)
   assignLocalSchema(result.pageSchema)
-  localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+  // 子表分区由画布容器承载：向导确认后在画布同步 upsert 关联子表容器（按 relationKey 幂等）。
+  localFormDesignerSchema.value = normalizeFormDesignerSchema(upsertSubTableContainer(result.formDesignerSchema, config))
   emit('dirtyChange', true)
   nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
 }
 
-function handleRemoveChildTableSection(payload = {}) {
-  const section = payload.section || payload
-  window.$dialog.warning({
-    title: '删除子表分区',
-    content: `确认删除“${section.title || '当前子表分区'}”吗？关联的数据模型引用和级联配置将同步清理。`,
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: () => {
-      const result = removeChildTableSectionConfig({
-        pageSchema: localSchema.value,
-        formDesignerSchema: localFormDesignerSchema.value,
-      }, section)
-      assignLocalSchema(result.pageSchema)
-      localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
-      emit('dirtyChange', true)
-      nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
-    },
+// 画布上的关联子表容器被删除（或关系被改）时，同步清理子表分区的运行时配置。
+const subTableContainerRelationKeys = computed(() => collectSubTableRelationKeys(localFormDesignerSchema.value?.components))
+watch(subTableContainerRelationKeys, (nextKeys, prevKeys) => {
+  if (useLegacyFormCreateDesigner.value)
+    return
+  prevKeys.forEach((relationKey) => {
+    if (nextKeys.has(relationKey))
+      return
+    const result = removeChildTableSectionConfig({
+      pageSchema: localSchema.value,
+      formDesignerSchema: localFormDesignerSchema.value,
+    }, { relationKey })
+    if (!result.pageSchema)
+      return
+    assignLocalSchema(result.pageSchema)
+    localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+    emit('dirtyChange', true)
   })
+})
+
+function upsertSubTableContainer(formDesignerSchema = {}, config = {}) {
+  const components = Array.isArray(formDesignerSchema.components) ? [...formDesignerSchema.components] : []
+  const relationKey = String(config.relationKey || '').trim()
+  if (!relationKey)
+    return formDesignerSchema
+  const containerId = `subtable_${safeKey(relationKey)}`
+  const nextProps = {
+    header: config.title || '关联子表',
+    relationKey,
+    displayMode: ['inline_grid', 'card_list', 'bottom_sheet'].includes(config.displayMode) ? config.displayMode : 'inline_grid',
+  }
+  const index = components.findIndex(component => component?.componentKey === 'subTable'
+    && (component.id === containerId || String(component.props?.relationKey || '') === relationKey))
+  if (index >= 0) {
+    const current = components[index]
+    components[index] = { ...current, label: nextProps.header, props: { ...(current.props || {}), ...nextProps } }
+  }
+  else {
+    components.push({
+      id: containerId,
+      componentKey: 'subTable',
+      label: nextProps.header,
+      props: nextProps,
+    })
+  }
+  return { ...formDesignerSchema, components }
+}
+
+function collectSubTableRelationKeys(components = [], keys = new Set()) {
+  ;(Array.isArray(components) ? components : []).forEach((component) => {
+    if (!component || typeof component !== 'object')
+      return
+    if (component.componentKey === 'subTable') {
+      const relationKey = String(component.props?.relationKey || '').trim()
+      if (relationKey)
+        keys.add(relationKey)
+    }
+    if (Array.isArray(component.children))
+      collectSubTableRelationKeys(component.children, keys)
+  })
+  return keys
+}
+
+// 画布容器上的「配置」入口：打开子表分区向导编辑对应关系。
+function handleEditSubTableContainer(relationKey = '') {
+  handleEditChildTableSection({ relationKey })
 }
 
 function handleConfigureBottomAction(payload = {}) {

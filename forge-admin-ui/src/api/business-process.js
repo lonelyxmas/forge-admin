@@ -46,6 +46,11 @@ export function validateBusinessProcess(id) {
   return request.post(`/ai/business/process/${id}/validate`, null, ENCRYPTED_REQUEST)
 }
 
+// 独立发布：同步生成不可变流程版本并切换运行投影，不触发应用发布。
+export function publishBusinessProcess(id) {
+  return request.post(`/ai/business/process/${id}/publish`, null, ENCRYPTED_REQUEST)
+}
+
 export function updateBusinessProcessStatus(id, status) {
   return request.put(`/ai/business/process/${id}/status`, null, encryptedParams({ status }))
 }

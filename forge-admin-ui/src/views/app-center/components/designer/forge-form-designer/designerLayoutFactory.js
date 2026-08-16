@@ -34,6 +34,20 @@ export function createForgeLayoutComponent(componentKey = 'title', schema = {}) 
       children: [],
     }
   }
+  if (componentKey === 'subTable') {
+    // 关联子表容器：承载子表分区语义（relationKey + 展示方式），不承载字段。
+    return {
+      id,
+      componentKey: 'subTable',
+      label: '关联子表',
+      props: {
+        header: '关联子表',
+        relationKey: '',
+        displayMode: 'inline_grid',
+      },
+      layout: { span: gridColumns, align: 'left' },
+    }
+  }
   if (componentKey === 'tabs') {
     return {
       id,

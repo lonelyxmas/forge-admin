@@ -140,6 +140,53 @@ describe('field event protocol', () => {
     }), expect.anything())
     expect(patches).toContainEqual({ contactName: 'SKU-001' })
   })
+
+  it('passes the configured page window when the source is a dataset', async () => {
+    const execute = vi.fn(async () => ({ data: { records: [{ name: '李四' }] } }))
+    const runtime = createFieldEventRuntime({
+      rules: [buildRule({
+        sourceType: 'DATASET',
+        sourceKey: 'member_dataset',
+        pageNum: 2,
+        pageSize: 15,
+        maxRows: 15,
+      })],
+      fields: ['mobile', 'contactName'],
+      execute,
+      getFormData: () => ({ mobile: '13800000000' }),
+    })
+
+    await runtime.dispatch('CHANGE', 'mobile')
+
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({
+      sourceType: 'DATASET',
+      pageNum: 2,
+      pageSize: 15,
+      maxRows: 15,
+    }), expect.anything())
+  })
+
+  it('uses page size as the dataset limit when max rows is omitted', async () => {
+    const execute = vi.fn(async () => ({ data: { records: [{ name: '李四' }] } }))
+    const runtime = createFieldEventRuntime({
+      rules: [buildRule({
+        sourceType: 'DATASET',
+        sourceKey: 'member_dataset',
+        pageSize: 50,
+        maxRows: undefined,
+      })],
+      fields: ['mobile', 'contactName'],
+      execute,
+      getFormData: () => ({ mobile: '13800000000' }),
+    })
+
+    await runtime.dispatch('CHANGE', 'mobile')
+
+    expect(execute.mock.calls[0][0]).toMatchObject({
+      pageSize: 50,
+      maxRows: 50,
+    })
+  })
 })
 
 describe('field event runtime concurrency', () => {

@@ -227,6 +227,7 @@ function entryDisplayName(item = {}) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 20px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border-light, #e5e6eb);
@@ -250,17 +251,17 @@ function entryDisplayName(item = {}) {
 }
 
 .entry-table {
-  overflow-x: auto;
+  min-width: 0;
   border: 1px solid var(--border-default, #c9cdd4);
   border-radius: 7px;
 }
 
 .entry-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.4fr) 110px minmax(140px, 1fr) 80px 160px 220px;
-  gap: 12px;
+  grid-template-columns: minmax(150px, 1.35fr) 78px minmax(120px, 1fr) 68px 120px minmax(130px, 1.2fr);
+  gap: 8px;
   align-items: center;
-  min-width: 980px;
+  min-width: 0;
   min-height: 58px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-light, #e5e6eb);
@@ -304,6 +305,65 @@ function entryDisplayName(item = {}) {
 
 .entry-actions {
   display: flex;
-  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.entry-row > span,
+.entry-row > :deep(.n-tag) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .entry-row-head {
+    display: none;
+  }
+
+  .entry-row:not(.entry-row-head) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    padding: 10px;
+  }
+
+  .entry-row:not(.entry-row-head) .entry-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(2),
+  .entry-row:not(.entry-row-head) > :nth-child(3),
+  .entry-row:not(.entry-row-head) > :nth-child(4),
+  .entry-row:not(.entry-row-head) > :nth-child(5) {
+    grid-column: 1;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(2) {
+    grid-row: 2;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(3) {
+    grid-row: 3;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(4) {
+    grid-row: 4;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(5) {
+    grid-row: 5;
+  }
+
+  .entry-row:not(.entry-row-head) .entry-actions {
+    grid-column: 2;
+    grid-row: 1 / span 5;
+    align-self: start;
+    justify-self: end;
+    max-width: 160px;
+    justify-content: flex-end;
+  }
 }
 </style>

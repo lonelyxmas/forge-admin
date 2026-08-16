@@ -217,3 +217,32 @@ function reserveId(prefix, items, resolver) {
   }
   return `${prefix}_${Date.now()}`
 }
+
+/**
+ * 关系选项归一化：relationKey 优先从 relationConfig 中提取，
+ * 供子表分区（页面分区/关联子表容器）统一展示与取值。
+ */
+export function normalizeRelationOption(relation = {}) {
+  const config = relation.relationConfig || relation.config || relation.props || {}
+  const value = String(relation.relationKey || relation.key || relation.collectionKey || config.relationKey || relation.relationName || '').trim()
+  if (!value)
+    return null
+  const label = relation.detailTabTitle || relation.modelName || relation.targetObjectName || relation.label || relation.relationName || value
+  return { label: `${label}（${value}）`, value }
+}
+
+/**
+ * 选项补齐：已配置但不在候选列表中的值以“（已失效/已有配置）”禁用项展示，
+ * 供分区字段、子表关系、底栏条件字段等下拉统一复用。
+ */
+export function appendMissingOptions(options = [], values = [], suffix = '已失效') {
+  const next = [...options]
+  const known = new Set(next.map(option => option.value))
+  ;(Array.isArray(values) ? values : []).filter(Boolean).forEach((value) => {
+    if (!known.has(value)) {
+      next.push({ label: `${value}（${suffix}）`, value, disabled: true })
+      known.add(value)
+    }
+  })
+  return next
+}

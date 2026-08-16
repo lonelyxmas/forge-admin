@@ -299,7 +299,7 @@ function parseRelationConfig(value) {
   }
 }
 
-function safeKey(value = '') {
+export function safeKey(value = '') {
   return String(value || '')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/\W+/g, '_')

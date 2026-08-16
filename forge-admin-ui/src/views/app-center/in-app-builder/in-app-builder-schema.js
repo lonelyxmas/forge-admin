@@ -163,6 +163,7 @@ export function createNavigationNode(schema, input = {}) {
     parentId,
     sort: resolveNextSort(siblingNodes),
     systemMenuVisible: input.systemMenuVisible === true,
+    access: normalizeNodeAccess(input.access),
   }
   if (type === 'page') {
     node.pageType = normalizePageType(input.pageType)
@@ -308,6 +309,7 @@ function normalizeNodes(nodes) {
       parentId: node.parentId ? String(node.parentId) : null,
       sort: Number.isFinite(Number(node.sort)) ? Number(node.sort) : index * 10,
       systemMenuVisible: node.systemMenuVisible === true,
+      access: normalizeNodeAccess(node.access),
       ...(node.type === 'group'
         ? {}
         : {
@@ -393,6 +395,26 @@ function normalizePageLayout(layout, node, application = {}) {
 function normalizePageType(value) {
   const type = String(value || '').toLowerCase()
   return inAppPageTypes.some(item => item.value === type) ? type : 'content'
+}
+
+/**
+ * 页面节点访问控制：默认继承应用运行入口的授权角色；
+ * roles 模式在发布时投影为系统菜单并只授权给指定角色（后端发布校验会拦截空角色）。
+ */
+export function normalizeNodeAccess(value) {
+  const source = value && typeof value === 'object' ? value : {}
+  const mode = String(source.mode || '').trim().toLowerCase() === 'roles' ? 'roles' : 'inherit'
+  const roleIds = [...new Set((Array.isArray(source.roleIds) ? source.roleIds : [])
+    .map((roleId) => {
+      if (roleId === undefined || roleId === null || roleId === '')
+        return null
+      const numeric = Number(roleId)
+      return Number.isFinite(numeric) ? numeric : null
+    })
+    .filter(roleId => roleId !== null))]
+  if (mode === 'inherit')
+    return { mode: 'inherit', roleIds: [] }
+  return { mode: 'roles', roleIds }
 }
 
 function normalizeObjectRef(value) {

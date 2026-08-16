@@ -1,7 +1,28 @@
 <template>
   <div v-if="blockRuntimeVisible" class="grid-block" :class="[`block-${block.blockType}`, { selected }]" :style="blockStyle" :data-block-id="block.id">
+    <template v-if="isDataFieldBlock && runtimeCrudLoading">
+      <div class="runtime-crud-loading">
+        <n-spin size="small" />
+      </div>
+    </template>
+
+    <template v-else-if="shouldShowDataSourceGuide">
+      <div class="data-source-guide" :class="{ 'is-readonly': readonly }">
+        <span class="data-source-guide-icon" aria-hidden="true">
+          <n-icon><CubeOutline /></n-icon>
+        </span>
+        <div class="data-source-guide-copy">
+          <strong>选择业务对象后，字段将自动生成</strong>
+          <span>{{ readonly ? '该页面组件尚未配置数据来源' : '无需逐项添加字段，选择后即可在画布中预览' }}</span>
+        </div>
+        <n-button v-if="!readonly" size="small" type="primary" secondary @click.stop="emit('requestDataSource', block.id)">
+          选择数据源
+        </n-button>
+      </div>
+    </template>
+
     <!-- 查询表单 -->
-    <template v-if="block.blockType === 'search-form'">
+    <template v-else-if="block.blockType === 'search-form'">
       <div class="block-header">
         <strong>{{ block.label || '查询表单' }}</strong>
         <span class="block-meta">{{ resolvedFields.length }} 个查询字段</span>
@@ -255,15 +276,23 @@
               </div>
               <GridBlockRenderer
                 :block="child"
-                :fields="fields"
+                :fields="resolveNestedBlockFields(child)"
                 :selected="false"
                 :selected-block-id="selectedBlockId"
                 :readonly="readonly"
-                :runtime-crud-props="runtimeCrudProps"
+                :runtime-crud-props="resolveNestedBlockRuntimeCrudProps(child)"
+                :runtime-crud-loading="resolveNestedBlockRuntimeCrudLoading(child)"
+                :show-data-source-guide="showDataSourceGuide"
+                :data-source-configured="resolveNestedBlockDataSourceConfigured(child)"
+                :runtime-interactive="runtimeInteractive"
                 :runtime-record="runtimeRecord"
                 :active-drop-cell="activeDropCell"
                 :nested-moving-block-id="nestedMovingBlockId"
                 :catalog-drag-block-type="catalogDragBlockType"
+                :block-fields-resolver="blockFieldsResolver"
+                :runtime-crud-props-resolver="runtimeCrudPropsResolver"
+                :runtime-crud-loading-resolver="runtimeCrudLoadingResolver"
+                :data-source-configured-resolver="dataSourceConfiguredResolver"
                 @child-block-select="emit('childBlockSelect', $event)"
                 @child-block-menu-select="emit('childBlockMenuSelect', $event)"
                 @block-props-update="emit('blockPropsUpdate', $event)"
@@ -273,6 +302,7 @@
                 @child-block-move-start="emit('childBlockMoveStart', $event)"
                 @child-block-drag-end="emit('childBlockDragEnd')"
                 @child-block-resize-start="emit('childBlockResizeStart', $event)"
+                @request-data-source="emit('requestDataSource', $event)"
               />
               <template v-if="!readonly && child.id === selectedBlockId">
                 <button
@@ -413,6 +443,7 @@
     <template v-else-if="block.blockType === 'AiForm'">
       <div class="system-component-preview">
         <AiForm
+          ref="aiFormRef"
           v-model:value="previewFormValue"
           :schema="aiFormSchema"
           :grid-cols="block.props?.gridCols || 2"
@@ -423,7 +454,8 @@
           :y-gap="block.props?.yGap ?? 0"
           :size="block.props?.size || 'medium'"
           :show-actions="block.props?.showActions !== false"
-          :show-submit="block.props?.showSubmit !== false"
+          :show-submit="block.props?.showSubmit !== false && runtimeInteractive"
+          :submit-loading="aiFormSubmitting"
           :show-reset="block.props?.showReset !== false"
           :show-cancel="block.props?.showCancel === true"
           :submit-text="block.props?.submitText || '提交'"
@@ -432,6 +464,7 @@
           :enable-collapse="block.props?.enableCollapse === true"
           :max-visible-fields="block.props?.maxVisibleFields || 6"
           :show-feedback="block.props?.showFeedback !== false"
+          @submit="handleAiFormSubmit"
         />
       </div>
     </template>
@@ -895,13 +928,21 @@
           v-for="child in (block.children || [])"
           :key="child.id"
           :block="child"
-          :fields="fields"
+          :fields="resolveNestedBlockFields(child)"
           :selected="child.id === selectedBlockId"
           :selected-block-id="selectedBlockId"
           :readonly="readonly"
-          :runtime-crud-props="runtimeCrudProps"
+          :runtime-crud-props="resolveNestedBlockRuntimeCrudProps(child)"
+          :runtime-crud-loading="resolveNestedBlockRuntimeCrudLoading(child)"
+          :show-data-source-guide="showDataSourceGuide"
+          :data-source-configured="resolveNestedBlockDataSourceConfigured(child)"
+          :runtime-interactive="runtimeInteractive"
           :runtime-record="runtimeRecord"
           :catalog-drag-block-type="catalogDragBlockType"
+          :block-fields-resolver="blockFieldsResolver"
+          :runtime-crud-props-resolver="runtimeCrudPropsResolver"
+          :runtime-crud-loading-resolver="runtimeCrudLoadingResolver"
+          :data-source-configured-resolver="dataSourceConfiguredResolver"
           @click.stop="emit('childBlockSelect', child.id)"
           @child-block-select="emit('childBlockSelect', $event)"
           @child-block-menu-select="emit('childBlockMenuSelect', $event)"
@@ -911,6 +952,7 @@
           @child-block-move-start="emit('childBlockMoveStart', $event)"
           @child-block-drag-end="emit('childBlockDragEnd')"
           @child-block-resize-start="emit('childBlockResizeStart', $event)"
+          @request-data-source="emit('requestDataSource', $event)"
         />
         <div v-if="!(block.children || []).length" class="container-empty">
           拖入组件到盒子中
@@ -989,14 +1031,22 @@
               v-for="child in block.children"
               :key="child.id"
               :block="child"
-              :fields="fields"
+              :fields="resolveNestedBlockFields(child)"
               :selected="child.id === selectedBlockId"
               :selected-block-id="selectedBlockId"
               :readonly="readonly"
-              :runtime-crud-props="runtimeCrudProps"
+              :runtime-crud-props="resolveNestedBlockRuntimeCrudProps(child)"
+              :runtime-crud-loading="resolveNestedBlockRuntimeCrudLoading(child)"
+              :show-data-source-guide="showDataSourceGuide"
+              :data-source-configured="resolveNestedBlockDataSourceConfigured(child)"
+              :runtime-interactive="runtimeInteractive"
               :runtime-record="runtimeRecord"
               :active-drop-cell="activeDropCell"
               :nested-moving-block-id="nestedMovingBlockId"
+              :block-fields-resolver="blockFieldsResolver"
+              :runtime-crud-props-resolver="runtimeCrudPropsResolver"
+              :runtime-crud-loading-resolver="runtimeCrudLoadingResolver"
+              :data-source-configured-resolver="dataSourceConfiguredResolver"
               @click.stop="emit('childBlockSelect', child.id)"
               @child-block-select="emit('childBlockSelect', $event)"
               @child-block-menu-select="emit('childBlockMenuSelect', $event)"
@@ -1006,6 +1056,7 @@
               @child-block-move-start="emit('childBlockMoveStart', $event)"
               @child-block-drag-end="emit('childBlockDragEnd')"
               @child-block-resize-start="emit('childBlockResizeStart', $event)"
+              @request-data-source="emit('requestDataSource', $event)"
             />
           </div>
           <div v-else-if="!block.props?.content" class="container-empty">
@@ -1081,15 +1132,23 @@
                 </div>
                 <GridBlockRenderer
                   :block="child"
-                  :fields="fields"
+                  :fields="resolveNestedBlockFields(child)"
                   :selected="false"
                   :selected-block-id="selectedBlockId"
                   :readonly="readonly"
-                  :runtime-crud-props="runtimeCrudProps"
+                  :runtime-crud-props="resolveNestedBlockRuntimeCrudProps(child)"
+                  :runtime-crud-loading="resolveNestedBlockRuntimeCrudLoading(child)"
+                  :show-data-source-guide="showDataSourceGuide"
+                  :data-source-configured="resolveNestedBlockDataSourceConfigured(child)"
+                  :runtime-interactive="runtimeInteractive"
                   :runtime-record="runtimeRecord"
                   :active-drop-cell="activeDropCell"
                   :nested-moving-block-id="nestedMovingBlockId"
                   :catalog-drag-block-type="catalogDragBlockType"
+                  :block-fields-resolver="blockFieldsResolver"
+                  :runtime-crud-props-resolver="runtimeCrudPropsResolver"
+                  :runtime-crud-loading-resolver="runtimeCrudLoadingResolver"
+                  :data-source-configured-resolver="dataSourceConfiguredResolver"
                   @child-block-select="emit('childBlockSelect', $event)"
                   @child-block-menu-select="emit('childBlockMenuSelect', $event)"
                   @block-props-update="emit('blockPropsUpdate', $event)"
@@ -1098,6 +1157,7 @@
                   @child-block-move-start="emit('childBlockMoveStart', $event)"
                   @child-block-drag-end="emit('childBlockDragEnd')"
                   @child-block-resize-start="emit('childBlockResizeStart', $event)"
+                  @request-data-source="emit('requestDataSource', $event)"
                 />
                 <template v-if="!readonly && child.id === selectedBlockId">
                   <button
@@ -1137,7 +1197,7 @@
 </template>
 
 <script setup>
-import { ChevronBackOutline } from '@vicons/ionicons5'
+import { ChevronBackOutline, CubeOutline } from '@vicons/ionicons5'
 import QRCodeVue3 from 'qrcode-vue3'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import Vue3Barcode from 'vue3-barcode'
@@ -1153,8 +1213,9 @@ import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRe
 import { appendDesignPreviewToApiValue, applyTableColumnLayout, buildCrudSearchTypeRequestParams, isDesignPreviewCrudProps, normalizeTableRowGap, resolveCrudPreviewReloadKey, resolveCrudSearchFieldCatalog, resolveCurrentConfigPlaceholder, resolveRuntimeBlockApi } from '@/components/lowcode-builder/shared/runtime-crud-props'
 import { matchSimpleExpression, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { useUserStore } from '@/store'
-import { request } from '@/utils'
+import { postEncrypt, request } from '@/utils'
 import { applyCrudHookRules, CRUD_HOOK_RULE_TARGETS, normalizeCrudHookRules } from './crud-hook-rules'
+import { isDataFieldBlockType } from './page-schema'
 
 const props = defineProps({
   block: {
@@ -1184,6 +1245,34 @@ const props = defineProps({
   runtimeCrudLoading: {
     type: Boolean,
     default: false,
+  },
+  showDataSourceGuide: {
+    type: Boolean,
+    default: false,
+  },
+  dataSourceConfigured: {
+    type: Boolean,
+    default: false,
+  },
+  runtimeInteractive: {
+    type: Boolean,
+    default: false,
+  },
+  blockFieldsResolver: {
+    type: Function,
+    default: null,
+  },
+  runtimeCrudPropsResolver: {
+    type: Function,
+    default: null,
+  },
+  runtimeCrudLoadingResolver: {
+    type: Function,
+    default: null,
+  },
+  dataSourceConfiguredResolver: {
+    type: Function,
+    default: null,
   },
   runtimeRecord: {
     type: Object,
@@ -1226,6 +1315,7 @@ const emit = defineEmits([
   'blockActivate',
   'tabsActiveChange',
   'tabDrop',
+  'requestDataSource',
 ])
 
 const localDataBindableBlockTypes = new Set([
@@ -1250,12 +1340,22 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const fieldMap = computed(() => new Map(props.fields.map(f => [f.field, f])))
-const resolvedFields = computed(() => (props.block.fieldRefs || [])
-  .map(ref => fieldMap.value.get(ref))
-  .filter(Boolean))
+const isDataFieldBlock = computed(() => isDataFieldBlockType(props.block.blockType))
+const configuredFieldRefs = computed(() => Array.isArray(props.block.fieldRefs) ? props.block.fieldRefs.filter(Boolean) : [])
+const resolvedFields = computed(() => {
+  if (!configuredFieldRefs.value.length && isDataFieldBlock.value)
+    return props.fields
+  return configuredFieldRefs.value.map(ref => fieldMap.value.get(ref)).filter(Boolean)
+})
+const shouldShowDataSourceGuide = computed(() => props.showDataSourceGuide
+  && isDataFieldBlock.value
+  && !props.dataSourceConfigured
+  && props.fields.length === 0)
 const visibleResolvedFields = computed(() => resolvedFields.value
   .filter(field => props.block.props?.fieldSettings?.[field.field]?.visible !== false))
 const previewFormValue = ref({})
+const aiFormRef = ref(null)
+const aiFormSubmitting = ref(false)
 const signaturePreviewValue = ref('')
 const runtimeCrudRef = ref(null)
 const runtimeTreeLoading = ref(false)
@@ -1638,8 +1738,19 @@ const designerCrudPublicParams = computed(() => ({
   ...(hasExplicitSearchFieldRefs.value ? crudSearchTypeRequestParams.value : {}),
 }))
 const aiFormSchema = computed(() => {
-  const formFields = props.fields.length ? props.fields : resolvedFields.value
+  const formFields = configuredFieldRefs.value.length
+    ? visibleResolvedFields.value
+    : visibleResolvedFields.value.filter(isDefaultAiFormField)
   return formFields.map(field => toAiFormField(field, 'form'))
+})
+const aiFormCreateApi = computed(() => {
+  const configuredApi = props.block.props?.createApi || props.runtimeCrudProps?.apiConfig?.create || ''
+  if (configuredApi)
+    return configuredApi
+  const baseApi = props.block.props?.api || props.runtimeCrudProps?.api || ''
+  if (!baseApi)
+    return ''
+  return String(baseApi).includes('@') ? baseApi : `post@${baseApi}`
 })
 const blockApiConfig = computed(() => ({
   list: props.block.props?.listApi || '',
@@ -2059,6 +2170,12 @@ function renderTableCell(field, row = {}) {
   })
 }
 
+function isDefaultAiFormField(field = {}) {
+  return field.formVisible !== false
+    && field.systemField !== true
+    && String(field.fieldStatus || 'ENABLED').toUpperCase() !== 'DISABLED'
+}
+
 function toAiFormField(field, mode = 'form') {
   const queryType = field.queryType || field.searchType || 'eq'
   return {
@@ -2074,6 +2191,24 @@ function toAiFormField(field, mode = 'form') {
     dictType: field.dictType || '',
     props: field.props || {},
   }
+}
+
+function resolveNestedBlockFields(block = {}) {
+  return props.blockFieldsResolver ? props.blockFieldsResolver(block) : props.fields
+}
+
+function resolveNestedBlockRuntimeCrudProps(block = {}) {
+  return props.runtimeCrudPropsResolver ? props.runtimeCrudPropsResolver(block) : props.runtimeCrudProps
+}
+
+function resolveNestedBlockRuntimeCrudLoading(block = {}) {
+  return props.runtimeCrudLoadingResolver ? Boolean(props.runtimeCrudLoadingResolver(block)) : props.runtimeCrudLoading
+}
+
+function resolveNestedBlockDataSourceConfigured(block = {}) {
+  return props.dataSourceConfiguredResolver
+    ? Boolean(props.dataSourceConfiguredResolver(block))
+    : props.dataSourceConfigured
 }
 
 function resolveAiFieldType(field) {
@@ -2720,6 +2855,44 @@ function matchDisplayCondition(expression = '', row = {}) {
   return matchSimpleExpression(expression, row)
 }
 
+async function handleAiFormSubmit(formData = {}) {
+  if (!props.runtimeInteractive || aiFormSubmitting.value)
+    return
+  if (!aiFormCreateApi.value) {
+    window.$message?.warning('当前表单尚未配置新增接口')
+    return
+  }
+
+  aiFormSubmitting.value = true
+  try {
+    const { method, url } = parseRuntimeApiConfig(aiFormCreateApi.value)
+    const data = {
+      ...(props.runtimeCrudProps?.submitDefaultParams || {}),
+      ...(props.block.props?.submitDefaultParams || {}),
+      ...(formData || {}),
+    }
+    if (method === 'postencrypt') {
+      await postEncrypt(url, data, { needTip: false })
+    }
+    else {
+      await request({
+        method,
+        url,
+        ...(method === 'get' ? { params: data } : { data }),
+        needTip: false,
+      })
+    }
+    window.$message?.success('提交成功')
+    aiFormRef.value?.reset?.()
+  }
+  catch (error) {
+    window.$message?.error(error?.message || '提交失败，请稍后重试')
+  }
+  finally {
+    aiFormSubmitting.value = false
+  }
+}
+
 function parseRuntimeApiConfig(value = '') {
   const text = String(value || '').trim()
   const [method, ...urlParts] = text.includes('@') ? text.split('@') : ['post', text]
@@ -2908,6 +3081,64 @@ watch(
 .block-empty.inline {
   display: inline-block;
   padding: 4px 8px;
+}
+
+.data-source-guide {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 112px;
+  padding: 18px 20px;
+  border: 1px dashed #b9c9dd;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.data-source-guide.is-readonly {
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-height: 72px;
+  padding: 12px 14px;
+  border-style: solid;
+  background: #fbfcfd;
+}
+
+.data-source-guide-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #cfe0f5;
+  border-radius: 6px;
+  background: #edf5ff;
+  color: #2563eb;
+  font-size: 20px;
+}
+
+.is-readonly .data-source-guide-icon {
+  width: 32px;
+  height: 32px;
+  background: #f2f3f5;
+  color: #64748b;
+  font-size: 17px;
+}
+
+.data-source-guide-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.data-source-guide-copy strong {
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.data-source-guide-copy span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .search-grid {

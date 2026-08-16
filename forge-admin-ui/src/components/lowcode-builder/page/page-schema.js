@@ -564,6 +564,19 @@ export const LIST_PAGE_GRID_GAP = 8
 export const LIST_PAGE_DESIGN_WIDTH = 1366
 export const LIST_PAGE_GRID_BASE_COL_WIDTH = Math.floor((LIST_PAGE_DESIGN_WIDTH - (LIST_PAGE_GRID_COLS - 1) * LIST_PAGE_GRID_GAP) / LIST_PAGE_GRID_COLS)
 
+export const DATA_FIELD_BLOCK_TYPES = Object.freeze([
+  'AiCrudPage',
+  'AiForm',
+  'AiTable',
+  'data-table',
+  'search-form',
+  'detail-info',
+])
+
+export function isDataFieldBlockType(blockType) {
+  return DATA_FIELD_BLOCK_TYPES.includes(blockType)
+}
+
 export const listPageBlockCatalog = [
   {
     blockType: 'search-form',
@@ -623,8 +636,9 @@ export const listPageBlockCatalog = [
   {
     blockType: 'AiCrudPage',
     group: 'action',
-    title: 'AiCrudPage',
-    desc: '系统完整 CRUD 组件',
+    title: '数据列表',
+    techTitle: 'AiCrudPage',
+    desc: '选择业务对象，自动生成筛选、表格与新增、编辑、删除，内置数据表单弹窗',
     defaultW: 12,
     defaultH: 14,
     unique: true,
@@ -632,8 +646,9 @@ export const listPageBlockCatalog = [
   {
     blockType: 'AiTable',
     group: 'data',
-    title: 'AiTable',
-    desc: '系统表格组合组件',
+    title: '数据表格',
+    techTitle: 'AiTable',
+    desc: '选择业务对象，生成支持分页、密度与列设置的交互表格',
     defaultW: 12,
     defaultH: 9,
     unique: true,
@@ -641,15 +656,16 @@ export const listPageBlockCatalog = [
   {
     blockType: 'AiForm',
     group: 'data',
-    title: 'AiForm',
-    desc: '系统表单组合组件',
+    title: '数据表单',
+    techTitle: 'AiForm',
+    desc: '选择业务对象，按字段自动生成录入表单，可独立提交',
     defaultW: 12,
     defaultH: 6,
   },
   {
     blockType: 'data-table',
     group: 'data',
-    title: '数据列表',
+    title: '基础列表',
     desc: '配置展示列、排序、宽度',
     defaultW: 12,
     defaultH: 10,
@@ -1852,7 +1868,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'AiForm') {
     base.props = {
       ...base.props,
-      title: 'AiForm',
+      title: '数据表单',
       gridCols: 2,
       labelPlacement: 'left',
       labelWidth: 100,
@@ -2253,8 +2269,8 @@ function createDefaultBlockFrameStyle(gridX = 0, gridY = 0, gridW = 12, gridH = 
 
 function createDefaultAiCrudPageProps() {
   return {
-    title: 'AiCrudPage',
-    description: '系统完整 CRUD 页面组件',
+    title: '数据列表',
+    description: '自动生成筛选、列表和数据维护表单',
     api: '',
     rowKey: 'id',
     listApi: '',

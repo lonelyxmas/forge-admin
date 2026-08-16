@@ -2290,6 +2290,34 @@
               </div>
             </section>
 
+            <section v-if="isSubTableLayout" class="panel-item">
+              <div class="panel-item-title">
+                关联子表
+              </div>
+              <n-form-item label="标题">
+                <n-input
+                  :value="selectedComponent.props?.header || ''"
+                  placeholder="关联子表"
+                  @update:value="updateComponent({ props: { header: $event || '关联子表' } })"
+                />
+              </n-form-item>
+              <n-form-item label="关联关系">
+                <n-select
+                  :value="selectedComponent.props?.relationKey || ''"
+                  :options="subTableRelationOptions"
+                  filterable
+                  placeholder="选择对象关系"
+                  @update:value="updateSubTableRelation"
+                />
+              </n-form-item>
+              <n-form-item label="展示方式">
+                <n-select
+                  :value="selectedComponent.props?.displayMode || 'inline_grid'"
+                  :options="subTableDisplayModeOptions"
+                  @update:value="updateComponent({ props: { displayMode: $event || 'inline_grid' } })"
+                />
+              </n-form-item>
+            </section>
             <section v-if="isCollapseLayout" class="panel-item">
               <div class="panel-item-title">
                 Collapse 属性
@@ -4342,6 +4370,7 @@ import { appendDesignerLayoutChild, cloneValue, findDesignerComponentPath, getDe
 import { camelToSnake } from '../form-first/namingUtils'
 import FieldEventRulesEditor from './FieldEventRulesEditor.vue'
 import FieldLinkageRulesEditor from './FieldLinkageRulesEditor.vue'
+import { normalizeRelationOption } from './pageSectionEditorUtils'
 import { buildDefaultPlaceholder, buildFieldAssetPlaceholderPatch, shouldSyncPlaceholder } from './placeholder-utils'
 
 const props = defineProps({
@@ -4460,6 +4489,20 @@ const isCrudBlock = computed(() => ['AiCrudPage', 'crudBlock'].includes(selected
 const isRowLayout = computed(() => ['row', 'fcRow'].includes(selectedComponent.value?.componentKey))
 const isColumnLayout = computed(() => selectedComponent.value?.componentKey === 'col')
 const isCardLayout = computed(() => ['card', 'elCard'].includes(selectedComponent.value?.componentKey))
+const isSubTableLayout = computed(() => selectedComponent.value?.componentKey === 'subTable')
+const subTableRelationOptions = computed(() => props.relations
+  .map(normalizeRelationOption)
+  .filter(Boolean))
+const subTableDisplayModeOptions = [
+  { label: '行内表格', value: 'inline_grid' },
+  { label: '卡片列表', value: 'card_list' },
+  { label: '底部抽屉', value: 'bottom_sheet' },
+]
+function updateSubTableRelation(relationKey) {
+  const matched = subTableRelationOptions.value.find(option => option.value === relationKey)
+  const header = matched ? matched.label.replace(/（[^（）]+）$/, '') : selectedComponent.value?.props?.header || '关联子表'
+  updateComponent({ props: { relationKey: relationKey || '', header } })
+}
 const isTabsLayout = computed(() => ['tabs', 'elTabs'].includes(selectedComponent.value?.componentKey))
 const isCollapseLayout = computed(() => ['collapse', 'elCollapse'].includes(selectedComponent.value?.componentKey))
 const isButtonComponent = computed(() => ['button', 'elButton'].includes(selectedComponent.value?.componentKey))

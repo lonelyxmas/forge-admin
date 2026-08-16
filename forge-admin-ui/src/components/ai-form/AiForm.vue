@@ -104,7 +104,7 @@
 
     <!-- 表单操作按钮 -->
     <n-space v-if="showActions" justify="center" :style="{ marginTop: '24px' }">
-      <n-button v-if="showSubmit" type="primary" @click="handleSubmit">
+      <n-button v-if="showSubmit" type="primary" :loading="submitLoading" @click="handleSubmit">
         {{ submitText }}
       </n-button>
       <n-button v-if="showReset" @click="handleReset">
@@ -214,6 +214,10 @@ const props = defineProps({
   showSubmit: {
     type: Boolean,
     default: true,
+  },
+  submitLoading: {
+    type: Boolean,
+    default: false,
   },
   showReset: {
     type: Boolean,

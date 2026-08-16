@@ -62,7 +62,7 @@
             />
           </n-form-item-gi>
           <n-form-item-gi label="对象图标">
-            <n-input v-model:value="draft.icon" placeholder="例如：i-carbon-user" @update:value="markDirty" />
+            <IconSelector v-model="draft.icon" @update:model-value="markDirty" />
           </n-form-item-gi>
           <n-form-item-gi label="启用状态">
             <n-switch
@@ -118,9 +118,9 @@
             @dirty-change="handleDirtyChange"
           />
         </n-tab-pane>
-        <n-tab-pane name="permission" tab="数据权限">
+        <n-tab-pane name="tree-model" tab="树形模型">
           <BusinessPermissionFlowPanel
-            ref="permissionFlowRef"
+            ref="treeModelRef"
             v-model:model-schema="draft.modelSchema"
             v-model:page-schema="draft.pageSchema"
             :fields="draft.fields"
@@ -207,6 +207,17 @@
       @dirty-change="handleDirtyChange"
     />
 
+    <ObjectActionEditor
+      v-else-if="activePanel === 'actions'"
+      :actions="draft.designerOptions?.actions || []"
+      :fields="draft.fields"
+      :relations="draft.relations"
+      :objects="workspaceObjects"
+      :object-code="draft.objectCode"
+      :config-key="draft.configKey"
+      @save="handleActionsUpdated"
+    />
+
     <BusinessFlowAppConfigPanel
       v-else-if="activePanel === 'flow-app'"
       ref="flowAppConfigRef"
@@ -228,8 +239,8 @@
     />
 
     <BusinessPermissionFlowPanel
-      v-else-if="activePanel === 'permission'"
-      ref="permissionFlowRef"
+      v-else-if="activePanel === 'tree-model'"
+      ref="treeModelRef"
       v-model:model-schema="draft.modelSchema"
       v-model:page-schema="draft.pageSchema"
       :fields="draft.fields"
@@ -276,6 +287,7 @@ import {
   saveBusinessFlowAppConfig,
   saveBusinessObjectDesigner,
 } from '@/api/business-app'
+import IconSelector from '@/components/IconSelector.vue'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import { createDefaultPageSchema } from '@/components/lowcode-builder/page/page-schema'
 import { useTabStore, useUserStore } from '@/store'
@@ -328,6 +340,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'saved', 'dirtyChange', 'flowContextChange'])
 
+const ObjectActionEditor = defineDesignerAsyncComponent(() => import('./components/designer/ObjectActionEditor.vue'))
 const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
@@ -377,7 +390,7 @@ const formDesignerRef = ref(null)
 const listDesignerRef = ref(null)
 const relationDesignerRef = ref(null)
 const flowAppConfigRef = ref(null)
-const permissionFlowRef = ref(null)
+const treeModelRef = ref(null)
 const publishChecklistRef = ref(null)
 const draft = reactive(createEmptyDraft())
 
@@ -410,6 +423,8 @@ const publishDisabled = computed(() => {
     return true
   return publishCheckState.value?.publishable === false
 })
+// ObjectActionEditor 跨对象字段通过 businessObjectList 兜底加载，无需本地维护对象列表
+const workspaceObjects = []
 const designerNavPanels = computed(() => {
   if (props.embedded && props.embeddedNavPanels.length)
     return props.embeddedNavPanels
@@ -466,6 +481,8 @@ function openProcessWorkspace() {
 }
 
 function normalizePanel(panel) {
+  if (panel === 'permission')
+    return 'tree-model'
   if (['trigger', 'automation-trigger', 'triggers'].includes(panel))
     return 'fields'
   if (['flow', 'document', 'automation', 'flow-app'].includes(panel))
@@ -755,8 +772,8 @@ async function handleSave() {
       await loadDesigner()
       return true
     }
-    if (currentPanel === 'permission') {
-      permissionFlowRef.value?.saveConfig?.()
+    if (currentPanel === 'tree-model') {
+      treeModelRef.value?.saveConfig?.()
     }
     await saveDesignerDraft(true, { manageSaving: false })
     return true
@@ -838,7 +855,7 @@ async function handlePanelSwitch(panel) {
     ? 'detail'
     : normalizePanel(panel)
   if (!usesLegacyObjectPanels.value) {
-    if (['relations', 'flow-app', 'permission'].includes(normalizedPanel))
+    if (['relations', 'flow-app', 'tree-model'].includes(normalizedPanel))
       dataModelTab.value = normalizedPanel
   }
   const compatibilityPanel = ['publish', 'advanced'].includes(normalizedPanel)
@@ -2300,6 +2317,12 @@ defineExpose({
 .basic-panel,
 .placeholder-panel {
   padding: 20px;
+}
+
+.grouped-designer-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 20px 20px;
 }
 
 .form-detail-panel :deep(.n-tabs-nav) {

@@ -128,7 +128,7 @@
         </template>
         <section class="advanced-section">
           <div class="section-heading">
-            <span>配置 H5 底部操作栏可用的流程按钮和按钮权限。</span>
+            <span>配置移动端底部操作栏可用的流程按钮和按钮权限。</span>
             <n-button size="small" type="primary" secondary @click="addApprovalAction">
               <template #icon>
                 <n-icon><AddOutline /></n-icon>
@@ -161,7 +161,7 @@
         </template>
         <section class="advanced-section timeline-section">
           <div class="section-heading">
-            <span>仅开启后，H5 才会按流程实例加载历史记录。</span>
+            <span>仅开启后，移动端才会按流程实例加载历史记录。</span>
             <n-switch :value="draft.timeline.enabled" @update:value="patchTimeline({ enabled: $event })" />
           </div>
           <n-form-item v-if="draft.timeline.enabled" label="区块标题">

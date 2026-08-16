@@ -17,7 +17,7 @@ const props = defineProps({
   subProcesses: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['update:config', 'openFlowDesigner', 'refreshFlowModel'])
+const emit = defineEmits(['update:config', 'openFlowDesigner', 'refreshFlowModel', 'editAction'])
 
 const FlowDesignPage = defineAsyncComponent(() => import('@/views/flow/design.vue'))
 
@@ -236,15 +236,35 @@ function clone(value) {
         </section>
       </template>
 
-      <label v-else-if="localConfig.actionType === 'BUSINESS_ACTION'" class="config-field">
+      <div v-else-if="localConfig.actionType === 'BUSINESS_ACTION'" class="config-field">
         <span>业务动作</span>
         <select :value="localConfig.businessActionCode || ''" @change="updateSingleReference('businessActionCode', $event)">
-          <option value="">选择已发布业务动作</option>
+          <option value="">
+            选择业务动作
+          </option>
           <option v-for="item in businessActions" :key="optionValue(item)" :value="optionValue(item)">
             {{ optionLabel(item) }}
           </option>
         </select>
-      </label>
+        <div class="action-edit-hint">
+          <button
+            v-if="localConfig.businessActionCode"
+            type="button"
+            class="link-button"
+            @click="emit('editAction', { actionCode: localConfig.businessActionCode, isNew: false, nodeId: node.id })"
+          >
+            编辑该动作的执行步骤
+          </button>
+          <button
+            type="button"
+            class="link-button"
+            @click="emit('editAction', { actionCode: '', isNew: true, nodeId: node.id })"
+          >
+            ＋ 新建业务动作
+          </button>
+          <span class="hint-text">动作是一组自动执行的步骤（校验、改状态、写记录等），保存后可在多个流程中复用</span>
+        </div>
+      </div>
 
       <label v-else-if="localConfig.actionType === 'SEND_MESSAGE'" class="config-field">
         <span>消息模板</span>
@@ -510,5 +530,31 @@ function clone(value) {
   overflow: hidden;
   border-radius: 10px;
   background: var(--card-color, #fff);
+}
+
+.action-edit-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #18a058;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.action-edit-hint .hint-text {
+  font-size: 12px;
+  color: #86909c;
 }
 </style>

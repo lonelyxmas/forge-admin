@@ -25,7 +25,7 @@
             </n-tag>
           </div>
           <p>
-            <span class="object-workbench-description">维护对象字段、数据关系和数据权限</span>
+            <span class="object-workbench-description">维护对象字段、数据关系和树形模型</span>
             {{ designer?.suiteName || designer?.suiteCode || '未关联业务域' }}
             <span v-if="designer?.updateTime">最近保存 {{ designer.updateTime }}</span>
             <span v-if="designer?.lastPublishTime">最后发布 {{ designer.lastPublishTime }}</span>
@@ -109,7 +109,6 @@
           <span>{{ item.label }}</span>
           <em v-if="item.key === 'publish' && designer?.hasUnpublishedChanges">待发布</em>
         </button>
-
       </aside>
 
       <main class="designer-main">
@@ -140,9 +139,9 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline,
   CubeOutline,
+  FlashOutline,
   GitBranchOutline,
   GitNetworkOutline,
-  KeyOutline,
   ListOutline,
   OptionsOutline,
   ReaderOutline,
@@ -235,8 +234,9 @@ const legacyNavItems = [
   { key: 'form', label: '表单设计', icon: ReaderOutline },
   { key: 'list', label: '列表设计', icon: ListOutline },
   { key: 'relations', label: '关系与级联', icon: GitNetworkOutline },
+  { key: 'actions', label: '业务动作', icon: FlashOutline },
   { key: 'flow-app', label: '业务流程配置', icon: GitBranchOutline },
-  { key: 'permission', label: '数据权限', icon: KeyOutline },
+  { key: 'tree-model', label: '树形模型', icon: GitNetworkOutline },
   { key: 'publish', label: '发布检查', icon: CheckmarkDoneOutline },
   { key: 'basic', label: '基本信息', icon: OptionsOutline },
   { key: 'advanced', label: '高级配置', icon: SettingsOutline },

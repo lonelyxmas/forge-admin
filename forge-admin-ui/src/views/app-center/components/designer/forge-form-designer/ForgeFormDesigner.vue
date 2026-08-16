@@ -17,6 +17,7 @@
         v-if="!leftCollapsed"
         :fields="fields"
         :used-field-set="usedFieldSet"
+        :relations="relations"
         @append-field="appendField"
       >
         <template #actions>
@@ -123,7 +124,7 @@
             <n-radio-button value="layout">
               表单布局
             </n-radio-button>
-            <n-radio-button value="sections">
+            <n-radio-button v-if="enableSectionsView" value="sections">
               页面分区
             </n-radio-button>
             <n-radio-button v-if="hasDetailSettings" value="detail">
@@ -198,6 +199,7 @@
         @update:schema="updateSchema"
         @update:selected-id="handleCanvasSelectedIdChange"
         @configure="openPropertyPanel"
+        @configure-sub-table="relationKey => emit('editSubTableContainer', relationKey)"
         @open-source="openSourcePanel"
         @toggle-focus="toggleCanvasFocus"
       />
@@ -234,6 +236,21 @@
       />
     </aside>
   </div>
+  <n-modal
+    v-model:show="bottomBarDialogVisible"
+    preset="card"
+    title="底部操作栏"
+    :bordered="false"
+    class="designer-bottom-bar-modal"
+    :style="{ width: 'min(960px, calc(100vw - 40px))' }"
+  >
+    <BottomBarEditor
+      :model-value="normalizedSchema.bottomBar || {}"
+      :fields="fields"
+      @update:model-value="updateBottomBarFromDialog"
+      @configure-bottom-action="payload => emit('configureBottomAction', payload)"
+    />
+  </n-modal>
   <n-modal
     v-model:show="previewDialogVisible"
     preset="card"
@@ -471,9 +488,11 @@ import {
   normalizeFormDesignerSchema,
   normalizeFormDesignerSchemaForSave,
 } from '../form-first/formDesignerSchema'
+import BottomBarEditor from './BottomBarEditor.vue'
 import ForgeFieldShelf from './ForgeFieldShelf.vue'
 import ForgeFormCanvas from './ForgeFormCanvas.vue'
 import ForgePropertyPanel from './ForgePropertyPanel.vue'
+import { derivePageSectionsFromLayout } from './pageSectionDerivation'
 import PageSectionEditor from './PageSectionEditor.vue'
 
 const props = defineProps({
@@ -518,6 +537,16 @@ const props = defineProps({
     default: 'layout',
     validator: value => ['layout', 'sections', 'detail'].includes(value),
   },
+  // 是否提供独立「页面分区」视图：分区由布局容器承载时宿主应关闭，分区随画布派生维护。
+  enableSectionsView: {
+    type: Boolean,
+    default: true,
+  },
+  // 开启后每次 schema 变更都会从布局组件树派生 pageSections 写回（card/collapse=内容分区、subTable=子表分区）。
+  deriveSectionsFromLayout: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
@@ -527,6 +556,7 @@ const emit = defineEmits([
   'moreSelect',
   'fieldAssetUpdated',
   'configureBottomAction',
+  'editSubTableContainer',
   'editChildTableSection',
   'removeChildTableSection',
 ])
@@ -545,7 +575,8 @@ const HISTORY_LIMIT = 50
 const previewMode = ref('create')
 const clearDialogVisible = ref(false)
 const clearScope = ref('current')
-const canvasView = ref(props.initialCanvasView)
+const bottomBarDialogVisible = ref(false)
+const canvasView = ref(!props.enableSectionsView && props.initialCanvasView === 'sections' ? 'layout' : props.initialCanvasView)
 const previewModeOptions = [
   { label: '新增', value: 'create' },
   { label: '编辑', value: 'edit' },
@@ -559,6 +590,7 @@ const previewRuntimeContext = {
 const baseDesignerMoreOptions = [
   { label: '按字段生成', key: 'resetFromFields' },
   { label: '清理失效字段', key: 'repairRefs' },
+  { label: '底部操作栏', key: 'configureBottomBar' },
 ]
 
 const normalizedSchema = computed(() => normalizeFormDesignerSchema(props.modelValue || createDefaultFormDesignerSchema({
@@ -619,7 +651,10 @@ const canvasMetaText = computed(() => {
 })
 
 function updateSchema(schema, options = {}) {
-  const nextSchema = normalizeFormDesignerSchema(schema || {})
+  let nextSchema = normalizeFormDesignerSchema(schema || {})
+  // 分区由布局承载时，pageSections 不再独立编辑，随画布结构派生写回。
+  if (props.deriveSectionsFromLayout)
+    nextSchema = { ...nextSchema, pageSections: derivePageSectionsFromLayout(nextSchema.components, nextSchema.pageSections || []) }
   const currentSchema = normalizeFormDesignerSchema(normalizedSchema.value || {})
   if (isSameDesignerSchema(nextSchema, currentSchema))
     return
@@ -730,7 +765,19 @@ function updatePageSectionProtocol(protocol) {
   })
 }
 
+// 底部操作栏弹窗即时写回：与分区编辑一致走 updateSchema，保留撤销历史与脏标记。
+function updateBottomBarFromDialog(bottomBar) {
+  updateSchema({
+    ...normalizedSchema.value,
+    bottomBar,
+  })
+}
+
 function handleDesignerMoreSelect(key = '') {
+  if (key === 'configureBottomBar') {
+    bottomBarDialogVisible.value = true
+    return
+  }
   if (key === 'resetFromFields') {
     resetFromFields()
     return
@@ -923,7 +970,8 @@ function flushDesigner() {
 }
 
 function openPageSections() {
-  canvasView.value = 'sections'
+  // 分区由布局承载的宿主没有 sections 视图，向导确认等入口改跳画布查看承载容器。
+  canvasView.value = props.enableSectionsView ? 'sections' : 'layout'
 }
 
 function countComponents(components = []) {

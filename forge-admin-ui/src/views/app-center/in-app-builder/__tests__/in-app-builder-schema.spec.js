@@ -7,6 +7,7 @@ import {
   moveNavigationNode,
   normalizeFlowInteraction,
   normalizeInAppBuilder,
+  normalizeNodeAccess,
   removeNavigationNode,
   updateInAppFormAsset,
 } from '../in-app-builder-schema'
@@ -182,5 +183,38 @@ describe('in-app builder schema', () => {
       expect.objectContaining({ id: created.formAssetId, name: '客户录入表单', formKey: 'customer_form' }),
     ])
     expect(mergeInAppBuilderOptions({}, updated).inAppBuilder.formAssets[0].formDesignerSchema.components).toHaveLength(1)
+  })
+
+  it('normalizes node access control and keeps roles grants across save round trips', () => {
+    const schema = normalizeInAppBuilder({
+      inAppBuilder: {
+        nodes: [
+          { id: 'page_sales', type: 'page', title: '销售', access: { mode: 'roles', roleIds: ['2', 3, 3, null] } },
+          { id: 'page_hr', type: 'page', title: '人事', access: { mode: 'unknown' } },
+          { id: 'page_finance', type: 'page', title: '财务' },
+        ],
+      },
+    }, APPLICATION, [])
+
+    expect(schema.nodes.find(node => node.id === 'page_sales').access).toEqual({ mode: 'roles', roleIds: [2, 3] })
+    expect(schema.nodes.find(node => node.id === 'page_hr').access).toEqual({ mode: 'inherit', roleIds: [] })
+    expect(schema.nodes.find(node => node.id === 'page_finance').access).toEqual({ mode: 'inherit', roleIds: [] })
+
+    const options = mergeInAppBuilderOptions({}, schema)
+    expect(options.inAppBuilder.nodes.find(node => node.id === 'page_sales').access).toEqual({ mode: 'roles', roleIds: [2, 3] })
+  })
+
+  it('defaults new navigation nodes to inherit access and accepts explicit roles input', () => {
+    const base = normalizeInAppBuilder({}, APPLICATION, [])
+    const inherited = createNavigationNode(base, { type: 'page', title: '默认页' })
+    const restricted = createNavigationNode(inherited, {
+      type: 'page',
+      title: '受限页',
+      access: { mode: 'roles', roleIds: [7] },
+    })
+
+    expect(inherited.nodes.find(node => node.title === '默认页').access).toEqual({ mode: 'inherit', roleIds: [] })
+    expect(restricted.nodes.find(node => node.title === '受限页').access).toEqual({ mode: 'roles', roleIds: [7] })
+    expect(normalizeNodeAccess(null)).toEqual({ mode: 'inherit', roleIds: [] })
   })
 })
