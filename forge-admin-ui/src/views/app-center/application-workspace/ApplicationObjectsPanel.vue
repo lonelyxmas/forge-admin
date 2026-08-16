@@ -241,6 +241,10 @@ async function bindObject(binding) {
 }
 
 async function handleObjectCreated(result) {
+  if (result.nextAction === 'ASSOCIATE' && objects.value.some(item => String(item.objectId) === String(result.id))) {
+    message.info('业务对象已在当前应用中')
+    return
+  }
   const role = hasPrimary.value ? 'SHARED' : 'PRIMARY'
   try {
     await persistObjects([...objects.value, {
@@ -252,6 +256,10 @@ async function handleObjectCreated(result) {
       objectId: result.id,
       objectCode: result.objectCode,
     })
+    if (result.nextAction === 'ASSOCIATE') {
+      message.success('业务对象已关联到当前应用')
+      return
+    }
     if (props.openDesignerAfterCreate)
       openDesigner({ objectCode: result.objectCode })
     else

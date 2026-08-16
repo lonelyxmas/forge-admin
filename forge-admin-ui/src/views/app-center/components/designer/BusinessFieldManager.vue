@@ -125,6 +125,27 @@
         <n-form-item v-if="needsCreateDict" label="字典类型">
           <DictTypeSelect v-model:value="createForm.dictType" :fields="visibleFields" />
         </n-form-item>
+        <template v-if="createForm.fieldType === 'REFERENCE'">
+          <n-form-item label="目标对象">
+            <n-select
+              v-model:value="createForm.referenceObjectCode"
+              :options="businessObjectOptions"
+              :loading="businessObjectLoading"
+              filterable
+              clearable
+              placeholder="选择关联的业务对象"
+            />
+          </n-form-item>
+          <n-form-item v-if="createForm.referenceObjectCode" label="回显字段">
+            <n-select
+              v-model:value="createForm.referenceDisplayField"
+              :options="referenceTargetFieldOptions"
+              filterable
+              clearable
+              placeholder="自动推断，也可手动选择"
+            />
+          </n-form-item>
+        </template>
         <div class="create-field-tip">
           创建后字段会加入字段资产。是否出现在当前表单、列表或查询区，请在对应页面设计器中配置。
         </div>
@@ -159,7 +180,9 @@
 import { useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
+  businessObjectDesigner,
   businessObjectFields,
+  businessObjectList,
   createBusinessObjectField,
   deleteBusinessObjectField,
   sortBusinessObjectFields,
@@ -220,6 +243,9 @@ const compactLayout = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 const createForm = reactive(createDefaultCreateForm())
 const lastSuggestedCreateFieldCode = ref('')
+const businessObjectOptions = ref([])
+const businessObjectLoading = ref(false)
+const referenceTargetFieldsMap = ref({})
 let compactMediaQuery = null
 
 const fieldTypeOptions = [
@@ -264,6 +290,10 @@ const filteredFields = computed(() => visibleFields.value
 const usedFieldCodes = computed(() => extractForgeSchemaFieldRefs(props.formDesignerSchema || {}))
 const selectedField = computed(() => visibleFields.value.find(field => field.fieldCode === selectedFieldCode.value) || null)
 const needsCreateDict = computed(() => ['DICT', 'RADIO', 'CHECKBOX'].includes(createForm.fieldType))
+const referenceTargetFieldOptions = computed(() => {
+  const target = referenceTargetFieldsMap.value[createForm.referenceObjectCode]
+  return target?.options || []
+})
 const drawerWidth = computed(() => Math.min(520, Math.max(320, viewportWidth.value - 24)))
 const fieldStats = computed(() => {
   const fields = activeFields.value
@@ -317,6 +347,33 @@ watch(showSystemFields, (visible) => {
   if (current?.systemField)
     closePropertyPanel(true, true)
 })
+
+watch(
+  () => createForm.fieldType,
+  async (fieldType) => {
+    if (fieldType === 'REFERENCE') {
+      await loadBusinessObjectOptions()
+      if (createForm.referenceObjectCode)
+        await loadReferenceTargetFields(createForm.referenceObjectCode)
+      return
+    }
+    createForm.referenceObjectCode = ''
+    createForm.referenceDisplayField = ''
+  },
+)
+
+watch(
+  () => createForm.referenceObjectCode,
+  async (value, oldValue) => {
+    if (!value || value === oldValue)
+      return
+    if (!businessObjectOptions.value.length)
+      await loadBusinessObjectOptions()
+    createForm.referenceDisplayField = ''
+    await loadReferenceTargetFields(value)
+    autoInferReferenceDisplayField(value)
+  },
+)
 
 onMounted(() => {
   compactMediaQuery = window.matchMedia('(max-width: 980px)')
@@ -410,6 +467,12 @@ async function createField() {
   if (needsCreateDict.value && !createForm.dictType?.trim()) {
     message.warning('字典字段需要选择或填写字典类型')
     return
+  }
+  if (createForm.fieldType === 'REFERENCE') {
+    if (!createForm.referenceObjectCode?.trim() || !createForm.referenceDisplayField?.trim()) {
+      message.warning('引用对象字段需要选择目标对象和回显字段')
+      return
+    }
   }
   creating.value = true
   try {
@@ -604,7 +667,73 @@ function createDefaultCreateForm() {
     unique: false,
     importable: true,
     exportable: true,
+    referenceObjectCode: '',
+    referenceDisplayField: '',
   }
+}
+
+async function loadBusinessObjectOptions() {
+  if (businessObjectOptions.value.length || businessObjectLoading.value)
+    return
+  businessObjectLoading.value = true
+  try {
+    const res = await businessObjectList({})
+    const list = Array.isArray(res.data) ? res.data : []
+    const seen = new Set()
+    businessObjectOptions.value = list
+      .filter((item) => {
+        if (!item.objectCode || seen.has(item.objectCode))
+          return false
+        seen.add(item.objectCode)
+        return true
+      })
+      .map(item => ({
+        label: `${item.objectName || item.objectCode}（${item.objectCode}）`,
+        value: item.objectCode,
+        object: item,
+      }))
+  }
+  catch {
+    businessObjectOptions.value = []
+  }
+  finally {
+    businessObjectLoading.value = false
+  }
+}
+
+async function loadReferenceTargetFields(objectCode) {
+  if (!objectCode || referenceTargetFieldsMap.value[objectCode])
+    return
+  const target = businessObjectOptions.value.find(item => item.value === objectCode)?.object
+  if (!target?.id) {
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options: [] } }
+    return
+  }
+  try {
+    const res = await businessObjectDesigner(target.id)
+    const fields = res.data?.fields || res.data?.modelSchema?.fields || []
+    const options = fields
+      .filter(field => !['tenantId', 'tenant_id', 'createBy', 'create_by', 'createTime', 'create_time', 'updateBy', 'update_by', 'updateTime', 'update_time', 'delFlag', 'del_flag'].includes(field.fieldCode || field.field))
+      .map(field => ({
+        label: `${field.fieldName || field.label || field.fieldCode || field.field}（${field.fieldCode || field.field}）`,
+        value: field.fieldCode || field.field,
+        field,
+      }))
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options } }
+  }
+  catch {
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options: [] } }
+  }
+}
+
+function autoInferReferenceDisplayField(objectCode) {
+  const fieldOptions = referenceTargetFieldsMap.value[objectCode]?.options || []
+  if (!fieldOptions.length)
+    return
+  const displayCandidate = fieldOptions.find(f => ['name', 'title', 'label'].includes(f.value))
+    || fieldOptions.find(f => /name|title/i.test(f.value))
+  if (displayCandidate && !createForm.referenceDisplayField)
+    createForm.referenceDisplayField = displayCandidate.value
 }
 
 function isHiddenField(field) {

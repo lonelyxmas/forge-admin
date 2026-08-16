@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.ai.provider.adapter;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,7 @@ import java.util.Map;
  * AI 供应商适配器注册表。
  */
 @Component
+@Slf4j
 public class AiProviderAdapterRegistry {
 
     private final Map<String, AiProviderAdapter> adapters;
@@ -63,8 +65,12 @@ public class AiProviderAdapterRegistry {
             throw new BusinessException("AI模型运行参数不能为空");
         }
         // 解密 apiKey：存储层为密文，构造 ChatModel 需要明文
+        boolean needsDecrypt = AiSecretCrypto.isEncrypted(provider.getApiKey());
+        log.info("[AiProviderAdapterRegistry] 构建ChatModel, providerId={}, providerName={}, adapterCode={}, baseUrl={}, model={}, temperature={}, maxTokens={}, apiKeyDecrypt={}",
+                provider.getId(), provider.getProviderName(), provider.getAdapterCode(),
+                provider.getBaseUrl(), options.model(), options.temperature(), options.maxTokens(), needsDecrypt);
         AiProvider decryptedProvider = provider;
-        if (AiSecretCrypto.isEncrypted(provider.getApiKey())) {
+        if (needsDecrypt) {
             decryptedProvider = new AiProvider();
             decryptedProvider.setId(provider.getId());
             decryptedProvider.setTenantId(provider.getTenantId());
@@ -72,7 +78,13 @@ public class AiProviderAdapterRegistry {
             decryptedProvider.setProviderType(provider.getProviderType());
             decryptedProvider.setAdapterCode(provider.getAdapterCode());
             decryptedProvider.setLogo(provider.getLogo());
-            decryptedProvider.setApiKey(aiSecretCrypto.decrypt(provider.getApiKey()));
+            try {
+                decryptedProvider.setApiKey(aiSecretCrypto.decrypt(provider.getApiKey()));
+            } catch (Exception e) {
+                log.error("[AiProviderAdapterRegistry] API Key解密失败, providerId={}, exceptionType={}, exceptionMessage={}",
+                        provider.getId(), e.getClass().getSimpleName(), e.getMessage());
+                throw e;
+            }
             decryptedProvider.setBaseUrl(provider.getBaseUrl());
             decryptedProvider.setModels(provider.getModels());
             decryptedProvider.setDefaultModel(provider.getDefaultModel());
