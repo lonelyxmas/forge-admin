@@ -66,10 +66,6 @@ spring:
     enabled: ${FORGE_FLYWAY_ENABLED:true}
     locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration,filesystem:../db/migration,filesystem:forge-server/db/migration}
     fail-on-missing-locations: false
-    # 系统必需种子(R__ai_provider_template / R__sys_config / R__sys_dict / R__sys_resource)
-    # 存放于 db/seed/required(非迁移扫描路径)，不参与 Flyway 增量迁移；
-    # 若历史库曾残留其 applied 记录而文件已不在扫描路径，忽略缺失的 repeatable，避免启动校验失败。
-    ignore-migration-patterns: repeatable:missing
     baseline-on-migrate: true
     baseline-version: 1.0.0
     table: forge_schema_history
