@@ -5,7 +5,9 @@ import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,35 +67,61 @@ public class AiProviderAdapterRegistry {
             throw new BusinessException("AI模型运行参数不能为空");
         }
         // 解密 apiKey：存储层为密文，构造 ChatModel 需要明文
-        boolean needsDecrypt = AiSecretCrypto.isEncrypted(provider.getApiKey());
         log.info("[AiProviderAdapterRegistry] 构建ChatModel, providerId={}, providerName={}, adapterCode={}, baseUrl={}, model={}, temperature={}, maxTokens={}, apiKeyDecrypt={}",
                 provider.getId(), provider.getProviderName(), provider.getAdapterCode(),
-                provider.getBaseUrl(), options.model(), options.temperature(), options.maxTokens(), needsDecrypt);
-        AiProvider decryptedProvider = provider;
-        if (needsDecrypt) {
-            decryptedProvider = new AiProvider();
-            decryptedProvider.setId(provider.getId());
-            decryptedProvider.setTenantId(provider.getTenantId());
-            decryptedProvider.setProviderName(provider.getProviderName());
-            decryptedProvider.setProviderType(provider.getProviderType());
-            decryptedProvider.setAdapterCode(provider.getAdapterCode());
-            decryptedProvider.setLogo(provider.getLogo());
-            try {
-                decryptedProvider.setApiKey(aiSecretCrypto.decrypt(provider.getApiKey()));
-            } catch (Exception e) {
-                log.error("[AiProviderAdapterRegistry] API Key解密失败, providerId={}, exceptionType={}, exceptionMessage={}",
-                        provider.getId(), e.getClass().getSimpleName(), e.getMessage());
-                throw e;
-            }
-            decryptedProvider.setBaseUrl(provider.getBaseUrl());
-            decryptedProvider.setModels(provider.getModels());
-            decryptedProvider.setDefaultModel(provider.getDefaultModel());
-            decryptedProvider.setIsDefault(provider.getIsDefault());
-            decryptedProvider.setStatus(provider.getStatus());
-            decryptedProvider.setRemark(provider.getRemark());
-        }
+                provider.getBaseUrl(), options.model(), options.temperature(), options.maxTokens(),
+                AiSecretCrypto.isEncrypted(provider.getApiKey()));
+        AiProvider decryptedProvider = decryptProvider(provider);
         AiProviderAdapter adapter = getRequired(decryptedProvider.getAdapterCode());
         adapter.validate(decryptedProvider, options);
         return adapter.createChatModel(decryptedProvider, options);
+    }
+
+    /**
+     * 按固定的选择、校验、创建顺序构建 Embedding 模型。
+     * 在构造前解密 apiKey（存储层为密文，使用时需明文）。
+     *
+     * @param provider 供应商配置
+     * @param model 模型标识
+     * @return EmbeddingModel
+     */
+    public EmbeddingModel createEmbeddingModel(AiProvider provider, String model) {
+        if (provider == null) {
+            throw new BusinessException("AI供应商配置不能为空");
+        }
+        if (!StringUtils.hasText(model)) {
+            throw new BusinessException("模型标识不能为空");
+        }
+        AiProvider decryptedProvider = decryptProvider(provider);
+        AiProviderAdapter adapter = getRequired(decryptedProvider.getAdapterCode());
+        return adapter.createEmbeddingModel(decryptedProvider, model);
+    }
+
+    /**
+     * 解密 apiKey：存储层为密文，构造模型需要明文。
+     * 未加密时原样返回，避免无谓的对象重建。
+     *
+     * @param provider 供应商配置
+     * @return apiKey 解密后的供应商配置
+     */
+    private AiProvider decryptProvider(AiProvider provider) {
+        if (!AiSecretCrypto.isEncrypted(provider.getApiKey())) {
+            return provider;
+        }
+        AiProvider decryptedProvider = new AiProvider();
+        decryptedProvider.setId(provider.getId());
+        decryptedProvider.setTenantId(provider.getTenantId());
+        decryptedProvider.setProviderName(provider.getProviderName());
+        decryptedProvider.setProviderType(provider.getProviderType());
+        decryptedProvider.setAdapterCode(provider.getAdapterCode());
+        decryptedProvider.setLogo(provider.getLogo());
+        decryptedProvider.setApiKey(aiSecretCrypto.decrypt(provider.getApiKey()));
+        decryptedProvider.setBaseUrl(provider.getBaseUrl());
+        decryptedProvider.setModels(provider.getModels());
+        decryptedProvider.setDefaultModel(provider.getDefaultModel());
+        decryptedProvider.setIsDefault(provider.getIsDefault());
+        decryptedProvider.setStatus(provider.getStatus());
+        decryptedProvider.setRemark(provider.getRemark());
+        return decryptedProvider;
     }
 }
