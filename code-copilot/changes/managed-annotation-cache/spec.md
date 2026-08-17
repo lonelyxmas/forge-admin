@@ -30,7 +30,8 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 - LOCAL 使用 Caffeine；REDIS 使用 Redisson `RMapCache`；MULTI 使用 `RLocalCachedMapCache`，本地提供方固定为 Caffeine，跨实例同步固定为失效通知，重连固定清空本地层。
 - 运行时将代码定义与策略覆盖注册到 Redis 控制面，本地持有有效策略快照；策略变更通过 Redisson Topic 分发。
 - 新增 `sys_cache_policy` 逻辑删除表、Mapper XML、Service、Controller、Flyway 和资源权限。
-- 管理端缓存页增加“受管缓存”与“Redis 诊断”两个视图，受管视图不展示 value。
+- 管理端缓存页只保留受管缓存策略工作台，不展示 entry key/value。
+- 下线 Redis 原始 key/value 诊断、任意 key 删除和 pattern 批量清理的前后端入口，并逻辑删除对应按钮/API 资源。
 - 迁移 `SysDictDataServiceImpl#selectDictDataByType` 及其清理方法。
 
 ### 2.2 非目标
@@ -64,7 +65,7 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 
 - `forge-starter-cache`：注解、AOP、运行时、Caffeine/Redisson 后端、Redis 控制面和本地统计；不得依赖 MyBatis 或 `forge-plugin-system`。
 - `forge-plugin-system`：策略表、Mapper XML、管理 Service/API、启动同步；通过 starter 公共模型调用运行时。
-- `forge-admin-ui`：策略列表、编辑、恢复默认和清空操作；Redis 原始键诊断作为独立页签保留。
+- `forge-admin-ui`：策略列表、编辑、恢复默认和按命名缓存清空操作；不得提供 Redis 原始 key/value 诊断入口。
 
 ### 3.2 注解合同
 
@@ -118,14 +119,15 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 - `POST /system/cache/policy/edit`：新增或按 `policyVersion` 更新覆盖。
 - `POST /system/cache/policy/reset?applicationCode=&cacheName=`：逻辑删除覆盖并恢复注解默认。
 - `POST /system/cache/policy/clear?applicationCode=&cacheName=`：清空一个受管缓存。
-- 原 `/system/cache/page|getInfo|remove|clear|metrics` 保留为 Redis 诊断接口。
+- 删除 `/system/cache/page|getInfo|remove|removeBatch|clear|metrics` Redis 诊断接口；受管缓存接口继续由独立 Controller 提供。
 
 所有新接口仅允许平台超级管理员，写操作记录操作日志。接口不返回缓存 entry key/value。
 
 ## 6. 管理端交互
 
-- 页面默认进入“受管缓存”，顶部以线型 Tabs 切换“受管缓存 / Redis 诊断”。
-- 受管列表支持应用编码、缓存名搜索，显示来源类、作用域、允许模式、有效模式、L1/L2 TTL、容量、状态和是否存在覆盖。
+- 页面直接进入受管缓存策略工作台，不再展示视图切换 Tabs。
+- 受管列表支持应用编码、缓存名搜索；将身份、作用域、有效/允许模式、TTL、容量/空值、状态/覆盖和命中/未命中/写入/失败统计组合成紧凑信息列。
+- 常用桌面宽度下操作列不得覆盖其他列；窄屏切换为紧凑策略列表，筛选和弹窗必须自适应且文字不得互相遮挡。
 - 编辑使用中等宽度弹窗，只编辑运行字段；模式使用单选按钮，启用/空值缓存使用开关，TTL/容量使用数字输入。
 - 行操作固定为“编辑、清空、恢复默认”；没有覆盖时禁用恢复默认。
 - 切换模式超出代码允许范围、MULTI 的 L1 TTL 大于 L2 TTL、TTL 非正数时前后端均阻止提交。
@@ -139,9 +141,11 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 5. 活动事务回滚不写缓存、不失效缓存；提交后执行写入/失效。
 6. 管理覆盖只能选择代码允许的模式；版本冲突返回 409；重置后恢复注解默认。
 7. `sys_cache_policy` 有完整审计字段、显式 `@TableLogic` 和 active-only 唯一索引。
-8. 字典查询移除手写两级缓存，修改后提交成功才失效。
+8. 字典查询移除手写两级缓存，通用 `useDict` 和后端翻译均统一经过受管 Service，修改后提交成功才失效。
 9. starter 定向测试、system 定向测试、Admin 聚合编译、Flyway 静态检查、前端构建均通过或记录真实环境阻断。
 10. 四类 Redis envelope 通过真实 codec 往返；缓存名拼写错误、定义重复/冲突和策略快照替换均有回归测试。
+11. 页面不再出现 Redis 诊断入口，生产源码不再暴露原始 key/value 诊断与任意删除 API，旧按钮/API 资源由 Flyway 下线。
+12. 1440x900 桌面和 390x844 移动视口下列表、筛选、分页和操作区无重叠，前端控制台无新增错误。
 
 ## 8. 风险与回滚
 
@@ -149,7 +153,7 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 - 风险：策略变更导致短时冷缓存。缓解：变更后主动清空，业务失败开放。
 - 风险：错误 scope 造成数据串读。缓解：scope 只能由代码声明，缺失上下文绕过，键作用域单测覆盖。
 - 风险：返回值不能远程序列化。缓解：允许模式由代码限制，远程写失败穿透并记录；不可序列化对象声明 LOCAL-only。
-- 回滚：停用 `forge.cache.annotation-enabled` 后所有注解穿透；恢复字典原实现可独立回滚。数据库脚本只新增表和资源，不删除旧缓存接口或旧数据。
+- 回滚：停用 `forge.cache.annotation-enabled` 后所有注解穿透；恢复字典原实现可独立回滚。Redis 诊断属于安全下线，若确需恢复，必须经安全复核后重新引入 Controller，并用新迁移恢复资源和角色授权；本次迁移不自动恢复已清理的授权关系。
 
 ## 9. 当前状态
 
@@ -161,6 +165,8 @@ Forge 已有 `forge-starter-cache`，底层同时依赖 Redisson 与 Caffeine，
 - [x] 字典迁移。
 - [x] 增量验证与审查。
 - [x] Review 发现的 codec、定义解析/注册和策略快照问题已修复并完成增量验证。
-- [ ] 真实 MySQL/Redis/Admin、双实例失效同步和普通管理员 403 E2E 由用户执行。
+- [x] 受管缓存列表规整与 Redis 诊断安全下线已完成增量验证。
+- [x] 业务字典消费链路已统一经过受管缓存，管理页已补齐写入与失败统计。
+- [ ] 真实 MySQL Flyway、双实例失效同步和普通管理员 403 E2E 由用户执行。
 
-代码实现和 Review 修复阶段已完成，下一步应重新执行 `/review managed-annotation-cache`。自动化验证覆盖 starter、系统控制面、字典迁移、Mapper/Flyway 静态合同、Admin 聚合编译和前端测试/构建；真实环境 E2E 不在本轮自动执行范围内，不能据此宣称运行态验收通过。
+代码实现、Review 修复、管理页规整、Redis 诊断安全下线和字典消费链路收口均已完成。自动化验证覆盖 starter、系统控制面、字典迁移、诊断下线合同、Mapper/Flyway 静态合同、Admin 聚合编译、前端测试/构建及桌面/移动页面回归；本地已运行 Admin/Redis 完成字典请求和统计增长验证，但真实 MySQL Flyway、双实例同步与普通管理员 403 仍未覆盖。

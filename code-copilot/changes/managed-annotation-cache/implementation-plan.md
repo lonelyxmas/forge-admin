@@ -4,7 +4,7 @@
 
 **Goal:** Build a Forge-owned annotation cache runtime with local, Redis and multi-level modes plus a centrally managed policy UI without enabling Spring Cache.
 
-**Architecture:** `forge-starter-cache` owns annotations, AOP, key isolation, transaction coordination, Redisson/Caffeine handles and Redis policy distribution. `forge-plugin-system` persists operational overrides and exposes super-admin APIs; the existing cache page adds a managed-policy view while preserving Redis diagnostics.
+**Architecture:** `forge-starter-cache` owns annotations, AOP, key isolation, transaction coordination, Redisson/Caffeine handles and Redis policy distribution. `forge-plugin-system` persists operational overrides and exposes super-admin APIs; the cache page is a managed-policy workbench and does not expose raw Redis keys or values.
 
 **Tech Stack:** Java 17, Spring Boot 3.5, Spring AOP/SpEL, Caffeine, Redisson 3.50, MyBatis-Plus/XML, Flyway, Vue 3, Naive UI, Vitest.
 
@@ -70,7 +70,7 @@
 ### Task 4: Add Flyway and permissions
 
 **Files:**
-- Create: `forge-server/db/migration/V1.0.120__add_managed_cache_policy.sql`
+- Create: `forge-server/db/migration/V1.0.122__add_managed_cache_policy.sql`
 
 - [ ] Create `sys_cache_policy` with all Forge audit fields, `tenant_id DEFAULT 1`, BIGINT tombstone logic delete and `UNIQUE (tenant_id, application_code, cache_name, del_flag)`.
 - [ ] Insert four API resources below the existing cache menu using `INSERT ... SELECT ... WHERE NOT EXISTS`; use `tenant_id=1`.
@@ -87,7 +87,7 @@
 
 - [ ] Extract policy normalization and validation into pure functions; write failing Vitest cases for allowed modes, positive TTL and MULTI L1 <= L2.
 - [ ] Implement the pure functions and rerun the test.
-- [ ] Add line Tabs with managed cache as default and the existing Redis diagnostic surface preserved under its own tab.
+- [ ] Make managed cache the only workbench surface; do not expose raw Redis keys or values.
 - [ ] Implement a compact table, application/cache filters, edit modal, clear confirmation and reset action; do not expose entry keys or values.
 - [ ] Run target ESLint, Vitest and production build under Node `v20.19.0`.
 - [ ] Commit with message `[managed-annotation-cache] 增加缓存策略管理页`.
@@ -134,3 +134,36 @@
 - [x] Register each local definition once, publish it with Redis `putIfAbsent`, and reject incompatible remote definitions while ignoring `source` in the compatibility comparison.
 - [x] Replace the mutable policy override map with atomically published immutable snapshots and consistently apply copy-on-write updates for local control events.
 - [x] Run the incremental starter/system/aggregate verification commands and append exact results to `execution-log.md`.
+
+### Task 9: Tidy the workbench and retire Redis diagnostics
+
+**Files:**
+- Modify: `forge-admin-ui/src/views/system/cache.vue`
+- Modify: `forge-admin-ui/src/views/system/cache/ManagedCachePolicies.vue`
+- Delete: `forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/controller/SysCacheController.java`
+- Delete: `forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/dto/CacheInfoDTO.java`
+- Create: `forge-server/db/migration/V1.0.123__remove_redis_cache_diagnostics.sql`
+- Modify: affected static contract tests and SDD verification records.
+
+- [x] Remove the diagnostic tab and all raw Redis key/value requests from the frontend.
+- [x] Consolidate table columns and make filters, actions, pagination and the edit modal responsive.
+- [x] Remove the diagnostic Controller/DTO and retire stale button/API resources with an idempotent Flyway migration.
+- [x] Run the security surface scan, frontend tests/lint/build, Admin aggregate compile and desktop/mobile Playwright checks.
+- [x] Append exact results and skipped real-service checks to `execution-log.md`.
+
+### Task 10: Unify dictionary consumers and expose failure statistics
+
+**Files:**
+- Modify: `forge-admin-ui/src/composables/useDict.js`
+- Create: `forge-admin-ui/src/composables/__tests__/useDict.spec.js`
+- Modify: `forge-admin-ui/src/views/system/cache/ManagedCachePolicies.vue`
+- Modify: `forge-admin-ui/src/views/system/cache/__tests__/managed-cache-policy.spec.js`
+- Modify: `forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SytemDictValueProvider.java`
+- Modify: `forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/listener/DictChangeEventListener.java`
+- Create: `forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/test/java/com/mdframe/forge/plugin/system/service/impl/SytemDictValueProviderTest.java`
+
+- [x] Route common business dictionary loading through `/system/dict/data/type/{dictType}` while keeping the dictionary management `/list` query unchanged.
+- [x] Remove the translation provider's independent 30-minute maps and delegate every dictionary lookup to the managed-cache service proxy.
+- [x] Keep dictionary change invalidation single-sourced through `clearDictDataCache` after commit.
+- [x] Show hit, miss, put and failure counters on desktop and mobile; use the active Naive UI error color for non-zero failures.
+- [x] Run focused frontend/backend tests, target ESLint, production build, Admin aggregate compile and desktop/mobile runtime checks.

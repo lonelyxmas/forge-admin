@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { normalizeManagedCachePolicy, validateManagedCachePolicy } from '../managed-cache-policy'
 
@@ -58,6 +60,13 @@ describe('managed cache policy', () => {
       validPolicy(),
       ['LOCAL', 'REDIS', 'MULTI'],
     )).toBeNull()
+  })
+
+  it('shows cache failures in both desktop and mobile statistics', () => {
+    const source = readFileSync(resolve('src/views/system/cache/ManagedCachePolicies.vue'), 'utf8')
+
+    expect(source).toContain('{{ formatCount(row.failureCount) }}')
+    expect(source).toContain('detailPair(\'失败\', formatCount(row.failureCount)')
   })
 })
 
