@@ -68,6 +68,15 @@
         @update:model-value="updateValue"
         @change="emit('change', $event)"
       />
+      <PillSelect
+        v-else-if="field.type === 'pillSelect'"
+        :model-value="modelValue"
+        :options="options"
+        :clearable="field.props?.clearable !== false"
+        :disabled="disabled"
+        @update:model-value="updateValue"
+        @change="emit('change', $event)"
+      />
       <switch
         v-else-if="field.type === 'switch'"
         :checked="Boolean(modelValue)"
@@ -102,6 +111,7 @@ import { computed, ref } from 'vue'
 import AiButton from '@/components/AiButton.vue'
 import AiField from '@/components/AiField.vue'
 import AiSelect from '@/components/AiSelect.vue'
+import PillSelect from './PillSelect.vue'
 import { scanBarcode } from '@/utils/barcode-scanner'
 
 const props = defineProps({
@@ -123,7 +133,7 @@ const control = computed(() => props.field.__runtimeControl || { visible: true, 
 const readonly = computed(() => props.readonly || props.disabled || props.field.readonly === true || control.value.readonly)
 const displayValue = computed(() => {
   const value = props.modelValue
-  if (props.field.type === 'dictSelect' || props.field.type === 'select') {
+  if (props.field.type === 'dictSelect' || props.field.type === 'select' || props.field.type === 'pillSelect') {
     return props.options.find(item => String(item.value) === String(value))?.label || value || '-'
   }
   if (value === undefined || value === null || value === '') return '-'

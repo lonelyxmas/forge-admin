@@ -426,8 +426,96 @@ export function normalizeFormDesignerSchema(source = {}) {
     formName: schema.formName || '业务表单',
     layout: normalizeLayout(schema.layout),
     components: migrateLegacyInteractionRules(normalizedComponents),
+    pageSections: normalizePageSections(schema.pageSections),
+    bottomBar: normalizeBottomBar(schema.bottomBar),
     settings: isPlainObject(schema.settings) ? schema.settings : {},
   }
+}
+
+export function normalizePageSections(source = []) {
+  const usedIds = new Set()
+  return (Array.isArray(source) ? source : [])
+    .filter(isPlainObject)
+    .map((section, index) => {
+      const sectionType = ['card', 'child_table'].includes(section.sectionType) ? section.sectionType : 'card'
+      const sectionId = reserveProtocolId(section.sectionId, `section_${index + 1}`, usedIds)
+      const visibleInModes = uniqueStrings(section.visibleInModes)
+      const normalized = {
+        ...section,
+        sectionId,
+        sectionType,
+        title: String(section.title || '').trim() || `分区 ${index + 1}`,
+        ...(Object.prototype.hasOwnProperty.call(section, 'visibleInModes') ? { visibleInModes } : {}),
+      }
+      if (sectionType === 'child_table') {
+        normalized.relationKey = String(section.relationKey || '').trim()
+        normalized.displayMode = ['inline_grid', 'card_list', 'bottom_sheet'].includes(section.displayMode)
+          ? section.displayMode
+          : 'inline_grid'
+        delete normalized.fields
+        delete normalized.fieldOverrides
+        delete normalized.collapsible
+        delete normalized.collapsedByDefault
+        return normalized
+      }
+      normalized.fields = uniqueStrings(section.fields)
+      if (isPlainObject(section.fieldOverrides))
+        normalized.fieldOverrides = section.fieldOverrides
+      normalized.collapsible = section.collapsible === true
+      if (Object.prototype.hasOwnProperty.call(section, 'collapsedByDefault'))
+        normalized.collapsedByDefault = normalized.collapsible && section.collapsedByDefault === true
+      delete normalized.relationKey
+      delete normalized.displayMode
+      return normalized
+    })
+}
+
+export function normalizeBottomBar(source = {}) {
+  const bottomBar = isPlainObject(source) ? source : {}
+  const usedIds = new Set()
+  return {
+    ...bottomBar,
+    actions: (Array.isArray(bottomBar.actions) ? bottomBar.actions : [])
+      .filter(isPlainObject)
+      .map((action, index) => {
+        const actionId = String(action.actionId || '').trim()
+        return {
+          ...action,
+          ...(actionId ? { actionId: reserveProtocolId(actionId, `bottom_action_${index + 1}`, usedIds) } : {}),
+          type: String(action.type || 'save').trim().toLowerCase(),
+          label: String(action.label || '').trim(),
+          ...(Object.prototype.hasOwnProperty.call(action, 'visibleInModes') ? { visibleInModes: uniqueStrings(action.visibleInModes) } : {}),
+          ...(action.actionCode ? { actionCode: String(action.actionCode).trim() } : {}),
+          ...(action.displayCondition ? { displayCondition: String(action.displayCondition).trim() } : {}),
+          ...(action.confirmText ? { confirmText: String(action.confirmText).trim() } : {}),
+          ...(action.successMessage ? { successMessage: String(action.successMessage).trim() } : {}),
+        }
+      }),
+  }
+}
+
+function reserveProtocolId(sourceId, fallbackId, usedIds) {
+  const base = String(sourceId || fallbackId).trim() || fallbackId
+  if (!usedIds.has(base)) {
+    usedIds.add(base)
+    return base
+  }
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${base}_${index}`
+    if (!usedIds.has(candidate)) {
+      usedIds.add(candidate)
+      return candidate
+    }
+  }
+  const candidate = `${base}_${Date.now()}`
+  usedIds.add(candidate)
+  return candidate
+}
+
+function uniqueStrings(source = []) {
+  return [...new Set((Array.isArray(source) ? source : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean))]
 }
 
 /**

@@ -2,11 +2,11 @@
   <section class="field-event-editor">
     <div class="field-event-editor__head">
       <div>
-        <strong>字段查询回填</strong>
-        <p>从受管接口或数据集中查询，并按规则回填表单字段。</p>
+        <strong>字段自动查询</strong>
+        <p>字段值变化后，自动查找匹配信息并带回到表单。</p>
       </div>
       <n-button size="tiny" type="primary" secondary @click="openCreate">
-        添加规则
+        添加查询
       </n-button>
     </div>
 
@@ -24,7 +24,7 @@
         </div>
         <div class="field-event-card__actions">
           <n-button text size="tiny" type="primary" @click="openEdit(index)">
-            设置
+            编辑
           </n-button>
           <n-dropdown
             trigger="click"
@@ -43,34 +43,61 @@
     <n-modal
       v-model:show="modalVisible"
       preset="card"
-      :title="editingIndex < 0 ? '添加字段查询规则' : '设置字段查询规则'"
+      :title="editingIndex < 0 ? '添加字段自动查询' : '编辑字段自动查询'"
       class="field-event-modal"
       style="width: min(920px, calc(100vw - 32px))"
       :mask-closable="false"
     >
       <div class="field-event-form">
         <section class="field-event-form__section">
-          <h4>触发与查询源</h4>
+          <h4>什么时候查、查什么</h4>
           <div class="field-event-form__grid">
-            <n-form-item label="规则名称" required>
-              <n-input v-model:value="draft.name" maxlength="80" placeholder="例如：手机号查询联系人" />
+            <n-form-item label="这条查询叫什么" required>
+              <n-input v-model:value="draft.name" maxlength="80" placeholder="例如：输入手机号后带回联系人" />
             </n-form-item>
-            <n-form-item label="触发时机" required>
+            <n-form-item label="什么时候查询" required>
               <n-select v-model:value="draft.trigger" :options="triggerOptions" @update:value="handleTriggerChange" />
             </n-form-item>
-            <n-form-item v-if="draft.trigger !== 'FORM_LOAD'" label="触发字段" required>
+            <n-form-item v-if="draft.trigger !== 'FORM_LOAD'" label="哪个字段触发" required>
               <n-select v-model:value="draft.sourceField" :options="fieldOptions" filterable placeholder="选择表单字段" />
             </n-form-item>
-            <n-form-item label="受管查询源" required>
-              <n-select
-                :value="selectedSourceValue"
-                :options="sourceOptions"
-                :loading="catalogLoading"
-                filterable
-                placeholder="选择已开放的接口或数据集"
-                @update:value="handleSourceChange"
-              />
+            <n-form-item label="从哪里查" required>
+              <div class="query-source-picker">
+                <n-radio-group
+                  v-model:value="sourceTypeTab"
+                  class="query-source-tabs"
+                  size="small"
+                  @update:value="handleSourceTypeChange"
+                >
+                  <n-radio-button value="DATASET">
+                    数据集（{{ sourceCount('DATASET') }}）
+                  </n-radio-button>
+                  <n-radio-button value="EXTERNAL_API">
+                    接口（{{ sourceCount('EXTERNAL_API') }}）
+                  </n-radio-button>
+                </n-radio-group>
+                <n-select
+                  :value="selectedSourceValue"
+                  :options="sourceOptions"
+                  :loading="catalogLoading"
+                  filterable
+                  placeholder="选择一个已开放的查询源"
+                  @update:value="handleSourceChange"
+                />
+                <small class="field-event-help">数据集适合查表格数据，接口适合调用已登记的业务服务。</small>
+              </div>
             </n-form-item>
+          </div>
+          <div v-if="draft.sourceType === 'DATASET' && draft.sourceKey" class="dataset-query-settings">
+            <div>
+              <strong>数据集分页</strong>
+              <span>只取前面一小页数据，避免一次返回过多记录。</span>
+            </div>
+            <label>
+              <span>每次最多返回</span>
+              <n-input-number v-model:value="draft.pageSize" :min="1" :max="100" :step="10" size="small" />
+              <em>条</em>
+            </label>
           </div>
           <div class="field-event-form__switches">
             <label><span>启用规则</span><n-switch v-model:value="draft.enabled" size="small" /></label>
@@ -86,8 +113,8 @@
         <section class="field-event-form__section">
           <div class="field-event-form__section-head">
             <div>
-              <h4>查询参数</h4>
-              <p>参数只从当前表单、只读运行上下文或路由参数取值。</p>
+              <h4>查询需要哪些信息</h4>
+              <p>优先从表单字段或常用上下文选取，不需要手写代码。</p>
             </div>
           </div>
           <n-spin :show="metadataLoading">
@@ -101,22 +128,41 @@
                   v-model:value="mapping.source"
                   :options="paramSourceOptions"
                   size="small"
-                  @update:value="resetParamMappingPath(mapping)"
+                  @update:value="handleParamSourceChange(mapping, $event)"
                 />
-                <n-select
-                  v-if="mapping.source === 'FORM_FIELD'"
-                  v-model:value="mapping.field"
-                  :options="fieldOptions"
-                  filterable
-                  size="small"
-                  placeholder="选择字段"
-                />
-                <n-input
-                  v-else
-                  v-model:value="mapping.path"
-                  size="small"
-                  :placeholder="mapping.source === 'CONTEXT_PATH' ? '如 currentUser.userId' : '如 channel'"
-                />
+                <div class="mapping-value">
+                  <n-select
+                    v-if="mapping.source === 'FORM_FIELD'"
+                    v-model:value="mapping.field"
+                    :options="fieldOptions"
+                    filterable
+                    size="small"
+                    placeholder="选择字段"
+                  />
+                  <template v-else-if="mapping.source === 'CONTEXT_PATH'">
+                    <n-select
+                      :value="contextPathOption(mapping)"
+                      :options="contextPathOptions"
+                      size="small"
+                      @update:value="handleContextPathChange(mapping, $event)"
+                    />
+                    <n-input
+                      v-if="contextPathOption(mapping) === CUSTOM_PATH_OPTION"
+                      v-model:value="mapping.path"
+                      size="small"
+                      placeholder="填写上下文路径，例如 currentUser.userId"
+                    />
+                  </template>
+                  <n-input
+                    v-else
+                    v-model:value="mapping.path"
+                    size="small"
+                    placeholder="填写路由参数名，例如 channel"
+                  />
+                </div>
+                <small v-if="mapping.source === 'CONTEXT_PATH'" class="mapping-help">
+                  常用项已代为填写；只有选“自定义路径”才需要手写路径。
+                </small>
               </div>
             </div>
             <n-empty v-else size="small" description="该查询源不需要参数" />
@@ -213,6 +259,7 @@ const emit = defineEmits(['update:modelValue'])
 const modalVisible = ref(false)
 const editingIndex = ref(-1)
 const draft = ref(createDraft())
+const sourceTypeTab = ref('DATASET')
 const catalog = ref([])
 const metadata = ref(null)
 const catalogLoading = ref(false)
@@ -228,8 +275,17 @@ const triggerOptions = [
 ]
 const paramSourceOptions = [
   { label: '表单字段', value: 'FORM_FIELD' },
-  { label: '运行上下文', value: 'CONTEXT_PATH' },
-  { label: '路由参数', value: 'ROUTE_QUERY' },
+  { label: '当前登录用户等上下文', value: 'CONTEXT_PATH' },
+  { label: '页面地址参数', value: 'ROUTE_QUERY' },
+]
+const CUSTOM_PATH_OPTION = '__CUSTOM_PATH__'
+const contextPathOptions = [
+  { label: '当前登录用户 ID', value: 'currentUser.userId' },
+  { label: '当前登录用户姓名', value: 'currentUser.userName' },
+  { label: '当前租户 ID', value: 'tenantId' },
+  { label: '当前组织 ID', value: 'activeOrgId' },
+  { label: '扫码内容', value: 'scan.value' },
+  { label: '自定义路径（高级）', value: CUSTOM_PATH_OPTION },
 ]
 const missingOptions = [
   { label: '清空旧值', value: 'CLEAR' },
@@ -237,10 +293,12 @@ const missingOptions = [
 ]
 
 const normalizedRules = computed(() => Array.isArray(props.modelValue) ? props.modelValue : [])
-const sourceOptions = computed(() => catalog.value.map(item => ({
-  label: `${item.sourceName || item.sourceKey} · ${item.sourceType === 'DATASET' ? '数据集' : '外部接口'}`,
-  value: `${item.sourceType}::${item.sourceKey}`,
-})))
+const sourceOptions = computed(() => catalog.value
+  .filter(item => item.sourceType === sourceTypeTab.value)
+  .map(item => ({
+    label: `${item.sourceName || item.sourceKey}${item.sourceGroup ? ` · ${item.sourceGroup}` : ''}`,
+    value: `${item.sourceType}::${item.sourceKey}`,
+  })))
 const selectedSourceValue = computed(() => draft.value.sourceType && draft.value.sourceKey
   ? `${draft.value.sourceType}::${draft.value.sourceKey}`
   : '')
@@ -261,6 +319,8 @@ function createDraft(source = {}) {
     sourceField: source.sourceField || '',
     sourceType: source.sourceType || '',
     sourceKey: source.sourceKey || '',
+    pageNum: Number.isInteger(Number(source.pageNum)) && Number(source.pageNum) > 0 ? Number(source.pageNum) : 1,
+    pageSize: Number.isInteger(Number(source.pageSize)) && Number(source.pageSize) > 0 ? Math.min(Number(source.pageSize), 100) : 20,
     debounceMs: Number.isInteger(Number(source.debounceMs)) ? Number(source.debounceMs) : 300,
     skipWhenEmpty: source.skipWhenEmpty !== false,
     clearTargetsOnTrigger: source.clearTargetsOnTrigger === true,
@@ -329,6 +389,8 @@ function syncParamMappings() {
 function openCreate() {
   editingIndex.value = -1
   draft.value = createDraft()
+  sourceTypeTab.value = preferredSourceType()
+  draft.value.sourceType = sourceTypeTab.value
   metadata.value = null
   validationMessage.value = ''
   modalVisible.value = true
@@ -339,6 +401,7 @@ function openCreate() {
 function openEdit(index) {
   editingIndex.value = index
   draft.value = createDraft(normalizedRules.value[index])
+  sourceTypeTab.value = draft.value.sourceType || preferredSourceType()
   validationMessage.value = ''
   modalVisible.value = true
   loadMetadata()
@@ -355,14 +418,39 @@ function handleSourceChange(value) {
   const [sourceType = '', ...sourceKeyParts] = String(value || '').split('::')
   draft.value.sourceType = sourceType
   draft.value.sourceKey = sourceKeyParts.join('::')
+  sourceTypeTab.value = sourceType
+  draft.value.pageNum = 1
+  if (sourceType === 'DATASET' && (!draft.value.pageSize || draft.value.pageSize > 100))
+    draft.value.pageSize = 20
   draft.value.paramMappings = []
   draft.value.resultMappings = []
   loadMetadata()
 }
 
-function resetParamMappingPath(mapping) {
+function handleSourceTypeChange(sourceType) {
+  if (!sourceType || sourceType === draft.value.sourceType)
+    return
+  draft.value.sourceType = sourceType
+  draft.value.sourceKey = ''
+  draft.value.paramMappings = []
+  draft.value.resultMappings = []
+  metadata.value = null
+}
+
+function handleParamSourceChange(mapping, source) {
   mapping.field = ''
   mapping.path = ''
+  if (source === 'CONTEXT_PATH')
+    mapping.path = 'currentUser.userId'
+}
+
+function contextPathOption(mapping) {
+  const path = String(mapping?.path || '')
+  return contextPathOptions.some(option => option.value === path) ? path : CUSTOM_PATH_OPTION
+}
+
+function handleContextPathChange(mapping, value) {
+  mapping.path = value === CUSTOM_PATH_OPTION ? '' : value
 }
 
 function addResultMapping() {
@@ -397,6 +485,8 @@ function validateDraft() {
     return '请至少添加一个结果回填字段'
   if (draft.value.paramMappings.some(item => !item.param || !item.source || (item.source === 'FORM_FIELD' ? !item.field : !item.path)))
     return '请完整配置查询参数来源'
+  if (draft.value.sourceType === 'DATASET' && (!Number.isInteger(Number(draft.value.pageSize)) || Number(draft.value.pageSize) < 1 || Number(draft.value.pageSize) > 100))
+    return '数据集每次返回条数需设置为 1～100'
   if (draft.value.resultMappings.some(item => !item.to))
     return '请完整配置结果目标字段'
   const targetFields = draft.value.resultMappings.map(item => item.to)
@@ -461,9 +551,17 @@ function fieldLabel(field) {
 }
 
 function sourceLabel(rule) {
-  return catalog.value.find(item => item.sourceType === rule.sourceType && item.sourceKey === rule.sourceKey)?.sourceName
-    || rule.sourceKey
-    || '未选择查询源'
+  const source = catalog.value.find(item => item.sourceType === rule.sourceType && item.sourceKey === rule.sourceKey)
+  const name = source?.sourceName || rule.sourceKey || '未选择查询源'
+  return `${name} · ${rule.sourceType === 'DATASET' ? '数据集' : '接口'}`
+}
+
+function sourceCount(sourceType) {
+  return catalog.value.filter(item => item.sourceType === sourceType).length
+}
+
+function preferredSourceType() {
+  return catalog.value.some(item => item.sourceType === 'DATASET') ? 'DATASET' : 'EXTERNAL_API'
 }
 
 function clone(value) {
@@ -475,6 +573,11 @@ function clone(value) {
 .field-event-editor {
   display: grid;
   gap: 10px;
+}
+
+.field-event-modal {
+  --n-color: #fff;
+  --n-color-modal: #fff;
 }
 
 .field-event-editor__head,
@@ -562,6 +665,7 @@ function clone(value) {
   padding: 14px;
   border: 1px solid var(--n-border-color);
   border-radius: 8px;
+  background: #fff;
 }
 
 .field-event-form h4 {
@@ -576,6 +680,61 @@ function clone(value) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 14px;
+}
+
+.query-source-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.query-source-tabs {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.field-event-help,
+.mapping-help {
+  color: var(--n-text-color-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dataset-query-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -2px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  background: var(--n-color-modal, #fff);
+}
+
+.dataset-query-settings > div {
+  display: grid;
+  gap: 2px;
+}
+
+.dataset-query-settings strong {
+  color: var(--n-text-color-2);
+  font-size: 12px;
+}
+
+.dataset-query-settings span,
+.dataset-query-settings em {
+  color: var(--n-text-color-3);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.dataset-query-settings label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  color: var(--n-text-color-2);
+  font-size: 12px;
 }
 
 .field-event-form__switches {
@@ -597,7 +756,12 @@ function clone(value) {
 
 .mapping-row--params {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(180px, 1.2fr);
+  grid-template-columns: minmax(120px, 0.7fr) minmax(145px, 0.8fr) minmax(180px, 1.2fr);
+}
+
+.mapping-row--params .mapping-help {
+  grid-column: 2 / -1;
+  margin-top: -3px;
 }
 
 .mapping-row--result {
@@ -620,6 +784,12 @@ function clone(value) {
 
 .mapping-fixed strong {
   font-size: 12px;
+}
+
+.mapping-value {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
 }
 
 .mapping-fixed span,
@@ -645,6 +815,19 @@ function clone(value) {
 
   .mapping-arrow {
     display: none;
+  }
+
+  .dataset-query-settings {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .query-source-tabs {
+    width: 100%;
+  }
+
+  .query-source-tabs :deep(.n-radio-button) {
+    flex: 1;
   }
 }
 </style>

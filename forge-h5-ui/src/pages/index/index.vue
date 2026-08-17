@@ -124,7 +124,7 @@
       max-height="96vh"
       body-max-height="calc(96vh - 160rpx - env(safe-area-inset-bottom))"
       title="全部应用"
-      description="按模块浏览已授权的 H5 菜单"
+      description="按模块浏览已授权的移动端菜单"
     >
       <view class="menu-search-bar">
         <AiIcon icon="/static/icons/ai-icon/search.svg" color="#64748b" size="sm" />

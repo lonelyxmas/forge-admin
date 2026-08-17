@@ -44,17 +44,27 @@
           <strong>业务自动化</strong>
           <span>{{ automationActions.length }}</span>
         </div>
-        <button
+        <div
           v-for="item in automationActions"
           :key="item.originalIndex"
-          type="button"
           class="automation-list-item"
           :class="{ active: item.originalIndex === selectedActionIndex }"
           @click="selectedActionIndex = item.originalIndex"
         >
-          <strong>{{ item.action.actionName || '未命名自动化' }}</strong>
-          <span>{{ actionSceneLabel(item.action) }}</span>
-        </button>
+          <div class="automation-list-item__info">
+            <strong>{{ item.action.actionName || '未命名自动化' }}</strong>
+            <span>{{ actionSceneLabel(item.action) }}</span>
+          </div>
+          <NButton
+            size="tiny"
+            quaternary
+            type="error"
+            class="automation-list-item__delete"
+            @click.stop="removeAction(item.originalIndex)"
+          >
+            删除
+          </NButton>
+        </div>
       </aside>
 
       <main v-if="selectedAction" class="automation-main">
@@ -104,6 +114,20 @@
                 :value="selectedAction.actionConfig?.relationKey || ''"
                 placeholder="选择关系与级联中的明细"
                 @update:value="updateChildActionRelation"
+              />
+            </NFormItemGi>
+            <NFormItemGi label="按钮权限标识">
+              <NInput
+                :value="selectedAction.permissionKey || selectedAction.permissionCode || selectedAction.permission || ''"
+                placeholder="例如：order:submit"
+                @update:value="patchSelectedAction({ permissionKey: $event, permission: $event })"
+              />
+            </NFormItemGi>
+            <NFormItemGi label="无权限时">
+              <NSelect
+                :value="selectedAction.permissionStrategy || 'hide'"
+                :options="permissionStrategyOptions"
+                @update:value="patchSelectedAction({ permissionStrategy: $event })"
               />
             </NFormItemGi>
           </NGrid>
@@ -425,9 +449,14 @@
         <section v-else class="panel-section">
           <div class="section-title">
             <h3>业务处理流程</h3>
-            <NButton size="tiny" secondary @click="addDetailQuantityFlow">
-              添加明细数量处理
-            </NButton>
+            <div class="orchestration-step-actions">
+              <NButton size="tiny" secondary @click="addDetailQuantityFlow">
+                添加明细数量处理
+              </NButton>
+              <NButton size="tiny" type="primary" secondary @click="addCallApiStep">
+                调用外部接口
+              </NButton>
+            </div>
           </div>
 
           <n-empty v-if="!rootSteps.length" description="还没有业务处理步骤" size="small" />
@@ -497,6 +526,29 @@
                 @remove="removeStep(rootStep)"
               />
 
+              <section v-else-if="isInternalStepType(rootStep.raw, INTERNAL_STEP.CALL_API)" class="call-api-step-card">
+                <div class="flow-card-head">
+                  <span class="step-index">{{ rootStep.index + 1 }}</span>
+                  <div>
+                    <NInput
+                      :value="rootStep.raw.stepName || '调用外部接口'"
+                      placeholder="步骤名称"
+                      @update:value="patchStep(rootStep, { stepName: $event })"
+                    />
+                    <em>调用已登记的 EXTERNAL_API，不在动作中填写 URL 或凭据</em>
+                  </div>
+                  <NButton size="tiny" quaternary type="error" @click="removeStep(rootStep)">
+                    删除
+                  </NButton>
+                </div>
+                <CallApiStepConfigPanel
+                  :model-value="rootStep.config"
+                  :record-field-options="callApiRecordFieldOptions"
+                  :form-field-options="callApiFormFieldOptions"
+                  @update:model-value="updateCallApiStepConfig(rootStep, $event)"
+                />
+              </section>
+
               <div v-else class="unsupported-step">
                 <div>
                   <strong>{{ rootStep.raw.stepName || '高级步骤' }}</strong>
@@ -536,11 +588,13 @@ import { businessObjectDesigner, businessObjectList } from '@/api/business-app'
 import {
   BUSINESS_ACTION_EXECUTION_MODE,
   canUseBusinessActionStep,
+  createCallApiBusinessActionStep,
   createDefaultBusinessActionConfig,
   createLocalBusinessActionStep,
   LOCAL_TRANSACTION_STEP_TYPES,
   resolveBusinessActionExecutionMode,
 } from './business-action-designer-protocol'
+import CallApiStepConfigPanel from './CallApiStepConfigPanel.vue'
 
 const props = defineProps({
   actions: {
@@ -581,6 +635,7 @@ const INTERNAL_STEP = {
   FOREACH: 'FOREACH',
   DOMAIN_ACTION: 'DOMAIN_ACTION',
   START_FLOW: 'START_FLOW',
+  CALL_API: 'CALL_API',
 }
 const INTERNAL_ACTION = {
   QUANTITY: 'QUANTITY',
@@ -608,6 +663,10 @@ const manualActionPositionOptions = [
 const successBehaviorOptions = [
   { label: '刷新列表', value: 'refreshList' },
   { label: '无操作', value: 'none' },
+]
+const permissionStrategyOptions = [
+  { label: '隐藏按钮', value: 'hide' },
+  { label: '禁用按钮', value: 'disable' },
 ]
 const executionModeOptions = [
   { label: '本地事务（可整体回滚）', value: EXECUTION_MODE.LOCAL_TRANSACTION },
@@ -687,15 +746,49 @@ const nonLocalStepCount = computed(() => flattenAllSteps(selectedAction.value?.a
 const inputSchemaRows = computed(() => Array.isArray(selectedAction.value?.actionConfig?.inputSchema)
   ? selectedAction.value.actionConfig.inputSchema
   : [])
+const callApiRecordFieldOptions = computed(() => collectMainFields(props.fields, props.modelSchema)
+  .map(toPageField)
+  .filter(field => !isInactiveField(field))
+  .map((field) => {
+    const code = field.sourceField || field.field || field.fieldCode
+    return code
+      ? { label: `${businessFieldLabel(field)}（${code}）`, value: `record.main.${code}` }
+      : null
+  })
+  .filter(Boolean))
+const callApiFormFieldOptions = computed(() => [
+  ...inputSchemaRows.value
+    .filter(field => field?.name)
+    .map(field => ({ label: `${field.label || field.name}（${field.name}）`, value: field.name })),
+  ...callApiRecordFieldOptions.value,
+])
 const targetConfigOptions = computed(() => buildTargetConfigOptions())
 const actionRelations = computed(() => buildActionRelations(props.modelSchema, props.relations))
 const collectionPathOptions = computed(() => buildCollectionPathOptions(actionRelations.value))
-const childRelationOptions = computed(() => actionRelations.value
-  .filter(relation => isDetailRelation(relation))
-  .map(relation => ({
-    label: relation.relationName || relation.detailTabTitle || relation.modelName || relation.collectionKey,
-    value: relation.collectionKey,
-  })))
+const childRelationOptions = computed(() => {
+  const detailRelations = actionRelations.value.filter(relation => isDetailRelation(relation))
+  const options = detailRelations.map((relation) => {
+    const isKeyName = relation.relationName && relation.relationName === relation.collectionKey
+    return {
+      label: (!isKeyName && relation.relationName)
+        || relation.detailTabTitle
+        || relation.targetObjectName
+        || relation.modelName
+        || relation.relationName
+        || relation.collectionKey,
+      value: relation.collectionKey,
+    }
+  })
+  const currentValue = String(selectedAction.value?.actionConfig?.relationKey || '').trim()
+  if (currentValue && !options.some(opt => opt.value === currentValue)) {
+    const matched = detailRelations[0]
+    const fallbackLabel = matched
+      ? (matched.relationName || matched.targetObjectName || matched.modelName || currentValue)
+      : currentValue
+    options.push({ label: fallbackLabel, value: currentValue })
+  }
+  return options
+})
 const selectedManualActionPosition = computed(() => {
   const position = String(selectedAction.value?.actionPosition || 'DETAIL')
     .replace('-', '_')
@@ -1131,6 +1224,32 @@ function addDetailQuantityFlow() {
   emitActions(actions)
 }
 
+function addCallApiStep() {
+  const actions = cloneValue(actionList.value)
+  const action = actions[selectedActionIndex.value]
+  if (!action)
+    return
+  const config = ensureActionConfig(action)
+  if (!Array.isArray(config.steps))
+    config.steps = []
+  config.steps.push(createCallApiBusinessActionStep(config.steps.length + 1))
+  config.executionMode = EXECUTION_MODE.ORCHESTRATION
+  emitActions(actions)
+}
+
+function updateCallApiStepConfig(step, value = {}) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, step)
+  if (!cloned)
+    return
+  const nextConfig = { ...(value || {}) }
+  const failureStrategy = String(nextConfig.failureStrategy || 'THROW').toUpperCase()
+  cloned.stepConfig = nextConfig
+  cloned.rollbackOnFailure = failureStrategy !== 'LOG_AND_CONTINUE'
+  ensureActionConfig(actions[selectedActionIndex.value]).executionMode = EXECUTION_MODE.ORCHESTRATION
+  emitActions(actions)
+}
+
 function addQuantityStep(parentStep) {
   const actions = cloneValue(actionList.value)
   const cloned = resolveStep(actions, parentStep)
@@ -1199,6 +1318,18 @@ function removeStep(step) {
     return
   parentSteps.splice(step.index, 1)
   emitActions(actions)
+}
+
+function removeAction(originalIndex) {
+  const actions = cloneValue(actionList.value)
+  if (originalIndex < 0 || originalIndex >= actions.length)
+    return
+  actions.splice(originalIndex, 1)
+  emitActions(actions)
+  if (selectedActionIndex.value >= actions.length)
+    selectedActionIndex.value = Math.max(0, actions.length - 1)
+  else if (selectedActionIndex.value > originalIndex)
+    selectedActionIndex.value--
 }
 
 function applyActionConfigText() {
@@ -1434,8 +1565,14 @@ function buildCollectionPathOptions(relations = []) {
     .map((child) => {
       const key = child.collectionKey || child.key || child.modelCode || child.tableName || child.relationName
       const value = `record.children.${key}`
+      const isKeyName = child.relationName && child.relationName === key
       return {
-        label: child.relationName || child.detailTabTitle || child.modelName || child.label || '明细关系',
+        label: (!isKeyName && child.relationName)
+          || child.detailTabTitle
+          || child.targetObjectName
+          || child.modelName
+          || child.label
+          || '明细关系',
         value,
       }
     })
@@ -1456,7 +1593,7 @@ function collectionOptionsForStep(step = {}) {
 function resolveCollectionPathLabel(collectionPath = '') {
   const relation = relationByCollectionPath(collectionPath)
   if (relation)
-    return relation.relationName || relation.detailTabTitle || relation.modelName || '明细关系'
+    return relation.relationName || relation.detailTabTitle || relation.targetObjectName || relation.modelName || '明细关系'
   return '未识别明细关系（请在关系与级联中维护）'
 }
 
@@ -1492,17 +1629,27 @@ function buildActionRelations(modelSchema = {}, relations = []) {
 
 function normalizeActionRelation(relation = {}) {
   const targetObjectCode = relation.targetObjectCode || relation.objectCode || relation.modelCode || ''
-  const collectionKey = relation.key
+  const parsedConfig = parseRelationConfig(relation.relationConfig)
+  const collectionKey = parsedConfig.relationKey
+    || relation.key
     || relation.modelCode
     || relation.tableName
     || lowerSnake(targetObjectCode)
     || relation.relationName
+  const isKeyName = relation.relationName && relation.relationName === collectionKey
   return {
     ...relation,
     targetObjectCode,
     collectionKey,
     relationType: relation.relationType || relation.type || 'DETAIL',
-    relationName: relation.relationName || relation.detailTabTitle || relation.modelName || relation.label || '',
+    relationName: (!isKeyName && relation.relationName)
+      || relation.detailTabTitle
+      || relation.targetObjectName
+      || parsedConfig.detailTabTitle
+      || relation.modelName
+      || relation.label
+      || relation.relationName
+      || '',
     fields: relationFields({
       ...relation,
       targetObjectCode,
@@ -1576,6 +1723,18 @@ function lowerSnake(value = '') {
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
     .toLowerCase()
+}
+
+function parseRelationConfig(value) {
+  if (!value)
+    return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  }
+  catch {
+    return {}
+  }
 }
 
 function toPageField(field = {}) {
@@ -1896,7 +2055,8 @@ function stringifyJson(value) {
 
 .automation-list-item {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 4px;
   width: 100%;
   padding: 10px;
@@ -1905,6 +2065,25 @@ function stringifyJson(value) {
   border-radius: 6px;
   background: transparent;
   text-align: left;
+}
+
+.automation-list-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.automation-list-item__delete {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.automation-list-item:hover .automation-list-item__delete,
+.automation-list-item.active .automation-list-item__delete {
+  opacity: 1;
 }
 
 .automation-list-item:hover,
@@ -1949,6 +2128,12 @@ function stringifyJson(value) {
   margin: 0;
   color: #71717a;
   font-size: 12px;
+}
+
+.orchestration-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .scope-note {
@@ -2035,11 +2220,17 @@ function stringifyJson(value) {
 
 .flow-card,
 .quantity-card,
+.call-api-step-card,
 .unsupported-step {
   padding: 12px;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
   background: #fafafa;
+}
+
+.call-api-step-card {
+  border-color: #c7d2fe;
+  background: #f8faff;
 }
 
 .flow-card-head {

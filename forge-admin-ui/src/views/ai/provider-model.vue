@@ -637,7 +637,8 @@ const modelTypeOverrideOptions = computed(() =>
  * @returns {string} 推断的模型类型 code
  */
 function inferModelType(modelId) {
-  if (!modelId) return 'chat'
+  if (!modelId)
+    return 'chat'
   const lower = modelId.toLowerCase()
   if (lower.includes('embedding') || lower.includes('embed')) return 'embedding'
   if (lower.includes('rerank') || lower.includes('re-rank') || lower.includes('cross-encoder')) return 'rerank'
@@ -966,7 +967,7 @@ const modelColumns = [
     width: 160,
     fixed: 'right',
     render(row) {
-      const rowLoading = (type) => isModelRowActionLoading(row.id, type)
+      const rowLoading = type => isModelRowActionLoading(row.id, type)
       const anyLoading = rowLoading('test') || rowLoading('edit') || rowLoading('delete')
       const actions = [
         h(NButton, { text: true, size: 'small', class: 'text-info', loading: rowLoading('test'), disabled: anyLoading, onClick: () => handleTestModel(row) }, { default: () => '测试' }),

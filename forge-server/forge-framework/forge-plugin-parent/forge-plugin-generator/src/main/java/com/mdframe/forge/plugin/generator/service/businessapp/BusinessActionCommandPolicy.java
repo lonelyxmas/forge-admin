@@ -34,6 +34,8 @@ final class BusinessActionCommandPolicy {
     private static final Pattern SAFE_KEY = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{0,63}$");
     private static final Pattern SAFE_PATH = Pattern.compile(
             "^[A-Za-z][A-Za-z0-9_]{0,63}(\\.[A-Za-z][A-Za-z0-9_]{0,63}){0,7}$");
+    private static final Pattern QUERY_SOURCE_KEY = Pattern.compile(
+            "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,128}$");
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("^[A-Za-z0-9._:-]{8,128}$");
     private static final Set<String> LOCAL_STEP_TYPES = Set.of(
             "CREATE_RECORD", "UPDATE_FIELD", "ADJUST_NUMBER", "TRANSITION_STATUS", "ASSERT_RECORD", "FOREACH");
@@ -51,6 +53,9 @@ final class BusinessActionCommandPolicy {
     private static final Set<String> MAPPING_SOURCE_TYPES = Set.of(
             "record", "parent", "parentrecord", "parent_record",
             "form", "formdata", "form_data", "context", "system", "static");
+    private static final Set<String> CALL_API_TARGETS = Set.of("STEP_CONTEXT", "FORM_DATA");
+    private static final Set<String> CALL_API_FAILURE_STRATEGIES = Set.of("THROW", "LOG_AND_CONTINUE");
+    private static final Set<String> CALL_API_RESULT_MODES = Set.of("ROOT", "FIRST_ROW");
     private static final Set<String> SYSTEM_SOURCE_FIELDS = Set.of(
             "userId", "tenantId", "activeOrgId", "activeOrgName", "mainOrgId",
             "username", "realName", "correlationId", "recordId", "parentRecordId",
@@ -257,6 +262,128 @@ final class BusinessActionCommandPolicy {
             if ("FOREACH".equals(type)) {
                 validateRequiredPath(config, "collectionPath");
                 validateStepDefinitions(toNestedSteps(config));
+            }
+            if ("CALL_API".equals(type)) {
+                validateCallApiStep(step, config);
+            }
+        }
+    }
+
+    /**
+     * CALL_API 与字段查询事件共用 paramMappings/resultMappings 的受控路径协议，
+     * 但执行时只允许调用已登记的 EXTERNAL_API 查询源。
+     */
+    static void validateCallApiStep(BusinessActionStepDTO step, Map<String, Object> config) {
+        String sourceType = StringUtils.upperCase(BusinessActionStepConfigHelper.firstText(
+                config, "sourceType", "querySourceType"));
+        if (!"EXTERNAL_API".equals(sourceType)) {
+            throw new BusinessException("CALL_API 只允许调用 EXTERNAL_API 查询源");
+        }
+        String sourceKey = BusinessActionStepConfigHelper.firstText(config, "sourceKey", "querySourceKey");
+        if (StringUtils.isBlank(sourceKey) || !QUERY_SOURCE_KEY.matcher(sourceKey).matches()) {
+            throw new BusinessException("CALL_API 查询源编码为空、过长或格式非法");
+        }
+
+        validateCallApiMappings(config);
+        validateCallApiResults(config);
+
+        String resultMode = StringUtils.upperCase(StringUtils.defaultIfBlank(
+                BusinessActionStepConfigHelper.firstText(config, "resultMode"), "ROOT"));
+        if (!CALL_API_RESULT_MODES.contains(resultMode)) {
+            throw new BusinessException("CALL_API 结果取值方式仅支持 ROOT、FIRST_ROW");
+        }
+
+        String failureStrategy = StringUtils.upperCase(StringUtils.defaultIfBlank(
+                BusinessActionStepConfigHelper.firstText(config, "failureStrategy"), "THROW"));
+        if (!CALL_API_FAILURE_STRATEGIES.contains(failureStrategy)) {
+            throw new BusinessException("CALL_API 失败处理策略仅支持 THROW、LOG_AND_CONTINUE");
+        }
+        boolean rollbackOnFailure = step == null || !Boolean.FALSE.equals(step.getRollbackOnFailure());
+        if ("LOG_AND_CONTINUE".equals(failureStrategy) == rollbackOnFailure) {
+            throw new BusinessException("CALL_API 失败策略必须与 rollbackOnFailure 保持一致");
+        }
+    }
+
+    private static void validateCallApiMappings(Map<String, Object> config) {
+        Object rawMappings = BusinessActionStepConfigHelper.firstValue(config, "paramMappings", "parameterMappings");
+        if (rawMappings == null) {
+            return;
+        }
+        if (!(rawMappings instanceof Collection<?>)) {
+            throw new BusinessException("CALL_API 参数映射必须是数组");
+        }
+        Set<String> params = new LinkedHashSet<>();
+        for (Object raw : (Collection<?>) rawMappings) {
+            Map<String, Object> mapping = BusinessActionStepConfigHelper.asMap(raw);
+            if (mapping.isEmpty()) {
+                throw new BusinessException("CALL_API 参数映射格式不正确");
+            }
+            String param = BusinessActionStepConfigHelper.firstText(mapping, "param", "name", "target");
+            if (StringUtils.isBlank(param) || !param.matches("^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
+                    || RESERVED_INPUT_KEYS.contains(normalizeKey(param)) || !params.add(param)) {
+                throw new BusinessException("CALL_API 参数名为空、格式非法或重复: " + StringUtils.defaultString(param));
+            }
+            Map<String, Object> normalized = new LinkedHashMap<>(mapping);
+            normalized.put("targetField", param);
+            String source = StringUtils.upperCase(BusinessActionStepConfigHelper.firstText(mapping, "source"));
+            if (source != null) {
+                switch (source) {
+                    case "FORM_FIELD" -> {
+                        normalized.put("sourceType", "form");
+                        normalized.put("sourceField", BusinessActionStepConfigHelper.firstText(mapping, "field"));
+                    }
+                    case "RECORD_FIELD" -> {
+                        normalized.put("sourceType", "record");
+                        normalized.put("sourceField", BusinessActionStepConfigHelper.firstText(mapping, "field"));
+                    }
+                    case "CONTEXT_PATH", "ROUTE_QUERY" -> {
+                        normalized.put("sourceType", "context");
+                        normalized.put("sourceField", BusinessActionStepConfigHelper.firstText(mapping, "path"));
+                    }
+                    case "SYSTEM_CONTEXT", "SYSTEM" -> {
+                        normalized.put("sourceType", "system");
+                        normalized.put("sourceField", BusinessActionStepConfigHelper.firstText(mapping, "path", "field"));
+                    }
+                    case "STATIC", "STATIC_VALUE" -> normalized.put("sourceType", "static");
+                    default -> throw new BusinessException("CALL_API 参数来源不受支持: " + source);
+                }
+            }
+            validateMappings(List.of(normalized));
+        }
+    }
+
+    private static void validateCallApiResults(Map<String, Object> config) {
+        Object rawMappings = BusinessActionStepConfigHelper.firstValue(config, "resultMappings", "responseMappings");
+        if (rawMappings == null) {
+            return;
+        }
+        if (!(rawMappings instanceof Collection<?>)) {
+            throw new BusinessException("CALL_API 结果映射必须是数组");
+        }
+        Set<String> targets = new LinkedHashSet<>();
+        for (Object raw : (Collection<?>) rawMappings) {
+            Map<String, Object> mapping = BusinessActionStepConfigHelper.asMap(raw);
+            if (mapping.isEmpty()) {
+                throw new BusinessException("CALL_API 结果映射格式不正确");
+            }
+            String from = BusinessActionStepConfigHelper.firstText(mapping, "from", "source", "path");
+            if (StringUtils.isNotBlank(from)) {
+                validatePath(from);
+            }
+            String to = BusinessActionStepConfigHelper.firstText(mapping, "to", "targetField", "field");
+            if (StringUtils.isBlank(to) || !SAFE_KEY.matcher(to).matches()
+                    || RESERVED_INPUT_KEYS.contains(normalizeKey(to)) || !targets.add(to)) {
+                throw new BusinessException("CALL_API 结果目标字段为空、格式非法或重复: " + StringUtils.defaultString(to));
+            }
+            String target = StringUtils.upperCase(StringUtils.defaultIfBlank(
+                    BusinessActionStepConfigHelper.firstText(mapping, "target", "targetType"), "STEP_CONTEXT"));
+            if (!CALL_API_TARGETS.contains(target)) {
+                throw new BusinessException("CALL_API 结果目标仅支持 STEP_CONTEXT、FORM_DATA");
+            }
+            String whenMissing = StringUtils.upperCase(StringUtils.defaultIfBlank(
+                    BusinessActionStepConfigHelper.firstText(mapping, "whenMissing"), "KEEP"));
+            if (!Set.of("CLEAR", "KEEP").contains(whenMissing)) {
+                throw new BusinessException("CALL_API 结果缺失处理方式仅支持 CLEAR、KEEP");
             }
         }
     }

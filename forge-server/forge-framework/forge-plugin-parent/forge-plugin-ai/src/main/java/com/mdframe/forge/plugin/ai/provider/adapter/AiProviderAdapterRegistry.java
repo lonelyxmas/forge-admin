@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.ai.provider.adapter;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import java.util.Map;
  * AI 供应商适配器注册表。
  */
 @Component
+@Slf4j
 public class AiProviderAdapterRegistry {
 
     private final Map<String, AiProviderAdapter> adapters;
@@ -65,6 +67,10 @@ public class AiProviderAdapterRegistry {
             throw new BusinessException("AI模型运行参数不能为空");
         }
         // 解密 apiKey：存储层为密文，构造 ChatModel 需要明文
+        log.info("[AiProviderAdapterRegistry] 构建ChatModel, providerId={}, providerName={}, adapterCode={}, baseUrl={}, model={}, temperature={}, maxTokens={}, apiKeyDecrypt={}",
+                provider.getId(), provider.getProviderName(), provider.getAdapterCode(),
+                provider.getBaseUrl(), options.model(), options.temperature(), options.maxTokens(),
+                AiSecretCrypto.isEncrypted(provider.getApiKey()));
         AiProvider decryptedProvider = decryptProvider(provider);
         AiProviderAdapter adapter = getRequired(decryptedProvider.getAdapterCode());
         adapter.validate(decryptedProvider, options);

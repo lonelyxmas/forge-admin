@@ -72,9 +72,14 @@
                 {{ row.title }} · {{ row.selectedCount || 0 }}/{{ row.fieldCount || 0 }} 字段
               </n-tag>
             </div>
-            <n-button size="small" type="primary" secondary @click="$emit('openRelations')">
-              配置关系与级联
-            </n-button>
+            <n-space size="small">
+              <n-button size="small" secondary @click="$emit('openRelations')">
+                配置关系与级联
+              </n-button>
+              <n-button size="small" type="primary" @click="openChildTableSectionWizard">
+                添加子表分区
+              </n-button>
+            </n-space>
           </section>
           <BusinessFormCreateDesigner
             v-if="useLegacyFormCreateDesigner"
@@ -93,11 +98,34 @@
             :object-code="objectCode"
             :object-name="objectName"
             :relations="relations"
+            :actions="actions"
+            :linkage-schema="linkageSchema"
+            :initial-property-tab="initialPropertyTab"
+            :initial-canvas-view="initialCanvasView"
             :extra-more-options="formDesignerMoreOptions"
+            :enable-sections-view="false"
+            :derive-sections-from-layout="true"
             @dirty-change="emit('dirtyChange', $event)"
+            @update:linkage-schema="emit('update:linkageSchema', $event)"
             @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
-          />
+            @configure-bottom-action="handleConfigureBottomAction"
+            @edit-sub-table-container="handleEditSubTableContainer"
+          >
+            <template #detail-settings>
+              <BusinessDetailDesigner
+                v-model="localSchema"
+                v-model:view-schema="localViewSchema"
+                settings-only
+                :object-id="objectId"
+                :model-schema="modelSchema"
+                :fields="fields"
+                :relations="relations"
+                @dirty-change="emit('dirtyChange', $event)"
+                @open-relations="emit('openRelations')"
+              />
+            </template>
+          </ForgeFormDesigner>
         </template>
 
         <section v-else class="relation-object-workbench">
@@ -253,13 +281,29 @@
         <n-empty v-if="!visibleShelfFields.length" description="当前分组没有字段" />
       </div>
     </aside>
+
+    <ChildTableSectionWizard
+      v-model:show="childTableWizardVisible"
+      :relations="relations"
+      :model-refs="pageModelRefs"
+      :model-value="childTableWizardValue"
+      @confirm="handleChildTableSectionConfirm"
+    />
+    <ButtonActionConfig
+      v-model:show="buttonActionConfigVisible"
+      :model-value="buttonActionValue"
+      :application-code="applicationCode"
+      :object-code="objectCode"
+      :pages="buttonTargetPages"
+      @confirm="handleButtonActionConfirm"
+    />
   </div>
 </template>
 
 <script setup>
 import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { saveBusinessObjectDesigner, saveBusinessObjectFormLayout } from '@/api/business-app'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import {
@@ -270,7 +314,16 @@ import {
   syncPageSchemaWithModel,
 } from '@/components/lowcode-builder/page/page-schema'
 import { hasRuntimeVisibilityRules } from '@/components/lowcode-builder/shared/runtime-rules'
+import BusinessDetailDesigner from './BusinessDetailDesigner.vue'
 import BusinessFormCreateDesigner from './BusinessFormCreateDesigner.vue'
+import ButtonActionConfig from './ButtonActionConfig.vue'
+import {
+  removeChildTableSectionConfig,
+  resolveChildTableSectionEditConfig,
+  safeKey,
+  upsertChildTableSectionConfig,
+} from './child-table-section-config'
+import ChildTableSectionWizard from './ChildTableSectionWizard.vue'
 import ForgeFormDesigner from './forge-form-designer/ForgeFormDesigner.vue'
 import { buildAutoFieldAssets } from './form-first/autoFieldRegistry'
 import { extractForgeSchemaFieldRefs, forgeSchemaToFormCreate } from './form-first/forgeToFormCreate'
@@ -289,11 +342,19 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  applicationCode: {
+    type: String,
+    default: '',
+  },
   modelValue: {
     type: Object,
     default: null,
   },
   formDesignerSchema: {
+    type: Object,
+    default: null,
+  },
+  viewSchema: {
     type: Object,
     default: null,
   },
@@ -309,9 +370,25 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  actions: {
+    type: Array,
+    default: () => [],
+  },
+  linkageSchema: {
+    type: Object,
+    default: null,
+  },
+  initialPropertyTab: {
+    type: String,
+    default: 'basic',
+  },
+  initialCanvasView: {
+    type: String,
+    default: 'layout',
+  },
 })
 
-const emit = defineEmits(['update:modelValue', 'update:formDesignerSchema', 'saved', 'fieldsUpdated', 'dirtyChange', 'createField', 'openRelations'])
+const emit = defineEmits(['update:modelValue', 'update:formDesignerSchema', 'update:viewSchema', 'update:linkageSchema', 'saved', 'fieldsUpdated', 'dirtyChange', 'createField', 'openRelations'])
 
 const FORM_FIELD_COMPONENT_KEYS = new Set([
   'input',
@@ -383,6 +460,11 @@ const shelfTab = ref('unused')
 const activeObjectKey = ref('primary')
 const formCreateDesignerRef = ref(null)
 const forgeFormDesignerRef = ref(null)
+const childTableWizardVisible = ref(false)
+const childTableWizardValue = ref(null)
+const buttonActionConfigVisible = ref(false)
+const buttonActionIndex = ref(-1)
+const buttonActionValue = ref({})
 const useLegacyFormCreateDesigner = ref(false)
 const activeFormDesignerRef = computed(() => useLegacyFormCreateDesigner.value ? formCreateDesignerRef.value : forgeFormDesignerRef.value)
 
@@ -396,11 +478,13 @@ const baseModelSchema = computed(() => {
 
 const localSchema = ref(resolveSchema(props.modelValue, resolveDesignModelSchema(props.modelValue, baseModelSchema.value)))
 const localFormDesignerSchema = ref(cloneSchema(props.formDesignerSchema || null))
+const localViewSchema = ref(cloneSchema(props.viewSchema || null))
 let localSchemaDirtyMode = null
 const effectiveModelSchema = computed(() => resolveDesignModelSchema(localSchema.value, baseModelSchema.value))
 const designFields = computed(() => effectiveModelSchema.value.fields || [])
 const editZone = computed(() => localSchema.value.zones?.find(zone => zone.zoneKey === 'edit') || null)
 const pageModelRefs = computed(() => effectiveModelSchema.value.pageModelRefs || [])
+const buttonTargetPages = computed(() => Array.isArray(localSchema.value?.pages) ? localSchema.value.pages : [])
 const primaryModelCode = computed(() => pageModelRefs.value.find(ref => ref?.primary)?.modelCode || '')
 const primaryDesignFields = computed(() => designFields.value.filter(field => !isRelationField(field)))
 const relationFields = computed(() => designFields.value.filter(field => isRelationField(field)))
@@ -532,6 +616,16 @@ watch(
 )
 
 watch(
+  () => props.viewSchema,
+  (value) => {
+    const next = cloneSchema(value || null)
+    if (!isSameSchema(next, localViewSchema.value))
+      localViewSchema.value = next
+  },
+  { deep: true },
+)
+
+watch(
   () => editZone.value?.props?.formOpenMode || editZone.value?.props?.modalType,
   (value) => {
     const nextFormOpenMode = normalizeFormOpenMode(value)
@@ -584,6 +678,15 @@ watch(
       if (dirtyMode !== 'silent')
         emit('dirtyChange', true)
     }
+  },
+  { deep: true },
+)
+
+watch(
+  localViewSchema,
+  (value) => {
+    if (!isSameSchema(value, props.viewSchema))
+      emit('update:viewSchema', cloneSchema(value || null))
   },
   { deep: true },
 )
@@ -1002,6 +1105,127 @@ function handleFormDesignerMoreSelect(key = '') {
     useLegacyFormCreateDesigner.value = !useLegacyFormCreateDesigner.value
 }
 
+function openChildTableSectionWizard() {
+  childTableWizardValue.value = null
+  childTableWizardVisible.value = true
+}
+
+function handleEditChildTableSection(payload = {}) {
+  const section = payload.section || payload
+  childTableWizardValue.value = resolveChildTableSectionEditConfig({
+    pageSchema: localSchema.value,
+    formDesignerSchema: localFormDesignerSchema.value,
+  }, section)
+  childTableWizardVisible.value = true
+}
+
+function handleChildTableSectionConfirm(config) {
+  const result = upsertChildTableSectionConfig({
+    pageSchema: localSchema.value,
+    formDesignerSchema: localFormDesignerSchema.value,
+  }, config)
+  assignLocalSchema(result.pageSchema)
+  // 子表分区由画布容器承载：向导确认后在画布同步 upsert 关联子表容器（按 relationKey 幂等）。
+  localFormDesignerSchema.value = normalizeFormDesignerSchema(upsertSubTableContainer(result.formDesignerSchema, config))
+  emit('dirtyChange', true)
+  nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
+}
+
+// 画布上的关联子表容器被删除（或关系被改）时，同步清理子表分区的运行时配置。
+const subTableContainerRelationKeys = computed(() => collectSubTableRelationKeys(localFormDesignerSchema.value?.components))
+watch(subTableContainerRelationKeys, (nextKeys, prevKeys) => {
+  if (useLegacyFormCreateDesigner.value)
+    return
+  prevKeys.forEach((relationKey) => {
+    if (nextKeys.has(relationKey))
+      return
+    const result = removeChildTableSectionConfig({
+      pageSchema: localSchema.value,
+      formDesignerSchema: localFormDesignerSchema.value,
+    }, { relationKey })
+    if (!result.pageSchema)
+      return
+    assignLocalSchema(result.pageSchema)
+    localFormDesignerSchema.value = normalizeFormDesignerSchema(result.formDesignerSchema)
+    emit('dirtyChange', true)
+  })
+})
+
+function upsertSubTableContainer(formDesignerSchema = {}, config = {}) {
+  const components = Array.isArray(formDesignerSchema.components) ? [...formDesignerSchema.components] : []
+  const relationKey = String(config.relationKey || '').trim()
+  if (!relationKey)
+    return formDesignerSchema
+  const containerId = `subtable_${safeKey(relationKey)}`
+  const nextProps = {
+    header: config.title || '关联子表',
+    relationKey,
+    displayMode: ['inline_grid', 'card_list', 'bottom_sheet'].includes(config.displayMode) ? config.displayMode : 'inline_grid',
+  }
+  const index = components.findIndex(component => component?.componentKey === 'subTable'
+    && (component.id === containerId || String(component.props?.relationKey || '') === relationKey))
+  if (index >= 0) {
+    const current = components[index]
+    components[index] = { ...current, label: nextProps.header, props: { ...(current.props || {}), ...nextProps } }
+  }
+  else {
+    components.push({
+      id: containerId,
+      componentKey: 'subTable',
+      label: nextProps.header,
+      props: nextProps,
+    })
+  }
+  return { ...formDesignerSchema, components }
+}
+
+function collectSubTableRelationKeys(components = [], keys = new Set()) {
+  ;(Array.isArray(components) ? components : []).forEach((component) => {
+    if (!component || typeof component !== 'object')
+      return
+    if (component.componentKey === 'subTable') {
+      const relationKey = String(component.props?.relationKey || '').trim()
+      if (relationKey)
+        keys.add(relationKey)
+    }
+    if (Array.isArray(component.children))
+      collectSubTableRelationKeys(component.children, keys)
+  })
+  return keys
+}
+
+// 画布容器上的「配置」入口：打开子表分区向导编辑对应关系。
+function handleEditSubTableContainer(relationKey = '') {
+  handleEditChildTableSection({ relationKey })
+}
+
+function handleConfigureBottomAction(payload = {}) {
+  const index = Number(payload.index)
+  if (!Number.isInteger(index) || index < 0)
+    return
+  const { __editorKey: _editorKey, ...action } = payload.action || {}
+  buttonActionIndex.value = index
+  buttonActionValue.value = cloneSchema(action)
+  buttonActionConfigVisible.value = true
+}
+
+function handleButtonActionConfirm(action) {
+  const index = buttonActionIndex.value
+  const currentSchema = normalizeFormDesignerSchema(localFormDesignerSchema.value || {})
+  const actions = Array.isArray(currentSchema.bottomBar?.actions) ? currentSchema.bottomBar.actions : []
+  if (index < 0 || index >= actions.length)
+    return
+  localFormDesignerSchema.value = normalizeFormDesignerSchema({
+    ...currentSchema,
+    bottomBar: {
+      ...(currentSchema.bottomBar || {}),
+      actions: actions.map((item, actionIndex) => actionIndex === index ? { ...item, ...action } : item),
+    },
+  })
+  emit('dirtyChange', true)
+  nextTick(() => forgeFormDesignerRef.value?.openPageSections?.())
+}
+
 function updateEditZoneProps(patch = {}) {
   if (!editZone.value)
     return
@@ -1303,6 +1527,7 @@ async function saveLayout() {
         modelSchema: cloneSchema(nextModelSchema || {}),
         pageSchema: cloneSchema(schema || {}),
         formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
+        viewSchema: cloneSchema(localViewSchema.value || {}),
       })
     }
     await saveBusinessObjectFormLayout(props.objectId, {
@@ -1343,6 +1568,7 @@ function syncDesignerDraft() {
   return {
     pageSchema: cloneSchema(schema),
     formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
+    viewSchema: cloneSchema(localViewSchema.value || {}),
     modelSchema: cloneSchema(nextModelSchema || {}),
     fields: cloneSchema(normalizedFields),
     createdFields: cloneSchema(createdFields),

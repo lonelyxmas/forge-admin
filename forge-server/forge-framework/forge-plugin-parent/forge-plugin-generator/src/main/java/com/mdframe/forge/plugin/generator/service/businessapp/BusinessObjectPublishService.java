@@ -20,6 +20,7 @@ import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessTriggerMapper;
+import com.mdframe.forge.plugin.generator.service.MenuRegisterAdapter;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePublishService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
@@ -89,6 +90,17 @@ public class BusinessObjectPublishService {
             "collapse", "elcollapseitem", "collapseitem", "fctable", "table", "fctablegrid",
             "tablegrid", "eldivider", "divider", "fctitle", "title", "text", "html", "space",
             "elalert", "alert", "elbutton", "button", "eltag", "tag", "elimage", "image");
+    /**
+     * 布局容器与纯展示组件：承载分组/关联子表分区等结构语义，不绑定业务字段。
+     * 与前端 formDesignerSchema 的 VIRTUAL_COMPONENT_KEYS 协议对齐；种子数据可能缺省
+     * virtual fieldBinding，发布检查需按组件类型跳过字段绑定校验。
+     */
+    private static final Set<String> FORM_VIRTUAL_COMPONENT_KEYS = Set.of(
+            "card", "elCard", "collapse", "elCollapse", "collapseItem", "elCollapseItem",
+            "fcRow", "row", "col", "tabs", "elTabs", "tabPane", "elTabPane",
+            "fcTable", "table", "fcTableGrid", "tableGrid", "subTable",
+            "elDivider", "divider", "fcTitle", "title", "text", "html", "space",
+            "elAlert", "alert", "elButton", "button", "elTag", "tag", "elImage", "image");
     private static final Set<String> REQUIRED_BLOCK_ITEM_CODES = Set.of(
             "FIELD_EMPTY", "FIELD_LABEL_EMPTY", "FIELD_CODE_EMPTY", "FIELD_DUPLICATE",
             "PAGE_EMPTY", "PAGE_REF_MISSING", "PAGE_SCHEMA_INVALID", "PAGE_TARGET_MISSING",
@@ -116,6 +128,7 @@ public class BusinessObjectPublishService {
     private final BusinessTriggerMapper triggerMapper;
     private final BusinessDocumentConfigService documentConfigService;
     private final BusinessPermissionService permissionService;
+    private final MenuRegisterAdapter menuRegisterAdapter;
     private final ObjectMapper objectMapper;
 
     public BusinessPublishCheckVO publishCheck(Long objectId) {
@@ -233,6 +246,8 @@ public class BusinessObjectPublishService {
         versionDTO.setPublishVersion(publishedConfig.getPublishedVersion());
         versionDTO.setRemark(dto == null ? null : dto.getRemark());
         Long versionId = designVersionService.createVersion(versionDTO);
+        menuRegisterAdapter.syncBusinessObjectActionPermissions(
+                object.getObjectCode(), object.getObjectName(), publishedConfig.getConfigKey());
         enqueueCrossObjectRecompute(context);
         return versionId;
     }
@@ -440,7 +455,13 @@ public class BusinessObjectPublishService {
             putIfNotBlank(item, "routePath", resolveActionRoutePath(actionType, config));
             putIfNotBlank(item, "targetFormKey", text(config.get("targetFormKey")));
             putIfNotBlank(item, "openTarget", StringUtils.defaultIfBlank(text(config.get("openTarget")), "_self"));
-            putIfNotBlank(item, "permissionCode", text(action.get("permission")));
+            String permissionKey = StringUtils.firstNonBlank(
+                    text(action.get("permissionKey")),
+                    text(action.get("permissionCode")),
+                    text(action.get("permission")));
+            putIfNotBlank(item, "permissionKey", permissionKey);
+            putIfNotBlank(item, "permissionCode", permissionKey);
+            putIfNotBlank(item, "permissionStrategy", text(action.get("permissionStrategy")));
             putIfNotBlank(item, "successMessage", text(action.get("successMessage")));
             putIfNotBlank(item, "failureMessage", text(action.get("failureMessage")));
             putIfNotBlank(item, "successBehavior", text(config.get("successBehavior")));
@@ -775,7 +796,7 @@ public class BusinessObjectPublishService {
     private void validateCommandStepCompleteness(List<BusinessActionStepDTO> steps) {
         Set<String> supported = Set.of(
                 "CREATE_RECORD", "UPDATE_FIELD", "ADJUST_NUMBER", "TRANSITION_STATUS", "ASSERT_RECORD", "FOREACH",
-                "DOMAIN_ACTION", "SEND_MESSAGE", "START_FLOW");
+                "DOMAIN_ACTION", "SEND_MESSAGE", "START_FLOW", "CALL_API");
         for (BusinessActionStepDTO step : steps) {
             String type = StringUtils.upperCase(StringUtils.defaultString(step.getStepType()));
             if (!supported.contains(type)) {
@@ -826,6 +847,11 @@ public class BusinessObjectPublishService {
                     throw new BusinessException("逐行步骤没有配置子步骤");
                 }
                 validateCommandStepCompleteness(nested);
+            }
+            if ("CALL_API".equals(type)
+                    && StringUtils.isBlank(text(config.get("sourceKey")))
+                    && StringUtils.isBlank(text(config.get("querySourceKey")))) {
+                throw new BusinessException("CALL_API 步骤缺少 sourceKey");
             }
         }
     }
@@ -1167,6 +1193,10 @@ public class BusinessObjectPublishService {
                 add(items, "FORM_COMPONENT_DUPLICATE", "FORM", BusinessPublishCheckLevel.BLOCK,
                         "表单组件重复", "组件 ID 重复: " + componentId, null, null,
                         "FIX_FORM", "修复表单", "form", 132);
+            }
+            if (FORM_VIRTUAL_COMPONENT_KEYS.contains(componentKey)) {
+                // 布局容器承载分区结构，不绑定业务字段（前端保存会 normalize 为 virtual，种子数据可能缺省）。
+                continue;
             }
             Map<String, Object> binding = mapValue(component.get("fieldBinding"));
             if (!"field".equals(StringUtils.defaultIfBlank(text(binding.get("mode")), "field"))) {

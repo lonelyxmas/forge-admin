@@ -188,6 +188,13 @@ export function createFieldEventRuntime(options = {}) {
         sourceType: rule.sourceType,
         sourceKey: rule.sourceKey,
         params,
+        ...(rule.sourceType === 'DATASET'
+          ? {
+              pageNum: rule.pageNum || 1,
+              pageSize: rule.pageSize || 20,
+              maxRows: rule.maxRows || rule.pageSize || 20,
+            }
+          : {}),
       }, {
         signal: controller?.signal,
         needTip: false,
@@ -321,6 +328,11 @@ function normalizeFieldEventRule(candidate, knownFields) {
   const debounceMs = normalizeDebounce(candidate.debounceMs, trigger)
   if (debounceMs === null)
     return null
+  const pageNum = normalizePageNum(candidate.pageNum)
+  const pageSize = normalizePageSize(candidate.pageSize)
+  const maxRows = candidate.maxRows === undefined || candidate.maxRows === null || candidate.maxRows === ''
+    ? null
+    : normalizePageSize(candidate.maxRows)
   const paramMappings = normalizeParamMappings(candidate.paramMappings, knownFields)
   const resultMappings = normalizeResultMappings(candidate.resultMappings, knownFields)
   if (!paramMappings || !resultMappings || !resultMappings.length)
@@ -334,6 +346,9 @@ function normalizeFieldEventRule(candidate, knownFields) {
     sourceField,
     sourceType,
     sourceKey,
+    pageNum,
+    pageSize,
+    ...(maxRows !== null ? { maxRows } : {}),
     debounceMs,
     skipWhenEmpty: candidate.skipWhenEmpty !== false,
     clearTargetsOnTrigger: candidate.clearTargetsOnTrigger === true,
@@ -344,6 +359,16 @@ function normalizeFieldEventRule(candidate, knownFields) {
     errorMessage: normalizeMessage(candidate.errorMessage, 200) || '查询失败，请重试',
     errorMode,
   }
+}
+
+function normalizePageNum(value) {
+  const number = Number(value)
+  return Number.isInteger(number) && number > 0 ? Math.min(number, 100000) : 1
+}
+
+function normalizePageSize(value) {
+  const number = Number(value)
+  return Number.isInteger(number) && number > 0 ? Math.min(number, 100) : 20
 }
 
 function normalizeParamMappings(mappings, knownFields) {

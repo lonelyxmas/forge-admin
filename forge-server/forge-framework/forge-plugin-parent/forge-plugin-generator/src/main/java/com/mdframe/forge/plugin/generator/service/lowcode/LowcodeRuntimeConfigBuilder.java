@@ -2394,6 +2394,9 @@ public class LowcodeRuntimeConfigBuilder {
             putIfNotBlank(action, "targetFormKey", text(source.get("targetFormKey")));
             putIfNotBlank(action, "openTarget", StringUtils.defaultIfBlank(text(source.get("openTarget")), "_self"));
             putIfNotBlank(action, "permissionCode", text(source.get("permissionCode")));
+            putIfNotBlank(action, "permissionKey", StringUtils.firstNonBlank(
+                    text(source.get("permissionKey")), text(source.get("permissionCode"))));
+            putIfNotBlank(action, "permissionStrategy", text(source.get("permissionStrategy")));
             putIfNotBlank(action, "confirmText", text(source.get("confirmText")));
             putIfNotBlank(action, "displayCondition", text(source.get("displayCondition")));
             putIfNotBlank(action, "successMessage", text(source.get("successMessage")));

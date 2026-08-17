@@ -91,6 +91,7 @@
           :row-action-visible="isChildRowActionVisible"
           :row-action-loading="isChildRowActionLoading"
           @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
         />
       </div>
       <footer class="form-only-footer">
@@ -372,6 +373,7 @@
                   :row-action-visible="isChildRowActionVisible"
                   :row-action-loading="isChildRowActionLoading"
                   @row-action="handleChildRowAction"
+                  @toolbar-action="handleChildToolbarAction"
                 />
                 <AiCrudRowExpand
                   v-if="showDetailPanels"
@@ -425,6 +427,7 @@
                 :row-action-visible="isChildRowActionVisible"
                 :row-action-loading="isChildRowActionLoading"
                 @row-action="handleChildRowAction"
+                @toolbar-action="handleChildToolbarAction"
               />
               <AiCrudRowExpand
                 v-if="showDetailPanels"
@@ -507,6 +510,7 @@
             :row-action-visible="isChildRowActionVisible"
             :row-action-loading="isChildRowActionLoading"
             @row-action="handleChildRowAction"
+            @toolbar-action="handleChildToolbarAction"
           />
           <AiCrudRowExpand
             v-if="showDetailPanels"
@@ -561,6 +565,7 @@
           :row-action-visible="isChildRowActionVisible"
           :row-action-loading="isChildRowActionLoading"
           @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
         />
         <AiCrudRowExpand
           v-if="showDetailPanels"
@@ -633,6 +638,7 @@
           :row-action-visible="isChildRowActionVisible"
           :row-action-loading="isChildRowActionLoading"
           @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
         />
 
         <!-- 抽屉底部按钮 -->
@@ -683,6 +689,45 @@
             取消
           </n-button>
           <n-button type="primary" :loading="commandActionSubmitting" @click="submitCommandAction">
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 子表工具栏动作弹窗（登记提货/登记退货） -->
+    <n-modal
+      v-model:show="childToolbarActionModalVisible"
+      :title="childToolbarActionTitle"
+      preset="card"
+      style="width: min(520px, calc(100vw - 32px))"
+      :mask-closable="false"
+    >
+      <n-form label-placement="left" :show-feedback="true">
+        <n-form-item label="商品" required>
+          <n-select
+            v-model:value="childToolbarItemSelected"
+            :options="childToolbarItemOptions"
+            placeholder="请选择商品"
+            clearable
+            filterable
+          />
+        </n-form-item>
+        <n-form-item :label="childToolbarQuantityLabel" required>
+          <n-input-number
+            v-model:value="childToolbarQuantity"
+            :min="1"
+            :max="childToolbarQuantityMax"
+            style="width: 100%"
+          />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button :disabled="childToolbarActionSubmitting" @click="closeChildToolbarActionModal">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="childToolbarActionSubmitting" @click="submitChildToolbarAction">
             确定
           </n-button>
         </n-space>
@@ -779,6 +824,7 @@ import {
   buildBusinessActionExecutePayload,
   buildBusinessActionInitialData,
   buildBusinessActionInputFormSchema,
+  buildChildRowActionContext,
   createBusinessActionIdempotencyKey,
   resolveBusinessActionAttempt,
   unwrapBusinessActionResult,
@@ -875,6 +921,11 @@ const commandActionModalVisible = ref(false)
 const commandActionSubmitting = ref(false)
 const commandActionFormData = ref({})
 const commandActionContext = ref(null)
+const childToolbarActionModalVisible = ref(false)
+const childToolbarActionSubmitting = ref(false)
+const childToolbarActionContext = ref(null)
+const childToolbarItemSelected = ref(null)
+const childToolbarQuantity = ref(1)
 const offlineFormRuntime = ref(null)
 const offlineDraftId = ref('')
 const offlineBaseRecordVersion = ref('')
@@ -894,6 +945,34 @@ const commandActionFormContext = computed(() => ({
   action: commandActionContext.value?.action || null,
   mode: 'businessAction',
 }))
+const childToolbarActionTitle = computed(() =>
+  childToolbarActionContext.value?.action?.label
+  || childToolbarActionContext.value?.action?.actionName
+  || '业务操作',
+)
+const childToolbarQuantityLabel = computed(() => {
+  const actionCode = childToolbarActionContext.value?.action?.actionCode
+  return actionCode === 'record_return' ? '退货数量' : '提货数量'
+})
+const childToolbarItemOptions = computed(() => {
+  const items = childFormData.value?.presale_items || []
+  return items
+    .filter(item => item?.id)
+    .map(item => ({
+      label: `${item.productName || '商品'}（待提: ${item.pendingQuantity ?? 0}，已提: ${item.pickedQuantity ?? 0}）`,
+      value: item.id,
+    }))
+})
+const childToolbarQuantityMax = computed(() => {
+  const items = childFormData.value?.presale_items || []
+  const selectedItem = items.find(item => item?.id === childToolbarItemSelected.value)
+  if (!selectedItem)
+    return 999999
+  const actionCode = childToolbarActionContext.value?.action?.actionCode
+  if (actionCode === 'record_return')
+    return selectedItem.pickedQuantity ?? 0
+  return selectedItem.pendingQuantity ?? 0
+})
 const formulaRuntimeTimers = new Map()
 const formulaRuntimeSequences = new Map()
 let inlineFormTabSequence = 0
@@ -1314,6 +1393,69 @@ async function handleChildRowAction({ action, row, executionContext } = {}) {
     recordId: executionContext.childRecordId,
     childActionContext: executionContext,
   }, row)
+}
+
+async function handleChildToolbarAction({ action, child } = {}) {
+  if (!action)
+    return
+  const parentRecordId = formData.value?.id
+  if (!parentRecordId) {
+    window.$message?.warning('请先保存主记录')
+    return
+  }
+  const items = childFormData.value?.presale_items || []
+  const persistedItems = items.filter(item => item?.id)
+  if (!persistedItems.length) {
+    window.$message?.warning('请先添加并保存商品明细')
+    return
+  }
+  childToolbarActionContext.value = { action, child }
+  childToolbarItemSelected.value = null
+  childToolbarQuantity.value = 1
+  childToolbarActionModalVisible.value = true
+}
+
+async function submitChildToolbarAction() {
+  const context = childToolbarActionContext.value
+  if (!context?.action)
+    return
+  const selectedItem = (childFormData.value?.presale_items || [])
+    .find(item => item?.id === childToolbarItemSelected.value)
+  if (!selectedItem) {
+    window.$message?.warning('请选择商品')
+    return
+  }
+  const executionContext = buildChildRowActionContext({
+    child: { relationKey: context.action.relationKey || 'presale_items' },
+    parentRecord: formData.value,
+    childRecord: selectedItem,
+  })
+  if (!executionContext.persisted) {
+    window.$message?.warning('记录未保存，无法执行操作')
+    return
+  }
+  childToolbarActionModalVisible.value = false
+  childToolbarActionSubmitting.value = true
+  try {
+    await executeCommandAction(
+      { ...context.action, childActionContext: executionContext, recordId: executionContext.childRecordId },
+      selectedItem,
+      { quantity: childToolbarQuantity.value },
+      { fromModal: true },
+    )
+  }
+  finally {
+    childToolbarActionSubmitting.value = false
+  }
+}
+
+function closeChildToolbarActionModal() {
+  if (childToolbarActionSubmitting.value)
+    return
+  childToolbarActionModalVisible.value = false
+  childToolbarActionContext.value = null
+  childToolbarItemSelected.value = null
+  childToolbarQuantity.value = 1
 }
 
 function handleConfiguredActionSuccess(action = {}) {

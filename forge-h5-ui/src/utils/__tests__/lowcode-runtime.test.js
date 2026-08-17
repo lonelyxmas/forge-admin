@@ -2,17 +2,35 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyEventMappings,
+  applyFieldLinkageChange,
   buildEventClearPatch,
   buildEventParams,
   buildDefaultData,
   ensureChildRows,
   normalizeScanContext,
+  normalizeRuntimeFlowInteraction,
   normalizeDesignerField,
   normalizeField,
   normalizeMainFields,
+  hasComposedRuntimePageSchema,
+  filterFieldOptionsByLinkage,
+  parseRuntimeConfig,
+  hasActionPermission,
+  resolveActionPermission,
+  resolveBottomBarActions,
   resolveFieldControl,
+  resolveFieldLinkageContext,
+  resolveFieldLinkages,
   resolveChildRows,
   resolveChildTitle,
+  resolvePageSectionChild,
+  resolvePageSectionFields,
+  isPageSectionReadonly,
+  mergeFlowActionsIntoBottomBar,
+  resolveVisiblePageSections,
+  resolveRuntimeFormDesignerSchema,
+  resolveRuntimePageZones,
+  resolveRuntimeZoneFormDesignerSchema,
   syncChildRowAliases,
   shouldSkipFieldEvent,
 } from '../lowcode-runtime.js'
@@ -71,6 +89,35 @@ test('field event skips blank sources and clears only governed targets', () => {
   assert.equal(shouldSkipFieldEvent(rule, { mobile: '  ' }), true)
   assert.equal(shouldSkipFieldEvent(rule, { mobile: '13800000000' }), false)
   assert.deepEqual(buildEventClearPatch(rule), { memberId: '' })
+})
+
+test('field linkage clears governed targets and filters linked dictionary options', () => {
+  const schema = {
+    settings: {
+      governance: {
+        fieldLinkages: [{
+          ruleId: 'province_city',
+          type: 'linkedDict',
+          sourceField: 'province',
+          targetField: 'city',
+          clearOnSourceChange: true,
+        }],
+      },
+    },
+  }
+  const formData = { province: '150000', city: '150100' }
+  const rules = resolveFieldLinkages(schema, {})
+  const patch = applyFieldLinkageChange(rules, 'province', formData)
+  const context = resolveFieldLinkageContext(rules, 'city', formData)
+  const options = [
+    { label: '呼和浩特', value: '150100', parentValue: '150000' },
+    { label: '海淀区', value: '110108', parentValue: '110000' },
+  ]
+
+  assert.deepEqual(patch, { city: '' })
+  assert.equal(formData.city, '')
+  assert.equal(context.sourceValue, '150000')
+  assert.deepEqual(filterFieldOptionsByLinkage(options, context).map(option => option.value), ['150100'])
 })
 
 test('scan context is length-bounded and contains only declared values', () => {
@@ -180,4 +227,154 @@ test('child rows and title support relation keys and Chinese relation labels', (
   assert.deepEqual(childData.ps_presale_operation_log, [{ id: 1 }])
   ensureChildRows({ modelCode: 'ps_presale_order_item', relationKey: 'presale_items' }, childData).push({ id: 2 })
   assert.deepEqual(childData.ps_presale_order_item, [{ id: 2 }])
+})
+
+test('page sections preserve configured field order and apply isolated overrides', () => {
+  const fields = [
+    { field: 'memberPhone', label: '会员手机号', type: 'input', props: { clearable: true } },
+    { field: 'payMethod', label: '收款方式', type: 'dictSelect', props: { dictType: 'pay_method' } },
+  ]
+  const section = {
+    fields: ['payMethod', 'missingField', 'memberPhone'],
+    fieldOverrides: {
+      payMethod: { componentKey: 'pillSelect', props: { clearable: false } },
+    },
+  }
+
+  const resolved = resolvePageSectionFields(section, fields)
+
+  assert.deepEqual(resolved.map(field => field.field), ['payMethod', 'memberPhone'])
+  assert.equal(resolved[0].type, 'pillSelect')
+  assert.deepEqual(resolved[0].props, { dictType: 'pay_method', clearable: false })
+  assert.equal(fields[1].type, 'dictSelect')
+})
+
+test('page sections and bottom actions use current mode and governed conditions', () => {
+  const sections = [
+    { sectionId: 'main', sectionType: 'card' },
+    { sectionId: 'logs', sectionType: 'child_table', visibleInModes: ['edit', 'detail'] },
+  ]
+  const bottomBar = {
+    actions: [
+      { type: 'reset', label: '清空' },
+      { type: 'action', label: '提交', displayCondition: 'status == DRAFT' },
+      { type: 'action', label: '非法条件保持兼容', displayCondition: 'status.includes(DRAFT)' },
+      { type: 'cancel', label: '隐藏', visible: false },
+    ],
+  }
+
+  assert.deepEqual(resolveVisiblePageSections(sections, 'create').map(section => section.sectionId), ['main'])
+  assert.deepEqual(resolveVisiblePageSections(sections, 'detail').map(section => section.sectionId), ['main', 'logs'])
+  assert.deepEqual(resolveBottomBarActions(bottomBar, { status: 'DRAFT' }).map(action => action.label), ['清空', '提交', '非法条件保持兼容'])
+  assert.deepEqual(resolveBottomBarActions(bottomBar, { status: 'SUBMITTED' }).map(action => action.label), ['清空', '非法条件保持兼容'])
+  assert.deepEqual(resolveBottomBarActions(bottomBar, { status: 'DRAFT' }, 'edit').map(action => action.label), ['提交', '非法条件保持兼容'])
+})
+
+test('button permissions support hide, disable and wildcard compatibility', () => {
+  const hidden = { type: 'action', label: '提交', permissionKey: 'order:submit', permissionStrategy: 'hide' }
+  const disabled = { type: 'action', label: '删除', permissionCode: 'order:delete', permissionStrategy: 'disable' }
+  const allowed = { type: 'action', label: '查看', permissionKey: 'order:view' }
+
+  assert.equal(hasActionPermission(hidden, ['order:submit']), true)
+  assert.equal(hasActionPermission(hidden, ['order:*']), true)
+  assert.equal(hasActionPermission(hidden, ['*:*:*']), true)
+  assert.equal(hasActionPermission(hidden, ['**']), true)
+  assert.equal(resolveActionPermission(hidden, []), null)
+  assert.deepEqual(resolveActionPermission(disabled, []), { ...disabled, disabled: true, permissionDenied: true })
+  assert.equal(resolveActionPermission(allowed, ['order:view']).permissionDenied, false)
+
+  const actions = resolveBottomBarActions({ actions: [hidden, disabled, allowed] }, {}, 'edit', ['order:view'])
+  assert.deepEqual(actions.map(action => [action.label, action.disabled]), [['删除', true], ['查看', false]])
+})
+
+test('page section resolves child only by configured relation key', () => {
+  const children = [
+    { key: 'items', relationKey: 'presale_items', modelCode: 'ps_presale_order_item' },
+    { key: 'logs', relationKey: 'operation_logs', modelCode: 'ps_presale_operation_log' },
+  ]
+
+  assert.equal(resolvePageSectionChild({ relationKey: 'operation_logs' }, children)?.modelCode, 'ps_presale_operation_log')
+  assert.equal(resolvePageSectionChild({ relationKey: 'missing' }, children), null)
+})
+
+test('flow interaction stays inert by default and applies node section policy when configured', () => {
+  const empty = normalizeRuntimeFlowInteraction()
+  assert.deepEqual(empty.approvalActions, [])
+  assert.equal(empty.timeline.enabled, false)
+  assert.deepEqual(mergeFlowActionsIntoBottomBar({ actions: [{ type: 'save', label: '保存' }] }, empty).actions, [
+    { type: 'save', label: '保存' },
+  ])
+
+  const flow = normalizeRuntimeFlowInteraction({
+    approvalActions: [{ actionId: 'approve', operation: 'approve', label: '同意' }],
+    nodePermissions: [{ nodeKey: 'manager', visibleSectionIds: ['base'], readonlySectionIds: ['base'] }],
+  })
+  const sections = [{ sectionId: 'base' }, { sectionId: 'amount' }]
+
+  assert.deepEqual(resolveVisiblePageSections(sections, 'detail', flow, 'manager').map(item => item.sectionId), ['base'])
+  assert.equal(isPageSectionReadonly(sections[0], flow, 'manager'), true)
+  assert.equal(mergeFlowActionsIntoBottomBar({}, flow).actions[0].type, 'flow_action')
+})
+
+test('pageSchema takes priority and extracts the mode-specific form zone', () => {
+  const config = parseRuntimeConfig({
+    options: {
+      formDesignerSchema: { components: [{ label: '旧表单', fieldBinding: { fieldCode: 'legacy' } }] },
+    },
+    pageSchema: {
+      zones: [
+        {
+          zoneId: 'main_form',
+          zoneType: 'form',
+          props: {
+            formDesignerSchema: {
+              components: [{ label: '新表单', fieldBinding: { fieldCode: 'current' } }],
+            },
+          },
+        },
+        { zoneId: 'actions', zoneType: 'actions', props: { actions: [{ type: 'save' }] } },
+      ],
+    },
+  })
+
+  assert.equal(hasComposedRuntimePageSchema(config), true)
+  assert.deepEqual(resolveRuntimePageZones(config, 'create').map(zone => zone.zoneId), ['main_form', 'actions'])
+  assert.deepEqual(normalizeMainFields(config, resolveRuntimeFormDesignerSchema(config, 'create')).map(field => field.field), ['current'])
+})
+
+test('legacy pageSchema edit zone remains compatible with the existing options fallback', () => {
+  const config = parseRuntimeConfig({
+    options: { formDesignerSchema: { components: [{ label: '旧表单', fieldBinding: { fieldCode: 'legacy' } }] } },
+    pageSchema: {
+      zones: [{ zoneKey: 'edit', componentKey: 'edit-form', props: {
+        formDesignerSchema: { components: [{ label: '页面表单', fieldBinding: { fieldCode: 'page' } }] },
+      } }],
+    },
+  })
+
+  assert.equal(hasComposedRuntimePageSchema(config), false)
+  assert.deepEqual(normalizeMainFields(config, resolveRuntimeFormDesignerSchema(config, 'edit')).map(field => field.field), ['page'])
+})
+
+test('runtime page normalization is idempotent and accepts serialized form schemas', () => {
+  const config = parseRuntimeConfig({
+    options: {
+      pageSchema: JSON.stringify({
+        zones: [{
+          zoneId: 'main',
+          zoneType: 'form',
+          props: {
+            formDesignerSchema: JSON.stringify({
+              components: [{ label: '名称', fieldBinding: { fieldCode: 'name' } }],
+            }),
+          },
+        }],
+      }),
+    },
+  })
+  const [zone] = resolveRuntimePageZones(config, 'create')
+
+  assert.equal(hasComposedRuntimePageSchema(config), true)
+  assert.equal(resolveRuntimeZoneFormDesignerSchema(zone).components[0].fieldBinding.fieldCode, 'name')
+  assert.deepEqual(parseRuntimeConfig(null).pageSchema.zones, [])
 })

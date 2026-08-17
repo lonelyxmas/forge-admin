@@ -246,6 +246,50 @@ class BusinessActionCommandPolicyTest {
                 action(Map.of("executionMode", "LOCAL_TRANSACTION")), List.of(gate)));
     }
 
+    @Test
+    @DisplayName("accepts governed external API steps in orchestration mode")
+    void acceptsGovernedCallApiStep() {
+        BusinessActionStepDTO callApi = step("CALL_API", Map.of(
+                "sourceType", "EXTERNAL_API",
+                "sourceKey", "inventory/deduct",
+                "paramMappings", List.of(Map.of(
+                        "param", "sku",
+                        "sourceType", "record",
+                        "sourceField", "skuCode")),
+                "resultMappings", List.of(Map.of(
+                        "from", "resultCode",
+                        "to", "inventoryResult",
+                        "target", "STEP_CONTEXT")),
+                "failureStrategy", "THROW"));
+
+        BusinessActionCommandPolicy.validateDefinition(
+                action(Map.of("executionMode", "ORCHESTRATION")), List.of(callApi));
+    }
+
+    @Test
+    @DisplayName("rejects datasets arbitrary URLs and incoherent failure policy for CALL_API")
+    void rejectsUnsafeCallApiDefinitions() {
+        BusinessActionStepDTO dataset = step("CALL_API", Map.of(
+                "sourceType", "DATASET",
+                "sourceKey", "inventory_dataset"));
+        BusinessActionStepDTO arbitraryUrl = step("CALL_API", Map.of(
+                "sourceType", "EXTERNAL_API",
+                "sourceKey", "inventory/deduct",
+                "url", "https://example.invalid"));
+        BusinessActionStepDTO incoherentFailure = step("CALL_API", Map.of(
+                "sourceType", "EXTERNAL_API",
+                "sourceKey", "inventory/deduct",
+                "failureStrategy", "LOG_AND_CONTINUE"));
+        incoherentFailure.setRollbackOnFailure(true);
+
+        assertThrows(BusinessException.class, () -> BusinessActionCommandPolicy.validateDefinition(
+                action(Map.of("executionMode", "ORCHESTRATION")), List.of(dataset)));
+        assertThrows(BusinessException.class, () -> BusinessActionCommandPolicy.validateDefinition(
+                action(Map.of("executionMode", "ORCHESTRATION")), List.of(arbitraryUrl)));
+        assertThrows(BusinessException.class, () -> BusinessActionCommandPolicy.validateDefinition(
+                action(Map.of("executionMode", "ORCHESTRATION")), List.of(incoherentFailure)));
+    }
+
     private BusinessActionStepDTO step(String type, Map<String, Object> config) {
         BusinessActionStepDTO step = new BusinessActionStepDTO();
         step.setStepType(type);

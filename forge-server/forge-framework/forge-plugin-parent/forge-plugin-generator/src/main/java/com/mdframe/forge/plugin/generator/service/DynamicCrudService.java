@@ -1276,6 +1276,7 @@ public class DynamicCrudService {
                 primaryData,
                 primaryKeyColumn(primaryKey),
                 primaryKeyAutoIncrement(primaryKey));
+        putPrimaryKeyAlias(mainPayload, primaryKey, mainId);
         Map<String, Object> currentMainRecord = null;
         Map<String, Object> childrenPayload = extractChildrenPayload(data);
         boolean childrenChanged = false;
@@ -1737,6 +1738,7 @@ public class DynamicCrudService {
                 primaryData,
                 primaryKeyColumn(primaryKey),
                 primaryKeyAutoIncrement(primaryKey));
+        putPrimaryKeyAlias(data, primaryKey, mainId);
         boolean childrenChanged = false;
         for (RuntimeChildRelation relation : joinContext.childRelations()) {
             Map<String, Object> childData = childDataMap.get(relation.modelCode());

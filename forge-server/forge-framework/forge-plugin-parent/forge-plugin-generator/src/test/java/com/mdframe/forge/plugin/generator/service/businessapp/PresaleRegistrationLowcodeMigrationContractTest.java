@@ -17,6 +17,7 @@ class PresaleRegistrationLowcodeMigrationContractTest {
     private static final String MIGRATION = "V1.0.105__seed_presale_registration_lowcode_app.sql";
     private static final String FIX_MIGRATION = "V1.0.106__fix_presale_lowcode_runtime_schema.sql";
     private static final String MOBILE_VISIBILITY_FIX_MIGRATION = "V1.0.108__fix_presale_mobile_form_visibility.sql";
+    private static final String H5_PAGE_SECTIONS_MIGRATION = "V1.0.109__add_presale_h5_page_sections.sql";
 
     @Test
     @DisplayName("seeds runtime tables, models, objects and master-detail relations")
@@ -159,6 +160,29 @@ class PresaleRegistrationLowcodeMigrationContractTest {
         assertFalse(sql.toLowerCase().contains("tenant_id = 0"));
     }
 
+    @Test
+    @DisplayName("adds H5 page sections, pill payment and action bottom bar to all published snapshots")
+    void addsH5PageSectionsToPublishedRuntimeSnapshots() throws IOException {
+        String sql = h5PageSectionsMigrationSql();
+
+        assertTrue(sql.contains("'sectionId', 'guide_info'"));
+        assertTrue(sql.contains("'sectionId', 'presale_items'"));
+        assertTrue(sql.contains("'displayMode', 'inline_grid'"));
+        assertTrue(sql.contains("'sectionId', 'operation_logs'"));
+        assertTrue(sql.contains("'displayMode', 'bottom_sheet'"));
+        assertTrue(sql.contains("'componentKey', 'pillSelect'"));
+        assertTrue(sql.contains("'actionCode', 'submit_presale'"));
+        assertTrue(sql.contains("'displayCondition', 'status == DRAFT'"));
+        assertTrue(sql.contains("'$.formDesignerSchema.pageSections'"));
+        assertTrue(sql.contains("'$.zones[2].props.formDesignerSchema.pageSections'"));
+        assertTrue(sql.contains("UPDATE ai_crud_config"));
+        assertTrue(sql.contains("UPDATE ai_business_object"));
+        assertTrue(sql.contains("UPDATE ai_business_object_design_version"));
+        assertTrue(sql.contains("UPDATE ai_crud_config_version"));
+        assertFalse(sql.contains("${"));
+        assertFalse(sql.toLowerCase().contains("tenant_id = 0"));
+    }
+
     private String migrationSql() throws IOException {
         Path migration = locateMigration();
         assertTrue(Files.isRegularFile(migration), "找不到预售登记 Flyway: " + migration);
@@ -197,6 +221,12 @@ class PresaleRegistrationLowcodeMigrationContractTest {
     private String mobileVisibilityRepairMigrationSql() throws IOException {
         Path migration = locateMigration().resolveSibling(MOBILE_VISIBILITY_FIX_MIGRATION);
         assertTrue(Files.isRegularFile(migration), "找不到预售登记移动端修复 Flyway: " + migration);
+        return Files.readString(migration, StandardCharsets.UTF_8);
+    }
+
+    private String h5PageSectionsMigrationSql() throws IOException {
+        Path migration = locateMigration().resolveSibling(H5_PAGE_SECTIONS_MIGRATION);
+        assertTrue(Files.isRegularFile(migration), "找不到预售登记 H5 分区 Flyway: " + migration);
         return Files.readString(migration, StandardCharsets.UTF_8);
     }
 }

@@ -21,6 +21,14 @@ describe('business action designer protocol', () => {
     expect(canUseBusinessActionStep(BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION, 'START_FLOW')).toBe(false)
     expect(canUseBusinessActionStep(BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION, 'SEND_MESSAGE')).toBe(false)
     expect(canUseBusinessActionStep(BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION, 'DOMAIN_ACTION')).toBe(false)
+    expect(canUseBusinessActionStep(BUSINESS_ACTION_EXECUTION_MODE.LOCAL_TRANSACTION, 'CALL_API')).toBe(false)
+  })
+
+  it('forces actions containing CALL_API into orchestration mode', () => {
+    expect(resolveBusinessActionExecutionMode({
+      executionMode: 'LOCAL_TRANSACTION',
+      steps: [{ stepType: 'CALL_API', stepConfig: {} }],
+    })).toBe('ORCHESTRATION')
   })
 
   it('keeps legacy actions with external steps in orchestration mode', () => {
