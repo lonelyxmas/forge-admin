@@ -506,8 +506,10 @@ public class BusinessFlowService {
     }
 
     /**
-     * 兼容业务对象编码唯一化前保存的页面引用。页面仍携带稳定 configKey/objectId 时，
-     * 即使调用方传入旧 objectCode，也应解析到当前应用的规范对象编码。
+     * 兼容业务对象编码唯一化前保存的页面引用。页面仍携带稳定 configKey 时，
+     * 即使页面上的 objectCode 是旧编码，也应通过 configKey 解析到规范编码；
+     * 解析结果必须与请求对象是同一个对象，否则会把应用内其它业务对象的
+     * 页面表单误纳入当前对象的候选任务表单。
      */
     private boolean matchesApplicationObject(Long applicationId,
                                              String requestedObjectCode,
@@ -525,8 +527,7 @@ public class BusinessFlowService {
         }
         AiBusinessObject canonical = businessObjectMapper.selectByConfigKey(resolveTenantId(), configKey);
         return canonical != null
-                && StringUtils.equals(canonical.getObjectCode(), pageObjectCode)
-                && !StringUtils.equals(canonical.getObjectCode(), requestedObjectCode);
+                && StringUtils.equals(canonical.getObjectCode(), requestedObjectCode);
     }
 
     private String resolveDefaultPageFormAssetId(JSONObject pageNode,

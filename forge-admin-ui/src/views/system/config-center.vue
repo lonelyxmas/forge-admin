@@ -101,6 +101,47 @@
                 </div>
                 <n-input-number v-model:value="configForms.login.rememberMeDays" :min="1" :max="365" class="config-input" />
               </div>
+              <div class="config-item">
+                <div class="config-copy">
+                  <div class="config-label">
+                    <i class="i-material-symbols:star-outline" />
+                    Gitee 社区体验登录
+                  </div>
+                  <div class="config-help">
+                    打开后，Gitee 登录会校验仓库 Star，新用户进入隔离体验租户。关闭后仍可用账号密码登录。
+                  </div>
+                </div>
+                <n-switch v-model:value="configForms.login.giteeCommunityEnabled" />
+              </div>
+              <div v-if="configForms.login.giteeCommunityEnabled" class="config-item">
+                <div class="config-copy">
+                  <div class="config-label">
+                    <i class="i-material-symbols:verified-outline" />
+                    要求仓库 Star
+                  </div>
+                  <div class="config-help">
+                    未点 Star 的 Gitee 账号不能登录，也不会自动建号。
+                  </div>
+                </div>
+                <n-switch v-model:value="configForms.login.giteeCommunityRequireStar" />
+              </div>
+              <div v-if="configForms.login.giteeCommunityEnabled" class="config-item">
+                <div class="config-label">
+                  <i class="i-material-symbols:link" />
+                  仓库地址
+                </div>
+                <n-input v-model:value="configForms.login.giteeCommunityRepoUrl" placeholder="https://gitee.com/ForgeLab/forge-admin" class="config-input" />
+              </div>
+              <div v-if="configForms.login.giteeCommunityEnabled" class="config-item">
+                <div class="config-label">
+                  <i class="i-material-symbols:folder-outline" />
+                  仓库空间 / 仓库名
+                </div>
+                <div class="config-input-row">
+                  <n-input v-model:value="configForms.login.giteeCommunityOwner" placeholder="ForgeLab" />
+                  <n-input v-model:value="configForms.login.giteeCommunityRepo" placeholder="forge-admin" />
+                </div>
+              </div>
             </div>
             <div class="section-footer">
               <NButton type="primary" :loading="saving.login" @click="saveConfig('login')">
@@ -782,6 +823,12 @@ const configForms = ref({
     enableRegister: false,
     enableRememberMe: true,
     rememberMeDays: 30,
+    giteeCommunityEnabled: false,
+    giteeCommunityRequireStar: true,
+    giteeCommunityOwner: 'ForgeLab',
+    giteeCommunityRepo: 'forge-admin',
+    giteeCommunityRepoUrl: 'https://gitee.com/ForgeLab/forge-admin',
+    giteeCommunityTenantId: 9001,
   },
   watermark: {
     enable: true,
@@ -879,7 +926,9 @@ async function getConfig(groupCode) {
         res = await getConfigByGroup(groupCode)
     }
     if (res.code === 200) {
-      configForms.value[groupCode] = res.data
+      configForms.value[groupCode] = groupCode === 'login'
+        ? { ...configForms.value.login, ...res.data }
+        : res.data
     }
   }
   catch {
@@ -1182,6 +1231,12 @@ onMounted(async () => {
 
 .config-input {
   width: 160px;
+}
+
+.config-input-row {
+  display: flex;
+  gap: 8px;
+  min-width: 280px;
 }
 
 .config-input-full {

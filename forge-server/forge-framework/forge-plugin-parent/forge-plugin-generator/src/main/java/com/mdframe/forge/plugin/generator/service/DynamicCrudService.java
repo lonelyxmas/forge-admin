@@ -166,6 +166,9 @@ public class DynamicCrudService {
         Map<String, Object> searchParams = (query != null) ? query.getSearchParams() : null;
         searchParams = expandIncludeChildrenParams(searchParams, config, tableName, allowedSearchFields, searchTypeMap);
 
+        // 4.1 将显式传入的 searchParams 字段扩展为允许搜索字段（支持选择器弹窗过滤等场景）
+        expandAllowedSearchFieldsFromParams(searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
         if (joinContext != null && requiresJoinedPageQuery(config, pageQuery, searchParams, joinContext)) {
             DynamicCrudRepository.SqlCondition dataScopeCondition = buildDataScopeCondition(config, tableName, "t0");
@@ -1941,6 +1944,11 @@ public class DynamicCrudService {
             }
             addFieldAlias(fields, field.getField());
             addFieldAlias(fields, field.getColumnName());
+            // 引用字段选中时同步提交显示名称，伴随列存在时放行写入，列表/详情回显零关联查询。
+            if (field.isSelectionLabelField() && tableColumns.contains(field.referenceDisplayColumnName())) {
+                addFieldAlias(fields, field.referenceDisplayFieldName());
+                addFieldAlias(fields, field.referenceDisplayColumnName());
+            }
         }
     }
 
@@ -3062,6 +3070,48 @@ public class DynamicCrudService {
     }
 
     /**
+     * 批量删除：一条 SQL 处理多条记录，避免逐条网络往返
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int batchDeleteByIds(String configKey, List<?> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        AiCrudConfig config = getConfig(configKey);
+        assertRuntimeWritable(config);
+        try (LowcodeRuntimeDataSourceContextHolder.Scope ignored = useRuntimeContext(config)) {
+            String tableName = config.getTableName();
+            LowcodePrimaryKeyStrategy primaryKey = currentPrimaryKey();
+            String pkColumn = primaryKeyColumn(primaryKey);
+            DynamicCrudRepository.SqlCondition dataScopeCondition = buildWriteDataScopeCondition(config, tableName, null);
+
+            // 一次查询所有待删除记录，验证权限与数据存在性
+            List<Map<String, Object>> beforeRecords = repository.selectByIds(tableName, pkColumn, ids, dataScopeCondition);
+            if (beforeRecords.isEmpty()) {
+                throw new BusinessException("无权限删除该数据或数据不存在");
+            }
+
+            // 提取实际查到的 ID，便于比对差异
+            List<Object> foundIds = beforeRecords.stream()
+                    .map(r -> r.get(pkColumn))
+                    .filter(Objects::nonNull)
+                    .toList();
+            if (foundIds.size() < ids.size()) {
+                throw new BusinessException("部分数据无权限删除或不存在");
+            }
+
+            boolean logicDelete = repository.hasDelFlag(tableName);
+            int affected = repository.deleteByIds(tableName, pkColumn, ids, logicDelete, dataScopeCondition);
+
+            // 逐条刷新聚合根缓存
+            for (Map<String, Object> record : beforeRecords) {
+                storedAggregateRefreshService.refreshAfterChildDelete(config, record);
+            }
+            return affected;
+        }
+    }
+
+    /**
      * 暴露运行时配置给动态导入导出服务，仍统一走发布态校验。
      */
     public AiCrudConfig getRuntimeConfig(String configKey) {
@@ -3892,6 +3942,32 @@ public class DynamicCrudService {
                 if (row.containsKey(camelColumnName)) {
                     row.put(fieldName, row.get(camelColumnName));
                 }
+            }
+            applyReferenceDisplayAliases(row, modelSchema);
+        }
+    }
+
+    /**
+     * 引用字段的显示名称伴随列（<col>_name）补充为业务字段编码（<field>Name），
+     * 与写入白名单、前端 relationName 渲染使用同一套键契约；存量空值保持缺失，前端退化显示 ID。
+     */
+    private void applyReferenceDisplayAliases(Map<String, Object> row, LowcodeModelSchema modelSchema) {
+        for (LowcodeFieldSchema field : modelSchema.getFields()) {
+            if (field == null || !field.isSelectionLabelField()) {
+                continue;
+            }
+            String displayFieldName = field.referenceDisplayFieldName();
+            String displayColumnName = field.referenceDisplayColumnName();
+            if (displayFieldName == null || displayColumnName == null || row.containsKey(displayFieldName)) {
+                continue;
+            }
+            if (row.containsKey(displayColumnName)) {
+                row.put(displayFieldName, row.get(displayColumnName));
+                continue;
+            }
+            String camelDisplayColumn = DynamicQueryGenerator.snakeToCamel(displayColumnName);
+            if (row.containsKey(camelDisplayColumn)) {
+                row.put(displayFieldName, row.get(camelDisplayColumn));
             }
         }
     }
@@ -4989,6 +5065,34 @@ public class DynamicCrudService {
             }
         }
         return result;
+    }
+
+    /**
+     * 将显式传入的 searchParams 键扩展为允许搜索字段。
+     * 解决选择器弹窗过滤字段不在 CRUD 配置 schemas 中时被静默跳过的问题。
+     * 仅当字段名对应的列在表中真实存在时才放行，防止任意字段注入。
+     */
+    private void expandAllowedSearchFieldsFromParams(Map<String, Object> searchParams,
+                                                     Set<String> allowedSearchFields,
+                                                     Map<String, String> searchTypeMap,
+                                                     Map<String, String> columnMapping) {
+        if (searchParams == null || searchParams.isEmpty()) {
+            return;
+        }
+        for (String key : searchParams.keySet()) {
+            if ("__orLike".equals(key)) {
+                continue;
+            }
+            if (allowedSearchFields.contains(key)) {
+                continue;
+            }
+            String column = columnMapping.getOrDefault(key, DynamicQueryGenerator.camelToSnake(key));
+            if (column != null && columnMapping.containsValue(column)) {
+                allowedSearchFields.add(key);
+                // 未配置搜索类型时默认精确匹配，适合字典值、状态码等精确筛选场景
+                searchTypeMap.putIfAbsent(key, "eq");
+            }
+        }
     }
 
     private ExportQueryContext buildExportQueryContext(String configKey, DynamicCrudQuery query) {

@@ -7,6 +7,7 @@ const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
 const ENCRYPTED_REQUEST = { encrypt: true }
 const PUBLISH_CHECK_TIMEOUT = 60_000
 const PUBLISH_EXECUTION_TIMEOUT = 120_000
+const DRAFT_SAVE_TIMEOUT = 60_000
 
 function encryptedParams(params) {
   return { params, encrypt: true }
@@ -74,7 +75,10 @@ export function createBusinessApplication(data) {
 }
 
 export function updateBusinessApplication(data) {
-  return request.put('/ai/business/application', data, ENCRYPTED_REQUEST)
+  return request.put('/ai/business/application', data, {
+    ...ENCRYPTED_REQUEST,
+    timeout: DRAFT_SAVE_TIMEOUT,
+  })
 }
 
 export function updateBusinessApplicationStatus(id, status) {
@@ -90,11 +94,17 @@ export function businessApplicationObjects(id) {
 }
 
 export function saveBusinessApplicationObjects(id, data) {
-  return request.put(`/ai/business/application/${id}/objects`, data || [], ENCRYPTED_REQUEST)
+  return request.put(`/ai/business/application/${id}/objects`, data || [], {
+    ...ENCRYPTED_REQUEST,
+    timeout: DRAFT_SAVE_TIMEOUT,
+  })
 }
 
 export function provisionBusinessApplicationFormData(id, data) {
-  return request.post(`/ai/business/application/${id}/form-data/provision`, data, ENCRYPTED_REQUEST)
+  return request.post(`/ai/business/application/${id}/form-data/provision`, data, {
+    ...ENCRYPTED_REQUEST,
+    timeout: DRAFT_SAVE_TIMEOUT,
+  })
 }
 
 export function designBusinessApplicationPage(id, data) {

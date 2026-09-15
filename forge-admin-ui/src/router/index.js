@@ -164,12 +164,8 @@ export const manualRoutes = [
   {
     name: 'BusinessApplicationPublish',
     path: '/app-center/application/:applicationCode/publish',
-    redirect: to => ({
-      name: 'BusinessApplicationRuntime',
-      params: { applicationCode: to.params.applicationCode },
-      query: { ...(to.query || {}), view: 'publish' },
-    }),
-    meta: { title: '应用发布', layout: 'empty', skipTab: true, preserveOnQuery: true, deprecated: true },
+    component: () => import('@/views/app-center/application-publish.[applicationCode].vue'),
+    meta: { title: '应用发布', layout: 'empty', skipTab: true, preserveOnQuery: true },
   },
   {
     name: 'BusinessProcessDesigner',

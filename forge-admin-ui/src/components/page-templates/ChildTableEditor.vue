@@ -27,14 +27,20 @@
               >
                 {{ action.label || action.actionName || action.actionCode }}
               </n-button>
-              <n-button v-if="!props.readonly" size="small" type="primary" secondary @click="addRow(child)">
+              <n-button
+                v-if="!props.readonly && child.showInCreate !== false"
+                size="small"
+                type="primary"
+                secondary
+                @click="addRow(child)"
+              >
                 {{ resolveAddButtonText(child) }}
               </n-button>
             </n-space>
           </div>
 
-          <div class="child-table-scroll">
-            <table class="child-edit-table" :style="resolveTableStyle(child)">
+          <div class="child-table-scroll" :class="{ 'card-scroll': isCardMode(child) }">
+            <table class="child-edit-table" :class="{ 'card-mode': isCardMode(child) }" :style="resolveTableStyle(child)">
               <thead>
                 <tr>
                   <th
@@ -55,7 +61,7 @@
                   v-for="{ row, rowIndex } in visibleRowsFor(child)"
                   :key="row.__rowKey"
                 >
-                  <td v-for="field in child.fields" :key="field.field">
+                  <td v-for="field in child.fields" :key="field.field" :data-label="field.label || field.field">
                     <AiFormItem
                       v-if="useRuntimeCell(field, child)"
                       class="child-runtime-cell"
@@ -87,13 +93,14 @@
                     />
                     <n-select
                       v-else-if="field.type === 'select'"
-                      :value="row[field.field]"
+                      :value="resolveSelectCellValue(row[field.field], field)"
                       :placeholder="field.props?.placeholder || `请选择${field.label || field.field}`"
                       :disabled="props.readonly || field.disabled || field.readonly"
                       :options="field.props?.options || field.options || []"
                       clearable
                       filterable
                       v-bind="field.props"
+                      :multiple="field.multiple === true || field.props?.multiple === true"
                       @update:value="updateCell(child, rowIndex, field, $event)"
                     />
                     <UserSelectPicker
@@ -102,7 +109,7 @@
                       :label-value="resolveUserLabel(row, field)"
                       :placeholder="field.props?.placeholder || `请选择${field.label || field.field}`"
                       :disabled="props.readonly || field.disabled || field.readonly"
-                      :multiple="field.multiple"
+                      :multiple="field.multiple === true || field.props?.multiple === true"
                       :clearable="field.clearable !== false"
                       v-bind="field.props"
                       @update:model-value="updateCell(child, rowIndex, field, $event)"
@@ -185,11 +192,15 @@
       :ref-object-code="activeSelectorConfig.refObjectCode"
       :source-object-code="activeSelectorConfig.sourceObjectCode"
       :target-code="activeSelectorConfig.targetCode"
-      :multiple="true"
+      :multiple="resolveSelectorMultiple(activeSelectorChild)"
       :display-fields="activeSelectorConfig.displayFields"
       :keyword-fields="activeSelectorConfig.keywordFields"
       :field-mappings="activeSelectorConfig.fieldMappings"
       :search-params="activeSelectorConfig.searchParams"
+      :filter-fields="activeSelectorConfig.filterFields"
+      :query-source-type="activeSelectorConfig.querySourceType"
+      :query-source-key="activeSelectorConfig.querySourceKey"
+      :keyword-param="activeSelectorConfig.keywordParam"
       :runtime-context="activeSelectorRuntimeContext"
       @confirm="handleSelectorConfirm"
     />
@@ -204,7 +215,8 @@ import AiFormItem from '@/components/ai-form/AiFormItem.vue'
 import AiRecordSelectorModal from '@/components/ai-form/AiRecordSelectorModal.vue'
 import { buildChildRowActionContext } from '@/components/ai-form/business-action-runtime'
 import { createFieldEventRuntime } from '@/components/ai-form/field-event-runtime'
-import { applyRecordFieldMappings, normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
+import { applyRecordFieldMappings, extractSelectorRawRecord, normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
+import { isFieldMultiple, parseSelectionValues, serializeSelectionValues } from '@/components/ai-form/selection-multi-value'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import { hasRuntimeVisibilityRules, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { scan as scanCollaborationCode } from '@/utils/collaboration-runtime'
@@ -273,6 +285,12 @@ function resolveChildKey(child) {
   return child.key || child.modelCode || child.tableName || 'children'
 }
 
+/** 设计器“数据展示”配置：卡片/抽屉形态用卡片布局呈现 */
+function isCardMode(child) {
+  const mode = String(child?.displayMode || '').toLowerCase()
+  return mode === 'card_list' || mode === 'bottom_sheet'
+}
+
 function resolveAddButtonText(child) {
   const title = child.tabTitle || child.relationName || child.modelName || '关联数据'
   return `新增${title}`
@@ -298,7 +316,8 @@ const activeSelectorRuntimeContext = computed(() => ({
 }))
 
 function hasRecordSelector(child) {
-  return Boolean(normalizeRecordSelectorConfig(child).objectCode)
+  const config = normalizeRecordSelectorConfig(child)
+  return Boolean(config.objectCode || config.querySourceKey)
 }
 
 function resolveSelectorButtonText(child) {
@@ -442,15 +461,48 @@ function handleSelectorConfirm({ rows = [], mappings = {} } = {}) {
   if (!child || !rows.length)
     return
   const key = resolveChildKey(child)
+  const hasMappings = mappings && Object.keys(mappings).length
   const nextRows = rows.map(row => ({
     ...createEmptyRow(child),
-    ...normalizeMappedRow(child, applyRecordFieldMappings(row, mappings || activeSelectorConfig.value.fieldMappings)),
+    ...normalizeMappedRow(child, hasMappings
+      ? applyRecordFieldMappings(row, mappings)
+      : autoMapSelectedRow(child, row)),
   }))
   localValue.value = {
     ...localValue.value,
     [key]: [...rowsFor(child), ...nextRows],
   }
   commit()
+}
+
+/**
+ * 未配置字段映射时按子表字段名自动匹配选中记录：
+ * 先同名取值，再尝试 snake_case 列名，兼容不同接口返回的键风格。
+ */
+function autoMapSelectedRow(child, row) {
+  const source = extractSelectorRawRecord(row)
+  const patch = {}
+  ;(child.fields || []).forEach((field) => {
+    const key = field.field || field.sourceField
+    if (!key)
+      return
+    let value = source[key]
+    if (value === undefined)
+      value = source[key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()]
+    if (value === undefined)
+      value = source[key.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase())]
+    if (value !== undefined && value !== null)
+      patch[key] = value
+  })
+  return patch
+}
+
+/** 选择器单/多选：recordSelector.multiple，默认多选 */
+function resolveSelectorMultiple(child) {
+  const selector = child?.recordSelector
+  if (selector && typeof selector === 'object' && 'multiple' in selector)
+    return selector.multiple !== false
+  return true
 }
 
 function removeRow(child, rowIndex) {
@@ -518,13 +570,16 @@ function useRuntimeCell(field = {}, child = {}) {
   if (field.type === 'barcodeScanner' || runtimeRules.length || hasCurrentChildrenSource || hasFieldEvents)
     return true
   if (field.type === 'select') {
-    return Boolean(field.dictType || field.props?.dictType || field.optionSource || field.props?.optionSource)
+    return Boolean(field.dictType || field.props?.dictType || field.optionSource || field.props?.optionSource
+      || field.multiple === true || field.props?.multiple === true)
   }
   return [
     'dictSelect',
+    'userSelect',
     'orgTreeSelect',
     'regionTreeSelect',
     'objectReference',
+    'recordSelector',
     'fileUpload',
     'imageUpload',
     'cascader',
@@ -690,6 +745,8 @@ function normalizeCellValueForType(field = {}, value) {
     const numberValue = Number(value)
     return Number.isNaN(numberValue) ? null : numberValue
   }
+  if (isFieldMultiple(field))
+    return serializeSelectionValues(value, true) || null
   return value
 }
 
@@ -706,6 +763,12 @@ function resolveInputValue(value) {
   if (value === undefined || value === null)
     return null
   return typeof value === 'string' ? value : String(value)
+}
+
+function resolveSelectCellValue(value, field = {}) {
+  if (!isFieldMultiple(field))
+    return value
+  return parseSelectionValues(value, true)
 }
 
 function resolveInputProps(field = {}) {
@@ -890,6 +953,58 @@ defineExpose({
   overflow-x: auto;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+}
+
+.child-table-scroll.card-scroll {
+  border: 0;
+  border-radius: 0;
+  overflow-x: visible;
+}
+
+.child-edit-table.card-mode,
+.child-edit-table.card-mode tbody,
+.child-edit-table.card-mode tr,
+.child-edit-table.card-mode td {
+  display: block;
+  width: 100%;
+}
+
+.child-edit-table.card-mode {
+  min-width: 0 !important;
+}
+
+.child-edit-table.card-mode thead {
+  display: none;
+}
+
+.child-edit-table.card-mode tr {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  padding: 4px 14px 12px;
+  background: #fff;
+}
+
+.child-edit-table.card-mode td {
+  border-bottom: 0;
+  padding: 7px 0 0;
+}
+
+.child-edit-table.card-mode td::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 2px;
+  color: #86909c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.child-edit-table.card-mode td.action-col {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed #eef2f7;
+  text-align: right;
+  width: auto;
 }
 
 .child-edit-table {

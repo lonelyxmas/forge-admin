@@ -728,14 +728,15 @@ function notify(type, message) {
 
 .process-page-header {
   display: grid;
-  min-height: 58px;
+  min-height: 52px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 16px;
-  padding: 8px 14px;
+  gap: 12px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--border-color, #e5e7eb);
   background: var(--card-color, #fff);
   grid-template-columns: auto minmax(0, 1fr) auto;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .back-button {
@@ -799,12 +800,13 @@ function notify(type, message) {
 .process-page-main {
   min-height: 0;
   flex: 1;
-  padding: 10px;
+  padding: 12px;
 }
 
 .process-page-main > :deep(.business-process-designer) {
-  height: calc(100vh - 78px);
+  height: calc(100vh - 72px);
   min-height: 620px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .process-designer-embedded .process-page-main > :deep(.business-process-designer) {

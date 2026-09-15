@@ -272,13 +272,18 @@
             </div>
 
             <!-- Social login buttons -->
-            <div v-if="socialPlatforms.length > 0" class="social-login-section">
+            <div v-if="displaySocialPlatforms.length > 0" class="social-login-section">
               <div class="social-divider">
                 <span class="divider-text">其他登录方式</span>
               </div>
+              <p v-if="giteeCommunity.enabled && giteeCommunity.requireStar" class="social-hint">
+                Gitee 登录需先给
+                <a :href="giteeCommunity.repoUrl" target="_blank" rel="noopener noreferrer">{{ giteeStarRepoLabel }}</a>
+                点 Star
+              </p>
               <div class="social-buttons">
                 <button
-                  v-for="platform in socialPlatforms"
+                  v-for="platform in displaySocialPlatforms"
                   :key="platform.platform"
                   class="social-button"
                   :title="platform.platformName"
@@ -615,6 +620,28 @@ const loading = ref(false)
 // 三方登录平台列表
 const socialPlatforms = ref([])
 const socialLoading = ref(false)
+const giteeCommunity = ref({
+  enabled: false,
+  requireStar: false,
+  repoUrl: 'https://gitee.com/ForgeLab/forge-admin',
+  owner: 'ForgeLab',
+  repo: 'forge-admin',
+})
+const giteeStarRepoLabel = computed(() => {
+  const owner = giteeCommunity.value.owner || 'ForgeLab'
+  const repo = giteeCommunity.value.repo || 'forge-admin'
+  return `${owner}/${repo}`
+})
+const displaySocialPlatforms = computed(() => {
+  const list = (socialPlatforms.value || []).filter(item => item.enabled)
+  if (!giteeCommunity.value.enabled)
+    return list
+  const withoutGitee = list.filter(item => item.platform !== 'GITEE')
+  return [
+    { platform: 'GITEE', platformName: 'Gitee', enabled: true },
+    ...withoutGitee,
+  ]
+})
 
 watch(resetPasswordChannels, (channels) => {
   if (!channels.includes(resetForm.value.channel))
@@ -762,9 +789,14 @@ async function loadLoginConfig() {
 async function loadSocialPlatforms() {
   try {
     socialLoading.value = true
-    const res = await api.getSocialPlatforms(normalizeTenantId(selectedTenantId.value))
-    if (res.code === 200 && res.data) {
-      socialPlatforms.value = res.data.filter(p => p.enabled)
+    const [platformRes, communityRes] = await Promise.all([
+      api.getSocialPlatforms(normalizeTenantId(selectedTenantId.value)),
+      api.getGiteeCommunityLogin().catch(() => null),
+    ])
+    if (platformRes.code === 200 && platformRes.data)
+      socialPlatforms.value = platformRes.data.filter(p => p.enabled)
+    if (communityRes?.code === 200 && communityRes.data) {
+      giteeCommunity.value = { ...giteeCommunity.value, ...communityRes.data }
     }
   }
   catch (error) {
@@ -778,7 +810,8 @@ async function loadSocialPlatforms() {
 // 处理三方登录
 async function handleSocialLogin(platform) {
   try {
-    const tenantId = normalizeTenantId(selectedTenantId.value)
+    const communityGitee = giteeCommunity.value.enabled && platform === 'GITEE'
+    const tenantId = communityGitee ? undefined : normalizeTenantId(selectedTenantId.value)
     const res = await api.getSocialAuthUrl(platform, tenantId)
     if (res.code === 200 && res.data) {
       rememberSocialTenant(res.data.state, tenantId)
@@ -2351,6 +2384,18 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   position: relative;
   text-align: center;
   margin-bottom: 20px;
+}
+
+.social-hint {
+  margin: -8px 0 16px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.social-hint a {
+  color: var(--primary-color, #2563eb);
 }
 
 .social-divider::before {

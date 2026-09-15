@@ -9,8 +9,25 @@
 -->
 
 <template>
+  <span v-if="currentDictItems.length > 1 && shouldShowAsText" class="dict-tag-text">
+    {{ currentDictItems.map(item => item.label).join('、') }}
+  </span>
+  <span v-else-if="currentDictItems.length > 1" class="dict-tag-list">
+    <n-tag
+      v-for="item in currentDictItems"
+      :key="String(item.value)"
+      class="dict-tag"
+      :class="`dict-tag--${resolveTagType(item)}`"
+      :type="resolveTagType(item)"
+      :size="size"
+      :round="round"
+      :bordered="bordered"
+    >
+      {{ item.label }}
+    </n-tag>
+  </span>
   <!-- 如果是 default 类型且没有强制指定 type，显示普通文字 -->
-  <span v-if="currentDict && shouldShowAsText">
+  <span v-else-if="currentDict && shouldShowAsText">
     {{ currentDict.label }}
   </span>
   <!-- 否则显示标签 -->
@@ -28,7 +45,7 @@
     {{ currentDict.label }}
   </n-tag>
   <!-- 没有找到字典项，显示原始值 -->
-  <span v-else>{{ resolvedValue }}</span>
+  <span v-else>{{ displayFallback }}</span>
 </template>
 
 <script setup>
@@ -48,9 +65,9 @@ const props = defineProps({
     default: '',
   },
 
-  // 字典值
+  // 字典值，多选时支持逗号分隔或数组
   value: {
-    type: [String, Number],
+    type: [String, Number, Array],
     default: '',
   },
 
@@ -108,14 +125,27 @@ const resolvedValue = computed(() => {
   return props.dictValue
 })
 
-// 当前字典项
-const currentDict = computed(() => {
+const resolvedValueList = computed(() => {
+  const raw = resolvedValue.value
+  if (Array.isArray(raw))
+    return raw.map(item => String(item ?? '').trim()).filter(Boolean)
+  if (raw === null || raw === undefined || raw === '')
+    return []
+  return String(raw).split(/[、,，]/).map(item => item.trim()).filter(Boolean)
+})
+
+const displayFallback = computed(() => resolvedValueList.value.join('、') || resolvedValue.value)
+
+const currentDictItems = computed(() => {
   const list = props.options || dictList.value
   if (!list || list.length === 0)
-    return null
-
-  return list.find(item => String(item.value) === String(resolvedValue.value))
+    return []
+  return resolvedValueList.value
+    .map(value => list.find(item => String(item.value) === String(value)))
+    .filter(Boolean)
 })
+
+const currentDict = computed(() => currentDictItems.value[0] || null)
 
 // 标签类型
 const tagType = computed(() => {
@@ -123,12 +153,17 @@ const tagType = computed(() => {
     return props.type
   }
 
-  if (!currentDict.value) {
+  return resolveTagType(currentDict.value)
+})
+
+function resolveTagType(dictItem) {
+  if (props.type)
+    return props.type
+  if (!dictItem)
     return 'default'
-  }
 
   // 根据 listClass 映射标签类型
-  const listClass = currentDict.value.listClass || currentDict.value.raw?.listClass
+  const listClass = dictItem.listClass || dictItem.raw?.listClass
 
   // 如果没有 listClass，返回默认类型
   if (!listClass) {
@@ -148,7 +183,7 @@ const tagType = computed(() => {
   }
 
   return typeMap[listClass] || 'default'
-})
+}
 
 // 是否显示为普通文字（当 listClass 为 default 且没有强制指定 type 时）
 const shouldShowAsText = computed(() => {
@@ -197,6 +232,13 @@ function handleClose() {
 </script>
 
 <style>
+.dict-tag-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
 .dict-tag.n-tag {
   --n-border-radius: 3px !important;
   --n-font-weight-strong: 500 !important;

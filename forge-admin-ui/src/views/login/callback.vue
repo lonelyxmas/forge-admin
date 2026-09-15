@@ -170,7 +170,7 @@ async function handleCallback() {
       authType: 'oauth2',
       socialTicket: ticketData.socialTicket,
       connectionCode: ticketData.connectionCode,
-      tenantId: tenantId ?? ticketData.tenantId,
+      tenantId: ticketData.tenantId ?? tenantId,
       userClient,
       appId: import.meta.env.VITE_APP_ID || 'forge_pc_001',
     }

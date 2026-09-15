@@ -36,8 +36,11 @@
 
 ## 分类目录
 
-### [前端 / 构建 / 路由](pitfalls/frontend.md)（18）
+### [前端 / 构建 / 路由](pitfalls/frontend.md)（21）
 
+- naive-ui FormItem 挂载测量会清空字段级固定 labelWidth
+- window.$message 是 class 实例，方法不能分离调用
+- computed 每次返回新对象时 watch 引用比较恒不等
 - Naive UI 表格居中不能只设置 `text-align`
 - Naive Dialog 取消回调不能意外返回 false
 - 8. 异步弹窗使用 v-if 首次打开无响应
